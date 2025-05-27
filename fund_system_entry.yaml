@@ -1,0 +1,27 @@
+edition: 3.0.0
+name: fc3-example
+access: default
+resources:
+  fcDemo:
+    component: fc3
+    props:
+      region: cn-shanghai
+      handler: index.handler
+      role: ''
+      disableOndemand: false
+      description: ''
+      timeout: 60
+      diskSize: 10240
+      internetAccess: true
+      logConfig:
+        enableRequestMetrics: true
+        enableInstanceMetrics: true
+        logBeginRule: DefaultRegex
+        project: serverless-cn-shanghai-22657033-3188-5e2f-9edb-77c4e4b6c05e
+        enableCustomExtraLog: true
+        logstore: default-logs
+      functionName: fund_system_entry
+      runtime: python3.10
+      cpu: 1
+      memorySize: 2048
+      code: ./

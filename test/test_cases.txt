@@ -1,0 +1,6 @@
+test/bussiness/最优止盈/test_redeem.py::test_redeem_all_users_success
+#test/bussiness/全局智能定投管理/test_redeem_all_fund_plans.py::test_redeem_all_fund_plans
+#test/bussiness/全局智能定投管理/test_increase_all_fund_plans.py::test_increase_all_fund_plans
+#test/API/交易管理/test_get_fee.py::test_get_fee_success
+#test/API/资产管理/test_get_asset_list_of_sub.py::test_get_asset_list_of_sub_success
+#test/service/资产管理/test_get_sub_account_asset_list.py::test_get_sub_account_asset_list_success

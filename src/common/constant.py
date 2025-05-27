@@ -1,6 +1,9 @@
 import sys
 import os
-from xxlimited import Null
+import numpy as np  # 新增：导入 numpy 模块
+
+# 如果需要定义一个类似 Null 的常量，可以使用 None 或自定义常量
+NULL_VALUE = None
 
 # 添加项目根目录到路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -17,6 +20,7 @@ from src.domain.trade.share import Share
 # API请求参数常量
 SERVER_VERSION = '6.7.1'
 PAGE_SIZE = '100'
+DEVICE_ID = '15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me'
 PASSPORT_CTOKEN = 'CR0PL-qa8w6SmCGBL4KzSXeTioFwoR7HN_JmcR_yMVCGSVFCGYTR4KBYc8gQI5rUPIp-fs6Hg5yN6jIPAYli_sE4Fnm-S2TN298wRuSBAxzWaDoRd82XYXt7FuPkh57WzKu7ejHQrhMXwp-uR5zuPnQi2L1joI7KuE0jnW4Yl2E'
 PLAN_TYPE = '1'
 PASSPORT_UTOKEN = 'QjaJ8B6U43EzrU9QuBKxUcLl7plJD3DQnGBVESjw_tEyqhKYNefuSoxE23M_B7Jf3J0QXt9K8L11-c8kM0US8Dh8-cOaAbUY9-Grz_lOD6YHTQVF-VrpwJ3rltTFJyrpYlAiTIjmOCCKRTAZHnZpLu0sRlqnHr8eQboojFxiYI6iO6kzsJMrP02LvOzw4P_nGXUk8trx06j9Y2RFXx950V04nn1NMRjyTSRUNbPKmwTYeaI1PGmptAYRY16wQzraxG8vMqmV8HoG5zVi9ovBuh0H3rBpfAMvAPsQpNSkMYs83gdJjuXZi4pY133FWRGdIG-1Hula3rHsjdvZm56ZkLT4UjljRP3aoFZ7N_zbM-g'
@@ -242,26 +246,11 @@ DEFAULT_FUND_PLAN = FundPlan(
     isGdlc=DEFAULT_FUND_PLAN_DETAIL_DATA['rationPlan']['isGdlc'],
     retriggerTips=DEFAULT_FUND_PLAN_DETAIL_DATA['rationPlan']['retriggerTips'],
     isDeductDay=DEFAULT_FUND_PLAN_DETAIL_DATA['rationPlan']['isDeductDay']
-    # 删除以下参数
-    # isCashBag=DEFAULT_FUND_PLAN_DETAIL_DATA['rationPlan'].get('isCashBag', False),
-    # couponsSummaryInfo=DEFAULT_FUND_PLAN_DETAIL_DATA['rationPlan'].get('couponsSummaryInfo', None),
-    # remark=DEFAULT_FUND_PLAN_DETAIL_DATA['rationPlan'].get('remark', None),
-    # createTime=DEFAULT_FUND_PLAN_DETAIL_DATA['rationPlan'].get('createTime', '2025-05-07'),
-    # stateTip=DEFAULT_FUND_PLAN_DETAIL_DATA['rationPlan'].get('stateTip', '')
 )
 
 # 创建Share对象
 DEFAULT_SHARES = [
-    Share(
-        availableVol=share_data['availableVol'],
-        bankCode=share_data['bankCode'],
-        showBankCode=share_data['showBankCode'],
-        bankCardNo=share_data['bankCardNo'],
-        bankName=share_data['bankName'],
-        shareId=share_data['shareId'],
-        bankAccountNo=share_data['bankAccountNo'],
-        totalVol=share_data['totalVol']
-    )
+    Share(**share_data)
     for share_data in DEFAULT_FUND_PLAN_DETAIL_DATA['shares']
 ]
 

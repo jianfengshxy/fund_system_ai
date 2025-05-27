@@ -8,19 +8,17 @@ import requests
 # 添加项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-# 禁用SSL证书验证警告
+# 禁用 urllib3 的警告信息
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# 禁用urllib3的LibreSSL警告
-warnings.filterwarnings('ignore', category=urllib3.exceptions.NotOpenSSLWarning)
 
 from typing import Optional, List
-from code.src.domain.fund_plan import ApiResponse
-from code.src.common.constant import (
+from src.domain.fund_plan import ApiResponse
+from src.common.constant import (
     SERVER_VERSION, PHONE_TYPE, MOBILE_KEY
 )
 
-from code.src.domain.bank.bank import BankCard, HqbBank, BankApiResponse
+from  src.domain.bank.bank import BankCard, HqbBank, BankApiResponse
 
 def getCashBagAvailableShareV2(user) -> List[HqbBank]:
     """

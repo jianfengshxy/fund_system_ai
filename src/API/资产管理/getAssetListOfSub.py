@@ -13,9 +13,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 # 禁用SSL证书验证警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# 禁用urllib3的LibreSSL警告
-warnings.filterwarnings('ignore', category=urllib3.exceptions.NotOpenSSLWarning)
-
 from typing import Optional, List
 from src.domain.fund_plan import ApiResponse
 from src.common.constant import (

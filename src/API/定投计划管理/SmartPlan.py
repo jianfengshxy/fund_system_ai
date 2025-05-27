@@ -14,10 +14,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 
 # 禁用SSL证书验证警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# 禁用urllib3的LibreSSL警告
-warnings.filterwarnings('ignore', category=urllib3.exceptions.NotOpenSSLWarning)
-
 from src.domain.fund_plan import ApiResponse, FundPlanResponse, PageInfo, FundPlan
 from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
 from src.domain.fund_plan import RationCreateParameters, DiscountRate

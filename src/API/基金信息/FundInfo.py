@@ -14,9 +14,8 @@ from common.constant import SERVER_VERSION, PHONE_TYPE
 # 禁用SSL证书验证警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# 禁用urllib3的LibreSSL警告
-warnings.filterwarnings('ignore', category=urllib3.exceptions.NotOpenSSLWarning)
-
+# 禁用 urllib3 的警告信息
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import requests
 from typing import Optional
 from domain.fund.fund_info import FundInfo

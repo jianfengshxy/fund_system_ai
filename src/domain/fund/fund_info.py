@@ -80,7 +80,10 @@ class FundInfo:
             max_purchase=safe_float(data.get('MAXSG')),
             can_purchase=data.get('ISBUY') == '1',
             index_code=data.get('INDEXCODE'),
-            tracking_error=safe_float(data.get('TRKERROR1'), None)
+            tracking_error=safe_float(data.get('TRKERROR1'), None),
+            rank_100day = 0,
+            rank_30day = 0 ,
+            volatility = 0.0
         )
 
     def __str__(self) -> str:

@@ -16,6 +16,7 @@ from src.common.constant import SERVER_VERSION, PASSPORT_CTOKEN
 from src.common.constant import DEFAULT_USER
 from src.bussiness.全局智能定投处理.increase import increase_all_fund_plans
 from src.domain.user.User import User
+from src.common.constant import DEFAULT_USER, DEFAULT_FUND_PLAN_DETAIL
 
 # 初始化日志记录器
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

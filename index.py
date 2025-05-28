@@ -22,7 +22,7 @@ from src.common.constant import DEFAULT_USER, DEFAULT_FUND_PLAN_DETAIL
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def redeem():
+def redeem(event, context):
     increase_all_fund_plans(DEFAULT_USER)
     result = redeem_all_users()
 

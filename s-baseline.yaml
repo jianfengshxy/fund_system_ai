@@ -1,0 +1,28 @@
+---
+edition: "3.0.0"
+name: "fund_system_ai"
+access: "default"
+vars: {}
+resources:
+  redeem:
+    component: "fc3"
+    actions:
+      complete-deploy:
+      - plugin: "flow_api_registry"
+        args: {}
+      complete-remove:
+      - plugin: "flow_api_registry"
+        args: {}
+    props:
+      functionName: "redeem"
+      region: "cn-shanghai"
+      code: "./"
+      cpu: 1
+      diskSize: 10240
+      handler: "index.redeem"
+      memorySize: 2048
+      runtime: "python3.10"
+      timeout: 600
+      logConfig: "auto"
+      layers:
+      - "acs:fc:cn-shanghai:1238993556817547:layers/fund_system_layer/versions/1"

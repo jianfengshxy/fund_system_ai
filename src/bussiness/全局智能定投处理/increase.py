@@ -74,6 +74,10 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     if not trades:
         # logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}今天没有可以回撤的定投计划交易记录。Skip ..........")
         return True
+        
+    if not shares or len(shares) == 0 or not shares[0].availableVol or shares[0].availableVol == 0:
+        return True
+
     # 检查是否有在途交易(在途交易个数大于1,要排除掉当天的定投交易)
     if on_way_transaction_count > 1:
         logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}今天有在途交易，不进行加仓操作并回撤定投。Skip..........")
@@ -118,10 +122,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                 revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)
             logger.info(f"{customer_name}的组合{sub_account_name}{fund_name}的周延期交易{day_of_week_number + 1},撤回所有交易。")
             return True
-        #判断shares为空或者长度为0或者里面虽然有元素但是里面availableVol为空或者为0 
-        if not shares or len(shares) == 0 or not shares[0].availableVol or shares[0].availableVol == 0:
-            return True
-                
+
         if estimated_profit_rate < -1.0 :
             logger.info(f"{customer_name}的组合{sub_account_name}{fund_name}的预估收益率{estimated_profit_rate} < -1.0")  
             if fund_info.rank_100day < 20:

@@ -75,8 +75,11 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         # logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}今天没有可以回撤的定投计划交易记录。Skip ..........")
         return True
         
-    if not shares or len(shares) == 0 or not shares[0].availableVol or shares[0].availableVol == 0:
-        return True
+    # if not shares or len(shares) == 0 or not shares[0].availableVol or shares[0].availableVol == 0:
+    #     return True
+    
+    if times == 1:
+        return True 
 
     # 检查是否有在途交易(在途交易个数大于1,要排除掉当天的定投交易)
     if on_way_transaction_count > 1:

@@ -15,6 +15,7 @@ sys.path.append('src')
 from src.common.constant import SERVER_VERSION, PASSPORT_CTOKEN
 from src.common.constant import DEFAULT_USER
 from src.bussiness.全局智能定投处理.increase import increase_all_fund_plans
+from src.bussiness.全局智能定投处理.redeem import redeem_all_fund_plans 
 from src.domain.user.User import User
 from src.common.constant import DEFAULT_USER, DEFAULT_FUND_PLAN_DETAIL
 
@@ -23,8 +24,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 def redeem(event, context):
-    increase_all_fund_plans(DEFAULT_USER)
+    redeem_all_fund_plans(DEFAULT_USER)
     result = redeem_all_users()
+
+def increase(event, context):
+    increase_all_fund_plans(DEFAULT_USER)
+    
 
 if __name__ == "__main__":
     handler(None, None)

@@ -4,7 +4,7 @@ name: "fund_system_ai"
 access: "default"
 vars: {}
 resources:
-  redeem:
+  inrease:
     component: "fc3"
     actions:
       complete-deploy:
@@ -14,20 +14,28 @@ resources:
       - plugin: "flow_api_registry"
         args: {}
     props:
-      functionName: "redeem"
-      region: "cn-shanghai"
-      code: "./"
-      cpu: 1
-      diskSize: 10240
-      handler: "index.redeem"
-      memorySize: 2048
-      runtime: "python3.10"
-      timeout: 600
+      handler: "index.inrease"
       logConfig:
         enableRequestMetrics:  true
         enableInstanceMetrics: true
         logBeginRule: DefaultRegex
         project: aliyun-fc-cn-shanghai-22657033-3188-5e2f-9edb-77c4e4b6c05e
         logstore: function-log
+      diskSize: 10240
+      code: "./"
+      memorySize: 2048
+      functionName: "inrease"
       layers:
       - "acs:fc:cn-shanghai:1238993556817547:layers/fund_system_layer/versions/1"
+      cpu: 1
+      runtime: "python3.10"
+      region: "cn-shanghai"
+      timeout: 600
+      triggers:
+      - qualifier: "LATEST"
+        triggerType: "timer"
+        triggerName: "inrease"
+        triggerConfig:
+          payload: "{\"account\": \"13918199137\",\"password\": \"sWX15706\"}"
+          cronExpression: "CRON_TZ=Asia/Shanghai 4 48 14 * * *"
+          enable: true

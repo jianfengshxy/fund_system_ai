@@ -14,7 +14,7 @@ resources:
       - plugin: "flow_api_registry"
         args: {}
     props:
-      handler: "index.inrease"
+      handler: "index.increase"
       logConfig:
         enableRequestMetrics:  true
         enableInstanceMetrics: true
@@ -24,7 +24,7 @@ resources:
       diskSize: 10240
       code: "./"
       memorySize: 2048
-      functionName: "inrease"
+      functionName: "increase"
       layers:
       - "acs:fc:cn-shanghai:1238993556817547:layers/fund_system_layer/versions/1"
       cpu: 1
@@ -34,7 +34,7 @@ resources:
       triggers:
       - qualifier: "LATEST"
         triggerType: "timer"
-        triggerName: "inrease"
+        triggerName: "increase"
         triggerConfig:
           payload: "{\"account\": \"13918199137\",\"password\": \"sWX15706\"}"
           cronExpression: "CRON_TZ=Asia/Shanghai 4 48 14 * * *"

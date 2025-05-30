@@ -4,7 +4,7 @@ name: "fund_system_ai"
 access: "default"
 vars: {}
 resources:
-  inrease:
+  increase:
     component: "fc3"
     actions:
       complete-deploy:

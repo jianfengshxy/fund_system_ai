@@ -133,6 +133,9 @@ def increase(user: User, sub_account_name:str = "最优止盈") -> bool:
     # 从用户的子账户列表中查找指定名称的子账户编号
     asset_details_list = get_sub_account_asset_by_name(user, sub_account_name)
     candidate_asset_detail = []  # 初始化候选资产列表
+    fund_num = 10
+    day_amount = round(user.budget * 8 / 250, 2)
+    day_amount_per_fund = round(day_amount / fund_num, 2)    
     
     if asset_details_list is None:
         logger.info(f"{customer_name}没有基金资产.")
@@ -153,7 +156,7 @@ def increase(user: User, sub_account_name:str = "最优止盈") -> bool:
 
         # 计算总收益率
         result = constant_profit_rate + fund_info.estimated_change
-        logger.info(f"{customer_name}的基金{fund_name}{fund_code}的收益{constant_profit_rate}加上估值增长率{fund_info.estimated_change}结果{result},预算:{user.budget}")
+        logger.info(f"{customer_name}的基金{fund_name}{fund_code}的收益{constant_profit_rate}加上估值增长率{fund_info.estimated_change}结果{result},金额:{day_amount_per_fund}")
         
         if available_vol == 0.0:
             continue
@@ -235,12 +238,7 @@ def increase(user: User, sub_account_name:str = "最优止盈") -> bool:
     if not candidate_asset_detail:
         logger.info(f"用户 {user.customer_name} 在组合 {sub_account_name} 中没有符合加仓条件的基金.")
         return True
-    
-    fund_num = 10
-    day_amount = round(user.budget * 8 / 250, 2)
-    day_amount_per_fund = round(day_amount / fund_num, 2)    
-    logger.info(f"用户 {user.customer_name} 在组合 {sub_account_name} 中找到 {len(candidate_asset_detail)} 个可加仓的基金项（可能重复，因加倍逻辑）.")
-    
+    logger.info(f"用户 {user.customer_name} 在组合 {sub_account_name} 中找到 {len(candidate_asset_detail)} 个可加仓的基金项（可能重复，因加倍逻辑）.")    
     # 遍历候选资产列表的前10个元素，调用commit_order
     for i, asset_detail in enumerate(candidate_asset_detail[:10]):
         fund_code = asset_detail.fund_code

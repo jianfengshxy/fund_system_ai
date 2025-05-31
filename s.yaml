@@ -37,5 +37,5 @@ resources:
         triggerName: "increase"
         triggerConfig:
           payload: "{\"account\": \"13918199137\",\"password\": \"sWX15706\"}"
-          cronExpression: "CRON_TZ=Asia/Shanghai 4 24 11 * * *"
+          cronExpression: "CRON_TZ=Asia/Shanghai 4 28 11 * * *"
           enable: true

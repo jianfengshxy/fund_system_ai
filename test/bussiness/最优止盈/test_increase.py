@@ -41,5 +41,5 @@ def test_increase():
 if __name__ == "__main__":
     # 直接运行测试
     logger.info("直接运行止盈测试")
-    # test_increase()
+    test_increase()
     

@@ -5,6 +5,7 @@ import sys
 import logging
 import urllib3  # 添加对 urllib3 的导入
 from src.bussiness.最优止盈组合.redeem import redeem_all_users
+from src.bussiness.最优止盈组合.increase import increase_all_users
 # 禁用 urllib3 的警告信息
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -29,7 +30,10 @@ def redeem(event, context):
 
 def increase(event, context):
     increase_all_fund_plans(DEFAULT_USER)
+    increase_all_users()
     
 
 if __name__ == "__main__":
-    handler(None, None)
+    # 根据需要调用 redeem 或 increase 函数
+    redeem(None, None)
+    increase(None, None)

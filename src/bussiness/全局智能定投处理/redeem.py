@@ -35,6 +35,7 @@ from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.service.交易管理.赎回基金 import sell_0_fee_shares
 from src.service.交易管理.赎回基金 import sell_low_fee_shares
+from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
 
 logger = logging.getLogger(__name__)
 
@@ -135,5 +136,19 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         if estimated_profit_rate > stop_rate:
             logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},实际止盈点:{stop_rate}")
             sell_low_fee_shares(user,sub_account_no,fund_code,shares)
-            return True                          
+            return True    
+            # 获取活期宝银行卡列表
+        bank_cards = getCashBagAvailableShareV2(user)
+        if not bank_cards:
+            logger.error("获取银行卡信息失败：没有可用的银行卡")
+            raise Exception("获取银行卡信息失败：没有可用的银行卡")   
+        # 使用第一个银行卡（余额最高的）
+        bank_card_info = bank_cards[0]     
+        CurrentRealBalance = bank_card_info.CurrentRealBalance
+        #检查银行卡余额,小于30万，且收益大于1.0，立即卖出费率为0的份额
+        if estimated_profit_rate > 1.0 and CurrentRealBalance < 300000 and fund_type == '000':
+            logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:1.0.")
+            sell_0_fee_shares(user,sub_account_no,fund_code,shares)
+            return True     
+
     return True

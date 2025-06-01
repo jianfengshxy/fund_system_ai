@@ -26,7 +26,7 @@ def test_redeem():
     # 打印测试开始信息
     logger.info("开始测试 redeem 函数")
 
-    detail_response = getPlanDetailPro('23dca4adcebb445e8e8a2710feaa71ad', DEFAULT_USER)
+    detail_response = getPlanDetailPro('2712c715a900473199eaae91f745d63f', DEFAULT_USER)
     # 调用函数进行止盈测试
     result = redeem(DEFAULT_USER, detail_response.Data)
     

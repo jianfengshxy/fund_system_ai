@@ -1,0 +1,26 @@
+# 新函数模板
+# 使用方法：复制以下内容到 s.yaml 的 resources 部分，并修改相应的函数名和配置
+
+  new_function_name:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.new_function_name"  # 修改为实际的处理函数
+      functionName: "new_function_name"   # 修改为实际的函数名
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      triggers:
+      - qualifier: ${vars.common.triggerConfig.qualifier}
+        triggerType: ${vars.common.triggerConfig.triggerType}
+        triggerName: "new_function_name"  # 修改为实际的触发器名
+        triggerConfig:
+          payload: ${vars.common.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 0 12 * * *"  # 修改为实际的定时表达式
+          enable: ${vars.common.triggerConfig.enable}

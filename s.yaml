@@ -2,9 +2,9 @@
 edition: "3.0.0"
 name: "fund_system_ai"
 access: "default"
-vars: {}
-resources:
-  increase:
+vars:
+  # 公共配置模板
+  common:
     component: "fc3"
     actions:
       complete-deploy:
@@ -14,9 +14,8 @@ resources:
       - plugin: "flow_api_registry"
         args: {}
     props:
-      handler: "index.increase"
       logConfig:
-        enableRequestMetrics:  true
+        enableRequestMetrics: true
         enableInstanceMetrics: true
         logBeginRule: DefaultRegex
         project: aliyun-fc-cn-shanghai-22657033-3188-5e2f-9edb-77c4e4b6c05e
@@ -24,18 +23,64 @@ resources:
       diskSize: 10240
       code: "./"
       memorySize: 2048
-      functionName: "increase"
       layers:
       - "acs:fc:cn-shanghai:1238993556817547:layers/fund_system_layer/versions/1"
       cpu: 1
       runtime: "python3.10"
       region: "cn-shanghai"
       timeout: 600
-      triggers:
-      - qualifier: "LATEST"
+      triggerConfig:
+        qualifier: "LATEST"
         triggerType: "timer"
+        enable: true
+        payload: "{\"account\": \"13918199137\",\"password\": \"sWX15706\"}"
+
+resources:
+  increase:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.increase"
+      functionName: "increase"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "increase"
         triggerConfig:
-          payload: "{\"account\": \"13918199137\",\"password\": \"sWX15706\"}"
+          payload: ${vars.common.props.triggerConfig.payload}
           cronExpression: "CRON_TZ=Asia/Shanghai 4 28 11 * * *"
-          enable: true
+          enable: ${vars.common.props.triggerConfig.enable}
+
+  redeem:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.redeem"
+      functionName: "redeem"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "redeem"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * *"
+          enable: ${vars.common.props.triggerConfig.enable}
+

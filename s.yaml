@@ -2,6 +2,7 @@
 edition: "3.0.0"
 name: "fund_system_ai"
 access: "default"
+
 vars:
   # 公共配置模板
   common:

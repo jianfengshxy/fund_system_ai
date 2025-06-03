@@ -163,10 +163,6 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                  logger.info(f"{fund_name}周收益率预估:{week_growth_rate},{fund_name}月收益率预估:{month_growth_rate},季度收益率预估:{season_growth_rate}.Skip......")
                  return  True
 
-            if  week_growth_rate <  0.0 and month_growth_rate < 0.0 and season_growth_rate < 0.0:
-                # 回撤所有交易
-                for trade in trades:
-                    revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)
             
             season_growth_rate, season_item_rank, season_item_sc = get_fund_growth_rate(fund_info, '3Y')
             month_growth_rate, month_item_rank, month_item_sc = get_fund_growth_rate(fund_info, 'Y')

@@ -111,7 +111,6 @@ def getFundInfo(user,fund_code) -> Optional[FundInfo]:
         try:
             fund_info_data = fund_data[0]
             fund_info = FundInfo.from_dict(fund_info_data)
-            fund_info = updateFundEstimatedValue(fund_info)
             return fund_info
         except (IndexError, KeyError, TypeError) as e:
             logger.error("解析基金数据失败: %s", str(e))

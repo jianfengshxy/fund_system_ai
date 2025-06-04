@@ -111,7 +111,7 @@ def getFundInfo(user,fund_code) -> Optional[FundInfo]:
         try:
             fund_info_data = fund_data[0]
             fund_info = FundInfo.from_dict(fund_info_data)
-            # fund_info = updateFundEstimatedValue(fund_info)
+            fund_info = updateFundEstimatedValue(fund_info)
             return fund_info
         except (IndexError, KeyError, TypeError) as e:
             logger.error("解析基金数据失败: %s", str(e))
@@ -179,14 +179,21 @@ def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
                 fund_info.estimated_value = float(data.get('gsz', 0))  # GSZ - 估算净值
                 fund_info.estimated_change = float(data.get('gszzl', 0))  # GSZZL - 估算涨跌幅
                 fund_info.estimated_time = data.get('gztime', '')  # GZTIME - 估算时间                
-                # 更新收益率信息
-                fund_info.week_return = float(data.get('SYL_Z', 0))  # 近一周收益率
-                fund_info.month_return = float(data.get('SYL_Y', 0))  # 近一月收益率
-                fund_info.three_month_return = float(data.get('SYL_3Y', 0))  # 近三月收益率
-                fund_info.six_month_return = float(data.get('SYL_6Y', 0))  # 近六月收益率
-                fund_info.year_return = float(data.get('SYL_1N', 0))  # 近一年收益率
-                fund_info.this_year_return = float(data.get('SYL_JN', 0))  # 今年以来收益率
                 
+                # 更新收益率信息 - 原有收益率加上估算涨跌幅                
+                if fund_info.week_return is not None:
+                    fund_info.week_return = fund_info.week_return + fund_info.estimated_change
+                if fund_info.month_return is not None:
+                    fund_info.month_return = fund_info.month_return + fund_info.estimated_change
+                if fund_info.three_month_return is not None:
+                    fund_info.three_month_return = fund_info.three_month_return + fund_info.estimated_change
+                if fund_info.six_month_return is not None:
+                    fund_info.six_month_return = fund_info.six_month_return + fund_info.estimated_change
+                if fund_info.year_return is not None:
+                    fund_info.year_return = fund_info.year_return + fund_info.estimated_change
+                if fund_info.this_year_return is not None:
+                    fund_info.this_year_return = fund_info.this_year_return + fund_info.estimated_change
+                       
                 # 请求成功，返回更新后的基金信息
                 if retry_count > 0:
                     logger.debug(f"重试成功，已获取基金 {fund_info.fund_code} 的估值数据")

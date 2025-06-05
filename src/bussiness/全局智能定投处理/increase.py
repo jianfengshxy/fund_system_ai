@@ -6,6 +6,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import os
 import sys
+import math
 
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -54,6 +55,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     if asset_detail is not None:
         constant_profit_rate = asset_detail.constant_profit_rate * 100
     else:
+        logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}资产为空。Skip ..........")
         return True
     constant_profit_rate = asset_detail.constant_profit_rate * 100
     on_way_transaction_count = asset_detail.on_way_transaction_count
@@ -71,17 +73,16 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
   
     # 检查是否有可回撤的定投交易，4是定投业务类型，7是可以回撤交易状态
     trades = get_trades_list(user, sub_account_no=sub_account_no, fund_code = fund_code,bus_type="4", status="7")
-    if not trades:
-        # logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}今天没有可以回撤的定投计划交易记录。Skip ..........")
+    if not trades or len(trades) == 0:
+        logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}今天没有可以回撤的定投计划交易记录。Skip ..........")
         return True
-        
-    # if not shares or len(shares) == 0 or not shares[0].availableVol or shares[0].availableVol == 0:
-    #     return True
-    
-    if times == 1:
+
+    if  math.isclose(float(plan_assets),fund_amount):
+        logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}资产{plan_assets},属于第一次定投。Skip ..........")
         return True 
 
     # 检查是否有在途交易(在途交易个数大于1,要排除掉当天的定投交易)
+    logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}今天有在途交易{on_way_transaction_count}个")
     if on_way_transaction_count > 1:
         logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}今天有在途交易，不进行加仓操作并回撤定投。Skip..........")
         # 撤回交易
@@ -149,7 +150,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
             season_growth_rate = fund_info.three_month_return
             month_growth_rate = fund_info.month_return
             week_growth_rate = fund_info.week_return
-    
+            logger.info(f"{fund_name}周收益率预估:{week_growth_rate},{fund_name}月收益率预估:{month_growth_rate},季度收益率预估:{season_growth_rate}")
             if  week_growth_rate <  0.0 and month_growth_rate < 0.0 and season_growth_rate < 0.0:
                 # 回撤所有交易  
                 for trade in trades:

@@ -78,10 +78,10 @@ user_list = [
     ("13500819290", "guojing1985","guojing1985","郭婧","最优止盈",200000.0),
     ("13562500306", "lilin926","lilin926","刘文杰","最优止盈",60000.0),
     ("13571973393", "wj121109","wj121109","安城","最优止盈",500000.0),
-    ("13584903800", "hu123321","hu123321","胡春红","最优止盈",300000.0)
+    ("13584903800", "hu123321","hu123321","胡春红","最优止盈",300000.0),
     #("13611617975", "65253056lml","65253056lml","胡琳元","最优止盈",100000000.0),
     # ("13636306263", "cy863391X","cy863391X","陈扬","最优止盈",200000.0),
-    # ("13817533699", "demone40","demone40","东岳亮","最优止盈",150000.0)
+    ("13817533699", "demone40","demone40","东岳亮","最优止盈",150000.0)
 ]
 
 
@@ -156,7 +156,7 @@ def increase(user: User, sub_account_name:str = "最优止盈") -> bool:
 
         # 计算总收益率
         result = constant_profit_rate + fund_info.estimated_change
-        logger.info(f"{customer_name}的基金{fund_name}{fund_code}的收益{constant_profit_rate}加上估值增长率{fund_info.estimated_change}结果{result},金额:{day_amount_per_fund}")
+        logger.info(f"{customer_name}的基金{fund_name}{fund_code}的收益{constant_profit_rate}加上估值增长率{fund_info.estimated_change}结果{result},:{day_amount_per_fund}")
         
         if available_vol == 0.0:
             continue

@@ -101,8 +101,8 @@ def increase_all_users():
             user = inference_passport_for_bind(user)
             user.budget = budget
             logger.info(f"开始加仓用户：{user.customer_name}")
-            # 执行止盈操作
-            # increase(user, sub_account_name)
+            # 执行加仓操作
+            increase(user, sub_account_name)
             logger.info(f"用户：{user.customer_name} 加仓完成")
         except Exception as e:
             logger.error(f"登录失败的账号：{account}，用户名：{name}，错误信息：{str(e)}")

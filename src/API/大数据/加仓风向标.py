@@ -6,6 +6,8 @@ import urllib3
 import warnings
 import requests
 from typing import List, Dict, Any, Optional
+import logging
+from common.constant import DEFAULT_USER, FUND_CODE
 
 # 添加项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -97,20 +99,23 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[List[FundInve
                 indicator = FundInvestmentIndicator.from_dict(fund_data)
                 indicators.append(indicator)
             
-            # 过滤掉名称中不包含字母"C"和包含"债"的基金
-            filtered_indicators = [ind for ind in indicators if "C" in ind.fund_name and "债" not in ind.fund_name]
+            # 过滤掉名称中不包含字母"C"和包含"债"的基金，以及基金子类型等于002003的基金
+            filtered_indicators = [ind for ind in indicators if "C" in ind.fund_name and "债" not in ind.fund_name and ind.fund_sub_type != "002003"]
             
             # 根据product_rank从小到大排序
             filtered_indicators.sort(key=lambda x: x.product_rank)
             
-            api_response = ApiResponse(
-                Success=True,
-                ErrorCode=None,
-                Data=filtered_indicators,
-                FirstError=None,
-                DebugError=None
-            )
-            return api_response
+            # 直接返回过滤后的基金指标数组
+            return filtered_indicators
+            
+            # api_response = ApiResponse(
+            #     Success=True,
+            #     ErrorCode=None,
+            #     Data=filtered_indicators,
+            #     FirstError=None,
+            #     DebugError=None
+            # )
+            # return api_response
             
         except Exception as e:
             logger.error(f'解析响应数据失败: {str(e)}')
@@ -120,8 +125,7 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[List[FundInve
         raise Exception(f'请求失败: {str(e)}')
 
 if __name__ == "__main__":
-    import logging
-    from common.constant import DEFAULT_USER
+
     
     # 配置日志
     logging.basicConfig(
@@ -131,14 +135,14 @@ if __name__ == "__main__":
     
     try:
         # 获取加仓风向标基金信息
-        result = getFundInvestmentIndicators(DEFAULT_USER)
+        result = getFundInvestmentIndicators(DEFAULT_USER,page_size=20)
         
-        if result and result.Success and result.Data:
+        if result:
             print("\n加仓风向标基金信息获取成功:")
-            print(f"总共获取到 {len(result.Data)} 条基金信息（已过滤保留名称中包含字母'C'且不包含'债'的基金，并按产品排名从小到大排序）")
+            print(f"总共获取到 {len(result)} 条基金信息（已过滤保留名称中包含字母'C'且不包含'债'的基金，并排除基金子类型等于002003的基金，按产品排名从小到大排序）")
             print("===================================")
             
-            for i, indicator in enumerate(result.Data, 1):
+            for i, indicator in enumerate(result, 1):
                 print(f"{i}. {indicator.fund_name} ({indicator.fund_code})")
                 print(f"   排名: {indicator.product_rank}")
                 print(f"   一年收益率: {indicator.one_year_return if indicator.one_year_return != 0 else '暂无'}%")
@@ -154,9 +158,8 @@ if __name__ == "__main__":
                 
                 print("-----------------------------------")
         else:
-            print(f"获取加仓风向标基金信息失败: {result.FirstError if result else '未知错误'}")
-            if result:
-                print(f"错误代码: {result.ErrorCode}")
-                print(f"调试信息: {result.DebugError}")
+            print("获取加仓风向标基金信息失败: 返回结果为空")
     except Exception as e:
         print(f"执行过程中发生异常: {str(e)}")
+
+

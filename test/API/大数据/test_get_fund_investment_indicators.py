@@ -13,7 +13,6 @@ if root_dir not in sys.path:
 
 # 修改导入路径，使用正确的导入路径
 from src.API.大数据.加仓风向标 import getFundInvestmentIndicators
-from src.domain.fund_plan import ApiResponse
 from src.domain.fund.fund_investment_indicator import FundInvestmentIndicator
 from src.common.constant import DEFAULT_USER
 
@@ -100,19 +99,18 @@ def test_get_fund_investment_indicators_success(mock_response):
         
         result = getFundInvestmentIndicators(DEFAULT_USER)
         
-        # assert isinstance(result, ApiResponse)
-        assert result.Success == True
-        # assert isinstance(result.Data, list)
+        # 现在直接返回列表，不再是ApiResponse对象
+        assert isinstance(result, list)
         
         # 验证过滤逻辑：只保留名称中包含字母"C"且不包含"债"的基金
-        assert len(result.Data) == 2  # 应该只有两个符合条件的基金
+        assert len(result) == 2  # 应该只有两个符合条件的基金
         
         # 验证排序逻辑：按product_rank从小到大排序
-        assert result.Data[0].product_rank < result.Data[1].product_rank
+        assert result[0].product_rank < result[1].product_rank
         
         # 验证第一个基金的属性
-        fund = result.Data[0]
-        # assert isinstance(fund, FundInvestmentIndicator)
+        fund = result[0]
+        assert isinstance(fund, FundInvestmentIndicator)
         assert fund.fund_name == "测试基金C"
         assert fund.fund_code == "123456"
         assert fund.fund_type == "混合型"
@@ -130,10 +128,9 @@ def test_get_fund_investment_indicators_empty(mock_empty_response):
         
         result = getFundInvestmentIndicators(DEFAULT_USER)
         
-        # assert isinstance(result, ApiResponse)
-        assert result.Success == True
-        # assert isinstance(result.Data, list)
-        assert len(result.Data) == 0  # 应该没有基金
+        # 现在直接返回列表
+        assert isinstance(result, list)
+        assert len(result) == 0  # 应该没有基金
 
 def test_get_fund_investment_indicators_error(mock_error_response):
     """测试API返回错误的情况"""
@@ -141,13 +138,12 @@ def test_get_fund_investment_indicators_error(mock_error_response):
         mock_post.return_value.json.return_value = mock_error_response
         mock_post.return_value.raise_for_status = MagicMock()
         
-        result = getFundInvestmentIndicators(DEFAULT_USER)
+        # 当API返回错误时，函数应该抛出异常
+        with pytest.raises(Exception) as exc_info:
+            getFundInvestmentIndicators(DEFAULT_USER)
         
-        # assert isinstance(result, ApiResponse)
-        assert result.Success == False
-        assert result.ErrorCode == "E001"
-        assert result.FirstError == "请求失败"
-        assert result.DebugError == "认证失败"
+        # 验证异常信息包含错误详情
+        assert "请求失败" in str(exc_info.value)
 
 def test_get_fund_investment_indicators_http_error():
     """测试HTTP请求失败的情况"""
@@ -181,9 +177,53 @@ def test_get_fund_investment_indicators_with_page_size():
         mock_post.return_value.raise_for_status = MagicMock()
         
         # 调用函数时指定page_size参数
-        getFundInvestmentIndicators(DEFAULT_USER, page_size=50)
+        result = getFundInvestmentIndicators(DEFAULT_USER, page_size=50)
+        
+        # 验证返回的是列表
+        assert isinstance(result, list)
         
         # 验证请求中包含了正确的page_size参数
         _, kwargs = mock_post.call_args
         assert 'data' in kwargs
         assert kwargs['data']['pageSize'] == 50
+
+def test_get_fund_investment_indicators_success_real():
+    """测试真实调用获取加仓风向标基金信息"""
+    result = getFundInvestmentIndicators(DEFAULT_USER)
+    
+    # 验证返回结果是列表
+    assert isinstance(result, list)
+    
+    # 如果有数据，验证基金对象的属性
+    if len(result) > 0:
+        fund = result[0]
+        assert hasattr(fund, 'fund_name')
+        assert hasattr(fund, 'fund_code')
+        assert hasattr(fund, 'fund_type')
+        assert hasattr(fund, 'fund_sub_type')
+        assert hasattr(fund, 'one_year_return')
+        assert hasattr(fund, 'since_launch_return')
+        assert hasattr(fund, 'update_time')
+        assert hasattr(fund, 'product_rank')
+        
+        # 验证数据类型
+        assert isinstance(fund.fund_name, str)
+        assert isinstance(fund.fund_code, str)
+        assert isinstance(fund.fund_type, str)
+        assert isinstance(fund.fund_sub_type, str)
+        assert isinstance(fund.one_year_return, (int, float))
+        assert isinstance(fund.since_launch_return, (int, float))
+        assert isinstance(fund.update_time, str)
+        
+        # 验证过滤逻辑：基金名称应该包含"C"且不包含"债"，且基金子类型不等于"002003"
+        for fund_item in result:
+            assert 'C' in fund_item.fund_name
+            assert '债' not in fund_item.fund_name
+            assert fund_item.fund_sub_type != "002003"
+        
+        # 验证排序逻辑：按product_rank从小到大排序
+        if len(result) > 1:
+            for i in range(len(result) - 1):
+                assert result[i].product_rank <= result[i + 1].product_rank
+    else:
+        print("API调用成功但返回空列表")

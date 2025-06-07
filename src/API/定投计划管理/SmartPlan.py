@@ -968,7 +968,7 @@ if __name__ == '__main__':
         fund_code="021490",
         amount="2000.0",
         period_type=4,
-        period_value="1",
+        period_value= "1",
         sub_account_name="最优止盈",
         strategy_type= 3
     )

@@ -10,15 +10,15 @@ from urllib.parse import quote_plus
 from typing import Dict, Any, Optional, Union
 
 # 添加项目根目录到路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, project_root)
 
-# 禁用SSL证书验证警告
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# 然后进行其他导入
 from src.domain.fund_plan import ApiResponse, FundPlanResponse, PageInfo, FundPlan
 from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
 from src.domain.fund_plan import RationCreateParameters, DiscountRate
 from src.domain.trade.share import Share
-
+from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.common.constant import (
     SERVER_VERSION, PAGE_SIZE, PASSPORT_CTOKEN, PLAN_TYPE,
     PASSPORT_UTOKEN, PHONE_TYPE, MOBILE_KEY, PAGE_INDEX,
@@ -237,15 +237,15 @@ def getFundPlanList(fund_code,user) -> ApiResponse[FundPlanResponse]:
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive',
         'Host': f'ibgapi{user.index}.1234567.com.cn',
-        'If-Modified-Since': 'Sat, 26 Apr 2025 10:26:57 GMT',
-        'Referer': 'https://mpservice.com/fund7a71775da8f2ce/release/pages/fund-plan-list/index?fundCode=020256&subAccountNo=&planType=1&holdAmount=20209.41',
+        'If-Modified-Since': 'Sat, 26 Apr 2025 08:55:51 GMT',
+        'Referer': f'https://mpservice.com/fund46516ffab83642/release/pages/home/index?fundCode={fund_code}&subAccountNo=&reference=holdDetail',
         'User-Agent': 'okhttp/3.12.13',
         'clientInfo': 'ttjj-ZTE 7534N-Android-11',
         'content-type': 'application/json',
         'gtoken': 'ceaf-4a997831b1b3b90849f585f98ca6f30e',
-        'mp_instance_id': '76',
-        'traceparent': '00-0000000046aa4cae0000019671a59144-0000000000000000-01',
-        'tracestate': 'pid=0xbfe0bf,taskid=0xa5fb933'
+        'mp_instance_id': '40',
+        'traceparent': '00-0000000046aa4cae00000196719ac91d-0000000000000000-01',
+        'tracestate': 'pid=0xb01a105,taskid=0xa539a9d'
     }
     logger = logging.getLogger("SmartPlan")
     try:
@@ -622,153 +622,6 @@ def getPlanDetailPro(plan_id, user) -> ApiResponse[FundPlanDetail]:
         raise Exception(f'请求失败: {str(e)}')
 
 
-def createPlanV3(user, fund_code: str ,amount:str = "2000", period_type: int = 4, period_value: int = 1, strategy_type: int = 0) -> ApiResponse[FundPlanDetail]:
-    """
-    创建基金定投计划V3版本
-    Args:
-        user: User对象，包含用户认证信息
-        fund_code: 基金代码
-        period_type: 定投周期类型 (1:周定投,2:双周定投,3:月定投,4: 每日)
-        period_value: 定投周期值 (对应周期类型的具体数值)
-        strategy_type: 策略类型 (0: 目标止盈定投，2:慧定投,3:普通定投), 默认为0
-    Returns:
-        ApiResponse[FundPlanDetail]: 定投计划创建结果
-    """
-    url = f'https://ibgapi{user.index}.1234567.com.cn/common/getNextDeductDateV2'
-    md5_password = hashlib.md5(user.password.encode('utf-8')).hexdigest()
-    params = [
-        ('product', 'EFund'),
-        ('ServerVersion', SERVER_VERSION),
-        ('passportctoken', user.passport_ctoken),
-        ('passportutoken', user.passport_utoken),
-        ('deviceid', MOBILE_KEY),
-        ('userid', user.customer_no),
-        ('version', SERVER_VERSION),
-        ('periodValue', period_value),
-        ('strategyType', strategy_type),
-        ('ctoken', user.c_token),
-        ('uid', user.customer_no),
-        ('periodType', period_type),
-        ('PhoneType', PHONE_TYPE),
-        ('MobileKey', MOBILE_KEY),
-        ('fundCode', fund_code),
-        ('UserId', user.customer_no),
-        ('utoken', user.u_token),
-        ('plat', PHONE_TYPE),
-        ('UToken', user.u_token),
-        ('passportid', user.passport_id),
-        ('bankAcctNo', user.passport_id),
-        ('Password', md5_password),
-        ('amount', amount),
-        ('CToken', user.c_token),
-    ]
-    
-    query_string = urllib.parse.urlencode(params)
-    full_url = f"{url}?{query_string}"
-    
-    headers = {
-        'Accept': '*/*',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Host': f'ibgapi{user.index}.1234567.com.cn',
-        'If-Modified-Since': 'Sat, 26 Apr 2025 09:22:45 GMT',
-        'Referer': f'https://mpservice.com/fund46516ffab83642/release/pages/home/index?fundCode={fund_code}',
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
-        'content-type': 'application/json',
-        'gtoken': 'ceaf-4a997831b1b3b90849f585f98ca6f30e',
-        'mp_instance_id': '24',
-        'traceparent': '00-0000000046aa4cae000001967172c8ae-0000000000000000-01',
-        'tracestate': 'pid=0x6865597,taskid=0x9d372ab',
-        'validmark': 'Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZdVcHJ8J2NdZhXTNMQR9BMpxG3EMlqXyJoFeiMLZWZZtJ1DXqiIOSu/kLYsAt37vKDe0z7E8EhsEcNJUPET3mtyAFlxGf+9vZQhrgOcMt8KwY='
-    }
-    
-    logger = logging.getLogger("SmartPlan")
-    try:
-        response = requests.get(full_url, headers=headers, verify=False)
-        response.raise_for_status()
-        json_data = response.json()
-        
-        try:
-            data = json_data.get('Data')
-            if data is None:
-                if not json_data.get('Success', False):
-                    return ApiResponse(
-                        Success=json_data.get('Success', False),
-                        ErrorCode=json_data.get('ErrorCode'),
-                        Data=None,
-                        FirstError=json_data.get('FirstError'),
-                        DebugError=json_data.get('DebugError')
-                    )
-                raise Exception('解析响应数据失败: Data字段为空')
-            
-            # 解析提示信息
-            tips = []
-            for tip_data in data.get('tips', []):
-                tips.append({
-                    'title': tip_data.get('title', ''),
-                    'subTitle': tip_data.get('subTitle', ''),
-                    'thirdTitle': tip_data.get('thirdTitle')
-                })
-            
-            # 解析优惠券信息
-            coupon_data = data.get('couponInfo', {})
-            coupon_info = {
-                'giftValueArea': coupon_data.get('giftValueArea'),
-                'deductTimes': coupon_data.get('deductTimes'),
-                'giftUnit': coupon_data.get('giftUnit'),
-                'giftId': coupon_data.get('giftId'),
-                'giftName': coupon_data.get('giftName'),
-                'supportVarGiftValue': coupon_data.get('supportVarGiftValue'),
-                'couponsSummaryInfo': coupon_data.get('couponsSummaryInfo')
-            }
-            
-            # 创建计划详情对象
-            plan_detail = FundPlanDetail(
-                planId=data.get('planId', ''),
-                planConfigId=data.get('planConfigId', ''),
-                planConfigName=data.get('planConfigName', ''),
-                tips=tips,
-                fundCode=data.get('fundCode', ''),
-                fundName=data.get('fundName', ''),
-                originFundCode=data.get('originFundCode', ''),
-                forceFundCode=data.get('forceFundCode'),
-                bankCode=data.get('bankCode', ''),
-                payType=data.get('payType', 0),
-                periodInfo=data.get('periodInfo', ''),
-                bankCardNo=data.get('bankCardNo', ''),
-                amount=data.get('amount', '0'),
-                minAmount=data.get('minAmount', '0'),
-                maxAmount=data.get('maxAmount', '0'),
-                
-                rationType=data.get('rationType', ''),
-                subAccountName=data.get('subAccountName'),
-                subAccountNo=data.get('subAccountNo', ''),
-                couponInfo=coupon_info,
-                showBankCode=data.get('showBankCode', ''),
-                applyTime=data.get('applyTime', ''),
-                nextWorkday=data.get('nextWorkday', ''),
-                operateType=data.get('operateType', 0)
-            )
-            
-            return ApiResponse(
-                Success=json_data.get('Success', False),
-                ErrorCode=json_data.get('ErrorCode'),
-                Data=plan_detail,
-                FirstError=json_data.get('FirstError'),
-                DebugError=json_data.get('DebugError')
-            )
-            
-        except Exception as e:
-            logger.error(f'解析响应数据失败: {str(e)}')
-            raise Exception(f'解析响应数据失败: {str(e)}')
-            
-    except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}')
-        raise Exception(f'请求失败: {str(e)}')
-
-
-
 def operateRation(user, plan_id: str, operation: str) -> ApiResponse[FundPlanDetail]:
     """
     操作定投计划
@@ -844,49 +697,40 @@ def operateRation(user, plan_id: str, operation: str) -> ApiResponse[FundPlanDet
                     'thirdTitle': tip_data.get('thirdTitle')
                 })
 
-            # 创建FundPlan对象
-            ration_plan = FundPlan(
+            # 创建FundPlan对象而不是FundPlanDetail对象
+            plan = FundPlan(
                 planId=data.get('planId', ''),
                 fundCode=data.get('fundCode', ''),
                 fundName=data.get('fundName', ''),
-                fundType='',
+                fundType='',  # 可能需要从其他地方获取
                 financialType=None,
-                isCashBag=False,
+                # 移除这行: isCashBag=False,
                 executedAmount=0.0,
                 executedTime=0,
-                planState='',
+                planState='1',  # 假设新创建的计划状态为1（正常）
                 planBusinessState='',
                 pauseType=None,
                 planExtendStatus='',
-                planType='',
+                planType=data.get('rationType', '1'),
                 nextDeductDescription='',
-                periodType=data.get('periodType', 0),
-                periodValue=data.get('periodValue', 0),
-                amount=float(data.get('amount', '0')),
-                nextDeductDate='',
+                periodType=period_type,
+                periodValue=int(period_value),
+                amount=float(amount.replace(',', '')),
+                nextDeductDate=data.get('nextWorkday', ''),
                 reTriggerDate='',
                 recentDeductDate='',
                 bankCode=data.get('bankCode', ''),
                 showBankCode=data.get('showBankCode', ''),
                 shortBankCardNo=data.get('bankCardNo', ''),
                 bankAccountNo='',
-                payType=data.get('payType', 0),
+                payType=data.get('payType', 1),
                 subAccountNo=data.get('subAccountNo', ''),
                 subAccountName=data.get('subAccountName', ''),
                 subDisband=None,
-                currentDay='',
+                currentDay=data.get('applyTime', '').split(' ')[0] if data.get('applyTime') else '',
                 isGdlc=False,
-                buyStrategy='',
-                redeemStrategy='',
-                retriggerTips='',
-                isDeductDay=False,
-                planConfigId=data.get('planConfigId', ''),
-                indexCode=None,
-                indexName=None,
-                maxTime=None,
-                minTime=None,
-                amountMin=None,
-                amountMax=None,
+                buyStrategy='1',
+                redeemStrategy='1',
                 planAssets=0.0,
                 rationProfit=None,
                 totalProfit=None,
@@ -895,9 +739,8 @@ def operateRation(user, plan_id: str, operation: str) -> ApiResponse[FundPlanDet
                 unitPrice=None,
                 targetRate=None,
                 retreatPercentage=None,
-                renewal=False,
-                redemptionWay=0,
-                sellLockDays=0,
+                renewal=True,
+                redemptionWay=1,
                 latestTakeProfitDetail=None,
                 takeProfitFailedDate=None,
                 redeemFailedMessage=None,
@@ -907,7 +750,7 @@ def operateRation(user, plan_id: str, operation: str) -> ApiResponse[FundPlanDet
                 planStrategyId='',
                 lockTime='',
                 maxProfit=None,
-                redeemLimit=''
+                redeemLimit='1'
             )
             
             # 创建FundPlanDetail对象，使用正确的参数
@@ -936,7 +779,7 @@ def operateRation(user, plan_id: str, operation: str) -> ApiResponse[FundPlanDet
 
 
 def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int = 4, 
-                 period_value: str = "1", strategy_type: int = 0) -> ApiResponse[FundPlan]:
+                 period_value: str = "1",sub_account_name = None,strategy_type: int = 0) -> ApiResponse[FundPlan]:
     """
     创建基金定投计划V3版本
     Args:
@@ -946,10 +789,18 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
         period_type: 定投周期类型 (4: 每日)
         period_value: 定投周期值
         strategy_type: 策略类型 (0: 目标止盈定投)
+        sub_account_name: 子账户名称，可选参数
     Returns:
         ApiResponse[FundPlan]: 定投计划创建结果
     """
+ 
+    
     url = f'https://ibgapi{user.index}.1234567.com.cn/ration/createPlanV3'
+    
+    # 如果指定了子账户名称，获取子账户编号
+    sub_account_no = None
+    if sub_account_name is not None:
+        sub_account_no = getSubAccountNoByName(user, sub_account_name)
     
     # 构建请求体
     body = {
@@ -995,6 +846,10 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
         "UToken": user.u_token,
         "passportid": user.passport_id
     }
+    
+    # 如果获取到了子账户编号，添加到请求体中
+    if sub_account_no is not None:
+        body["subAcctNo"] = sub_account_no
 
     # 构建请求头
     headers = {
@@ -1039,7 +894,7 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
             fundName=data.get('fundName', ''),
             fundType='',  # 可能需要从其他地方获取
             financialType=None,
-            isCashBag=False,
+            # 移除这行: isCashBag=False,
             executedAmount=0.0,
             executedTime=0,
             planState='1',  # 假设新创建的计划状态为1（正常）
@@ -1076,16 +931,8 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
             retreatPercentage=None,
             renewal=True,
             redemptionWay=1,
-            sellLockDays=-1,
-            latestTakeProfitDetail=None,
-            takeProfitFailedDate=None,
-            redeemFailedMessage=None,
-            reachExpectationDate=None,
-            isHKFund=False,
-            rangeIndex=None,
             planStrategyId='',
-            lockTime='',
-            maxProfit=None,
+         
             redeemLimit='1'
         )
         
@@ -1121,7 +968,8 @@ if __name__ == '__main__':
         fund_code="021490",
         amount="2000.0",
         period_type=4,
-        period_value="1"
+        period_value="1",
+        sub_account_name="最优止盈",
     )
 
     # 检查响应

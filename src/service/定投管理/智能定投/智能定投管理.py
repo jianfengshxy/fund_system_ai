@@ -44,7 +44,20 @@ def create_period_smart_investment(user: User,fund_code: str, amount: int, perio
     Returns:
         API响应结果
     """
-      
+    # 获取该基金的所有定投计划
+    existing_plans = getFundPlanList(fund_code, user)
+    # 查找指定子账户名称的定投计划
+    target_plan = None
+    if existing_plans:
+        for plan in existing_plans:
+            try:
+                detail_response = getPlanDetailPro(plan.planId, user)
+            except Exception as e:
+                 # 记录错误但继续处理其他计划
+                print(f"获取计划 {plan.planId} 详情失败: {str(e)}")
+            if  plan.planType == '1' and detail_response.Data.rationPlan.periodType == 4:
+                logger.info(f"基金 {plan.fundName}已存在智能定投每日定投计划")
+                return None           
     # 调用现有的createPlanV3函数，硬编码strategy_type=3（组合定投）
     return createPlanV3(
         user=user,

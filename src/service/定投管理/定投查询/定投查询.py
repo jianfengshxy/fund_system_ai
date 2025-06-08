@@ -1,7 +1,19 @@
+import sys
+import os
 from typing import List
+
+# 添加项目根目录到Python路径
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../../'))
+
 from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
-from src.API.定投计划管理.SmartPlan import getFundRations, getPlanDetailPro
+from src.API.定投计划管理.SmartPlan import getRationCreateParameters, getPlanDetailPro
 from src.domain.user.User import User
+from src.common.constant import (
+    SERVER_VERSION, PAGE_SIZE, PASSPORT_CTOKEN, PLAN_TYPE,
+    PASSPORT_UTOKEN, PHONE_TYPE, MOBILE_KEY, PAGE_INDEX,
+    USER_ID, U_TOKEN, C_TOKEN, PASSPORT_ID, DEFAULT_USER
+)
+from src.API.定投计划管理.SmartPlan import getFundRations
 
 def get_all_fund_plan_details(user: User) -> List[FundPlanDetail]:
     """
@@ -32,3 +44,8 @@ def get_all_fund_plan_details(user: User) -> List[FundPlanDetail]:
             continue
             
     return plan_details
+
+if __name__ == '__main__':
+    # 获取所有定投计划详情
+    details = get_all_fund_plan_details(DEFAULT_USER)
+    print(details)

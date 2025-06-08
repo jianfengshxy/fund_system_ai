@@ -58,7 +58,7 @@ resources:
         triggerName: "increase"
         triggerConfig:
           payload: ${vars.common.props.triggerConfig.payload}
-          cronExpression: "CRON_TZ=Asia/Shanghai 4 28 11 * * *"
+          cronExpression: "CRON_TZ=Asia/Shanghai 4 24 11 * * *"
           enable: ${vars.common.props.triggerConfig.enable}
 
   redeem:

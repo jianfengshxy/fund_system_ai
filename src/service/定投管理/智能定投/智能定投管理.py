@@ -21,7 +21,7 @@ from src.domain.trade.share import Share
 from src.domain.user.User import User
 from src.API.定投计划管理.SmartPlan import getFundRations, getPlanDetailPro,getFundPlanList
 from src.bussiness.最优止盈组合.increase import increase
-from src.API.定投计划管理.SmartPlan import createPlanV3
+from src.API.定投计划管理.SmartPlan import createPlanV3,operateRation
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.common.constant import (
     SERVER_VERSION, PAGE_SIZE, PASSPORT_CTOKEN, PLAN_TYPE,
@@ -56,6 +56,7 @@ def create_period_smart_investment(user: User,fund_code: str, amount: int, perio
                  # 记录错误但继续处理其他计划
                 print(f"获取计划 {plan.planId} 详情失败: {str(e)}")
             if  plan.planType == '1' and detail_response.Data.rationPlan.periodType == 4:
+                # 如果计划类型为1（目标定投）且周期类型为4（按日）
                 logger.info(f"基金 {plan.fundName}已存在智能定投每日定投计划")
                 return None           
     # 调用现有的createPlanV3函数，硬编码strategy_type=3（组合定投）
@@ -68,6 +69,7 @@ def create_period_smart_investment(user: User,fund_code: str, amount: int, perio
         sub_account_name= None,
         strategy_type= 0 # 硬编码为0，表示目标定投
     )
+
 
 if __name__ == '__main__':
     # 配置logger

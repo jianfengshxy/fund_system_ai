@@ -83,15 +83,23 @@ def dissolve_period_investment_by_group(user: User, sub_account_name: str, fund_
     """
     # 获取该基金的所有定投计划
     existing_plans = getFundPlanList(fund_code, user)
-    
+    try:
+        detail_response = getPlanDetailPro(plan.planId, user)
+    except Exception as e:
+        # 记录错误但继续处理其他计划  
+        print(f"获取计划 {plan.planId} 详情失败: {str(e)}")  
     # 查找指定子账户名称的定投计划
     target_plan = None
+    plan_assets = detail_response.Data.rationPlan.planAssets
     if existing_plans:
         for plan in existing_plans:
             if plan.subAccountName == sub_account_name:
                 target_plan = plan
                 break
-    
+    if plan_assets is not None:
+        logger.info(f"基金 {fund_code} 在子账户 '{sub_account_name}'资产不为空{plan_assets}")
+        return None
+
     if target_plan is None:
         logger.info(f"基金 {fund_code} 在子账户 '{sub_account_name}' 中未找到定投计划")
         return None

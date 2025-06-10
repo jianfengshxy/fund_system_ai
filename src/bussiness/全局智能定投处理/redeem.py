@@ -117,7 +117,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             logger.info(f"{customer_name}计算止盈点：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},times:{times},实际止盈点:5.0")
             stop_rate = 5.0
         #指数基金排名在90以上的时候，大于1%即止盈
-        if fund_type == '000' and estimated_profit_rate > 1.0 and rank_100 > 90 and fund_info.estimated_change != 0.0 > 0.0:
+        if fund_type == '000' and estimated_profit_rate > 1.0 and rank_100 > 90 and fund_info.estimated_change != 0.0 :
             logger.info(f"{customer_name}的止盈操作开始：指数基金{fund_name}{fund_code}预估收益{estimated_profit_rate},100日排名:{rank_100},实际止盈点:1.0")
             sell_low_fee_shares(user,sub_account_no,fund_code,shares)
             return True
@@ -146,12 +146,12 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         bank_card_info = bank_cards[0]     
         CurrentRealBalance = bank_card_info.CurrentRealBalance
         #检查银行卡余额,小于30万，且收益大于1.0，立即卖出费率为0的份额
-        if estimated_profit_rate > 1.0 and CurrentRealBalance < 300000 and fund_type == '000' and asset_detail.fund_type != 'a':
+        if estimated_profit_rate > 1.0 and CurrentRealBalance < 500000 and fund_type == '000' and fund_info.estimated_change != 0.0:
             logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:1.0.")
             sell_0_fee_shares(user,sub_account_no,fund_code,shares)
             return True     
-        #检查银行卡余额,小于30万，且收益大于1.0，立即卖出费率为0的份额
-        if estimated_profit_rate > 3.0 and CurrentRealBalance < 300000 and fund_type in ['001','002'] :
+        #检查银行卡余额,小于50万，且收益大于1.0，立即卖出费率为0的份额
+        if estimated_profit_rate > 3.0 and CurrentRealBalance < 500000 and fund_type in ['001','002'] :
             logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:1.0.")
             sell_0_fee_shares(user,sub_account_no,fund_code,shares)
             return True     

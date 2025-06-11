@@ -37,6 +37,7 @@ def get_all_fund_plan_details(user: User) -> List[FundPlanDetail]:
         try:
             detail_response = getPlanDetailPro(plan.planId, user)
             if detail_response.Success and detail_response.Data:
+                detail_response.Data.rationPlan.planType = plan.planType
                 plan_details.append(detail_response.Data)
         except Exception as e:
             # 记录错误但继续处理其他计划

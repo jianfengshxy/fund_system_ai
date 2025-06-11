@@ -894,6 +894,9 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
             redeemLimit='1'
         )
         
+        # 记录成功创建定投计划的详细信息
+        logger.info(f"定投计划创建成功 - 计划ID: {plan.planId}, 基金代码: {plan.fundCode}, 基金名称: {plan.fundName}, 定投金额: {plan.amount}, 定投周期: {plan.periodType}, 子账户: {plan.subAccountName}")
+        
         return ApiResponse(
             Success=True,
             ErrorCode=0,

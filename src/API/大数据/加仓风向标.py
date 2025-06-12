@@ -100,7 +100,7 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[List[FundInve
                 indicators.append(indicator)
             
             # 过滤掉名称中不包含字母"C"和包含"债"的基金，以及基金子类型等于002003的基金
-            filtered_indicators = [ind for ind in indicators if "C" in ind.fund_name and "债" not in ind.fund_name and ind.fund_sub_type != "002003"]
+            filtered_indicators = [ind for ind in indicators if "C" in ind.fund_name and "债" not in ind.fund_name and ind.fund_sub_type != "002003" and ind.fund_type in ["000","001","002"]]
             
             # 根据product_rank从小到大排序
             filtered_indicators.sort(key=lambda x: x.product_rank)

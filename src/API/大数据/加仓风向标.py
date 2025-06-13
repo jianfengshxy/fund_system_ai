@@ -15,6 +15,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from common.constant import DEFAULT_USER, FUND_CODE
 from domain.fund_plan import ApiResponse
 from domain.fund.fund_investment_indicator import FundInvestmentIndicator
+from service.基金信息.基金信息 import get_all_fund_info
 
 # 删除这行导入：
 # from API.大数据.减仓风向标 import getFundReductionInvestmentIndicators
@@ -173,6 +174,35 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[List[FundInve
                     logger.info("未获取到减仓基金列表，跳过重名过滤")
             except Exception as e:
                 logger.warning(f"获取减仓基金列表失败，跳过重名过滤: {str(e)}")
+            
+            # 对基金类型为"000"的基金按index_code去重，只保留第一个
+            try:
+                seen_index_codes = set()
+                final_indicators = []
+                
+                for indicator in filtered_indicators:
+                    if indicator.fund_type == "000":
+                        # 获取基金详细信息以获得index_code
+                        fund_info = get_all_fund_info(user, indicator.fund_code)
+                        if fund_info and hasattr(fund_info, 'index_code') and fund_info.index_code:
+                            if fund_info.index_code not in seen_index_codes:
+                                seen_index_codes.add(fund_info.index_code)
+                                final_indicators.append(indicator)
+                                logger.info(f"保留基金 {indicator.fund_name}({indicator.fund_code})，跟踪指数: {fund_info.index_code}")
+                            else:
+                                logger.info(f"过滤基金 {indicator.fund_name}({indicator.fund_code})，跟踪指数 {fund_info.index_code} 已存在")
+                        else:
+                            # 如果获取不到index_code，仍然保留该基金
+                            final_indicators.append(indicator)
+                            logger.info(f"保留基金 {indicator.fund_name}({indicator.fund_code})，未获取到跟踪指数信息")
+                    else:
+                        # 非"000"类型的基金直接保留
+                        final_indicators.append(indicator)
+                
+                filtered_indicators = final_indicators
+                logger.info(f"基金类型000去重后剩余 {len(filtered_indicators)} 个基金")
+            except Exception as e:
+                logger.warning(f"基金类型000去重处理失败，跳过此步骤: {str(e)}")
             
             # 根据product_rank从小到大排序
             filtered_indicators.sort(key=lambda x: x.product_rank)

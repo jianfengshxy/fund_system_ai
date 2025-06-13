@@ -93,6 +93,12 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     except Exception as e:
         logger.error(f"{fund_info.fund_name}获取基金30日波动率信息时发生异常: {str(e)}")
     
+    # 打印基金跟踪的指数信息
+    if hasattr(fund_info, 'index_code') and fund_info.index_code:
+        logger.info(f"{fund_info.fund_name}跟踪指数代码: {fund_info.index_code}")
+    else:
+        logger.info(f"{fund_info.fund_name}未跟踪任何指数或指数代码为空")
+    
     # 第6步：将基金信息加入缓存
     fund_info_cache[fund_code] = fund_info
     logger.info(f"基金 {fund_code} {fund_info.fund_name}的完整信息已加入缓存")

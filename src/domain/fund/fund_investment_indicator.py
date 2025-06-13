@@ -37,7 +37,7 @@ class FundInvestmentIndicator:
                 
         return cls(
             fund_code=data.get('FCODE', ''),
-            fund_name=process_fund_name(data.get('SHORTNAME', '')),
+            fund_name=data.get('SHORTNAME', ''),
             fund_type=data.get('RSFUNDTYPE', ''),
             fund_sub_type=data.get('RSBTYPE', ''),
             one_year_return=safe_float(data.get('SYL_1N')),

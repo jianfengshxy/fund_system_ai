@@ -98,9 +98,16 @@ def dissolve_daily_plan(user: User):
         
         # 获取加仓风向标中的基金代码列表
         logger.info("步骤3: 获取加仓风向标数据...")
-        indicators_list = getFundInvestmentIndicators(user)
-        if not indicators_list:
-            logger.warning("获取加仓风向标数据失败或为空")
+        try:
+            indicators_list = getFundInvestmentIndicators(user)
+            if not indicators_list:
+                logger.warning("获取加仓风向标数据失败或为空")
+                return
+            logger.info(f"成功获取加仓风向标数据，共{len(indicators_list)}个基金")
+        except Exception as e:
+            logger.error(f"调用加仓风向标API失败: {str(e)}")
+            import traceback
+            logger.error(f"异常堆栈: {traceback.format_exc()}")
             return
         
         # 添加延迟，避免并发问题

@@ -117,3 +117,32 @@ dmypy.json
 
 # Project specific
 *.log
+
+# Cache directories
+cache/
+.cache/
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+.nyc_output
+
+# Frontend tools cache
+.parcel-cache
+.next
+.nuxt
+dist
+.vuepress/dist
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port

@@ -24,10 +24,20 @@ class FundInvestmentIndicator:
                 return float(value)
             except (ValueError, TypeError):
                 return default
+        
+        # 处理基金名称，去除字母
+        def process_fund_name(name: str) -> str:
+            if not name:
+                return ''
+            # 去除所有英文字母（大小写）
+            import re
+            result = re.sub(r'[A-Za-z]', '', name)
+            print(f'PROCESS_FUND_NAME: {name} -> {result}')
+            return result
                 
         return cls(
             fund_code=data.get('FCODE', ''),
-            fund_name=data.get('SHORTNAME', ''),
+            fund_name=process_fund_name(data.get('SHORTNAME', '')),
             fund_type=data.get('RSFUNDTYPE', ''),
             fund_sub_type=data.get('RSBTYPE', ''),
             one_year_return=safe_float(data.get('SYL_1N')),

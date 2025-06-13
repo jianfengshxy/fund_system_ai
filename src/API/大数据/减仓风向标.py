@@ -1,23 +1,20 @@
-import os
 import sys
+import os
 import logging
 import urllib.parse
 import urllib3
 import warnings
 import requests
 from typing import List, Dict, Any, Optional
-import re
-import subprocess
+import logging
+from common.constant import DEFAULT_USER, FUND_CODE
 
 # 添加项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from common.constant import DEFAULT_USER, FUND_CODE
 from domain.fund_plan import ApiResponse
 from domain.fund.fund_investment_indicator import FundInvestmentIndicator
-
-# 删除这行导入：
-# from API.大数据.减仓风向标 import getFundReductionInvestmentIndicators
+import re
 
 def process_fund_name(name):
     """
@@ -29,49 +26,16 @@ def process_fund_name(name):
     processed_name = re.sub(r'[AaCc]', '', name)
     return processed_name
 
-def get_reduction_fund_names(user):
-    """
-    直接调用减仓风向标函数获取减仓基金名称列表
-    """
-    try:
-        # 导入减仓风向标模块
-        import sys
-        import os
-        sys.path.append(os.path.dirname(__file__))
-        
-        # 直接导入并调用函数
-        from 减仓风向标 import getFundReductionInvestmentIndicators
-        
-        # 获取减仓基金列表
-        reduction_indicators = getFundReductionInvestmentIndicators(user)
-        
-        if reduction_indicators and hasattr(reduction_indicators, '__iter__'):
-            fund_names = set()
-            for indicator in reduction_indicators:
-                if hasattr(indicator, 'fund_name'):
-                    fund_names.add(indicator.fund_name)
-            return fund_names
-        else:
-            logging.warning("减仓基金列表为空或格式不正确")
-            return set()
-            
-    except ImportError as e:
-        logging.warning(f"无法导入减仓风向标模块: {str(e)}")
-        return set()
-    except Exception as e:
-        logging.warning(f"获取减仓基金名称失败: {str(e)}")
-        return set()
-
-def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[List[FundInvestmentIndicator]]:
+def getFundReductionInvestmentIndicators(user, page_size=20) -> ApiResponse[List[FundInvestmentIndicator]]:
     """
     获取加仓风向标基金信息
     
     参数:
     user: 用户对象
-    page_size: 每页数量，默认为20
+    page_size: 每页数量，默认为40
     
     返回:
-    ApiResponse: 包含加仓风向标基金信息列表的响应对象
+    ApiResponse: 包含减仓风向标基金信息列表的响应对象
     """
     url = 'https://fundcomapi.tiantianfunds.com/mm/FundCustom/multiFundTypeSpeConfigListPage'
     
@@ -94,7 +58,7 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[List[FundInve
         'product': 'EFund',
         'pageSize': page_size,
         'passportctoken': user.passport_ctoken,
-        'configType': '9',
+        'configType': '10',
         'passportutoken': user.passport_utoken,
         'deviceid': '15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me',
         'userid': user.customer_no,
@@ -108,7 +72,7 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[List[FundInve
         'passportid': user.passport_id
     }
     
-    logger = logging.getLogger("FundInvestmentIndicator")
+    logger = logging.getLogger("FundReductionInvestmentIndicator")
     try:
         response = requests.post(url, data=data, headers=headers, verify=False)
         response.raise_for_status()
@@ -130,9 +94,9 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[List[FundInve
                 raise Exception('解析响应数据失败: data字段为空')
             
             # 获取类型为9的基金列表
-            fund_list = data.get('9', [])
+            fund_list = data.get('10', [])
             if not fund_list:
-                logger.warning("未找到加仓风向标基金数据")
+                logger.warning("未找到减仓风向标基金数据")
                 return ApiResponse(
                     Success=True,
                     ErrorCode=None,
@@ -142,34 +106,17 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[List[FundInve
                 )
             
             indicators = []
-            
             for fund_data in fund_list:
                 indicator = FundInvestmentIndicator.from_dict(fund_data)
-                #处理基金名称，去除字母A和C
+                # 处理基金名称，去除字母A和C
                 indicator.fund_name = process_fund_name(indicator.fund_name)
                 indicators.append(indicator)
             
-            # 过滤掉名称中不包含字母"C"和包含"债"的基金，以及基金子类型等于002003的基金
-            filtered_indicators = [ind for ind in indicators if "债" not in ind.fund_name and ind.fund_sub_type != "002003" and ind.fund_type in ["000","001","002"]]
-            
-            # 获取减仓基金列表，用于过滤重名基金
-            try:
-                reduction_fund_names = get_reduction_fund_names(user)
-                if reduction_fund_names:
-                    original_count = len(filtered_indicators)
-                    filtered_indicators = [ind for ind in filtered_indicators if ind.fund_name not in reduction_fund_names]
-                    filtered_count = original_count - len(filtered_indicators)
-                    logger.info(f"过滤掉了 {filtered_count} 个与减仓基金重名的基金")
-                else:
-                    logger.info("未获取到减仓基金列表，跳过重名过滤")
-            except Exception as e:
-                logger.warning(f"获取减仓基金列表失败，跳过重名过滤: {str(e)}")
-            
             # 根据product_rank从小到大排序
-            filtered_indicators.sort(key=lambda x: x.product_rank)
+            indicators.sort(key=lambda x: x.product_rank)
             
             # 直接返回过滤后的基金指标数组
-            return filtered_indicators
+            return indicators
             
             # api_response = ApiResponse(
             #     Success=True,
@@ -198,11 +145,11 @@ if __name__ == "__main__":
     
     try:
         # 获取加仓风向标基金信息
-        result = getFundInvestmentIndicators(DEFAULT_USER,page_size=20)
+        result = getFundReductionInvestmentIndicators(DEFAULT_USER,page_size=20)
         
         if result:
             print("\n加仓风向标基金信息获取成功:")
-            print(f"总共获取到 {len(result)} 条基金信息（已过滤保留名称不包含'债'的基金，并排除基金子类型等于002003的基金，按产品排名从小到大排序）")
+            print(f"总共获取到 {len(result)} 条基金信息（已过滤保留名称中包含字母'C'且不包含'债'的基金，并排除基金子类型等于002003的基金，按产品排名从小到大排序）")
             print("===================================")
             
             for i, indicator in enumerate(result, 1):

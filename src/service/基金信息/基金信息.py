@@ -3,6 +3,8 @@ from typing import Dict, List, Optional
 import sys
 import os
 
+from common.constant import DEFAULT_USER
+
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -98,3 +100,7 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     # 第7步：返回基金信息对象
     return fund_info
 
+if __name__ == '__main__':
+    fund_info = get_all_fund_info(DEFAULT_USER, '011707')
+    print(fund_info)
+    pass

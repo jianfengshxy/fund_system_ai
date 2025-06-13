@@ -157,9 +157,13 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[List[FundInve
                 reduction_fund_names = get_reduction_fund_names(user)
                 if reduction_fund_names:
                     original_count = len(filtered_indicators)
+                    # 记录被过滤的基金名称
+                    filtered_fund_names = [ind.fund_name for ind in filtered_indicators if ind.fund_name in reduction_fund_names]
                     filtered_indicators = [ind for ind in filtered_indicators if ind.fund_name not in reduction_fund_names]
                     filtered_count = original_count - len(filtered_indicators)
                     logger.info(f"过滤掉了 {filtered_count} 个与减仓基金重名的基金")
+                    if filtered_fund_names:
+                        logger.info(f"被过滤的基金名称: {', '.join(filtered_fund_names)}")
                 else:
                     logger.info("未获取到减仓基金列表，跳过重名过滤")
             except Exception as e:

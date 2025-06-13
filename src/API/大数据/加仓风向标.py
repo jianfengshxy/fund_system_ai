@@ -145,11 +145,16 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[List[FundInve
             
             for fund_data in fund_list:
                 indicator = FundInvestmentIndicator.from_dict(fund_data)
-                #处理基金名称，去除字母A和C
-                indicator.fund_name = process_fund_name(indicator.fund_name)
                 indicators.append(indicator)
             
-            # 过滤掉名称中不包含字母"C"和包含"债"的基金，以及基金子类型等于002003的基金
+            # 先过滤掉名称中不包含字母"C"的基金
+            indicators = [ind for ind in indicators if "C" in ind.fund_name or "c" in ind.fund_name]
+            
+            # 然后处理基金名称，去除字母A和C
+            for indicator in indicators:
+                indicator.fund_name = process_fund_name(indicator.fund_name)
+            
+            # 过滤掉包含"债"的基金，以及基金子类型等于002003的基金
             filtered_indicators = [ind for ind in indicators if "债" not in ind.fund_name and ind.fund_sub_type != "002003" and ind.fund_type in ["000","001","002"]]
             
             # 获取减仓基金列表，用于过滤重名基金

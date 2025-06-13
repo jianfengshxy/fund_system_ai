@@ -101,6 +101,6 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     return fund_info
 
 if __name__ == '__main__':
-    fund_info = get_all_fund_info(DEFAULT_USER, '011707')
+    fund_info = get_all_fund_info(DEFAULT_USER, '110026')
     print(fund_info)
     pass

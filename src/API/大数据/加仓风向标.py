@@ -179,22 +179,33 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[List[FundInve
             try:
                 seen_index_codes = set()
                 final_indicators = []
+                type_000_count = len([ind for ind in filtered_indicators if ind.fund_type == "000"])
+                logger.info(f"开始处理基金类型000去重，共有 {type_000_count} 个基金类型为000的基金")
                 
                 for indicator in filtered_indicators:
                     if indicator.fund_type == "000":
-                        # 获取基金详细信息以获得index_code
-                        fund_info = get_all_fund_info(user, indicator.fund_code)
-                        if fund_info and hasattr(fund_info, 'index_code') and fund_info.index_code:
-                            if fund_info.index_code not in seen_index_codes:
-                                seen_index_codes.add(fund_info.index_code)
-                                final_indicators.append(indicator)
-                                logger.info(f"保留基金 {indicator.fund_name}({indicator.fund_code})，跟踪指数: {fund_info.index_code}")
+                        try:
+                            # 获取基金详细信息以获得index_code
+                            logger.info(f"正在获取基金 {indicator.fund_name}({indicator.fund_code}) 的详细信息...")
+                            fund_info = get_all_fund_info(user, indicator.fund_code)
+                            # 添加延迟避免并发问题
+                            import time
+                            time.sleep(1)
+                            if fund_info and hasattr(fund_info, 'index_code') and fund_info.index_code:
+                                if fund_info.index_code not in seen_index_codes:
+                                    seen_index_codes.add(fund_info.index_code)
+                                    final_indicators.append(indicator)
+                                    logger.info(f"保留基金 {indicator.fund_name}({indicator.fund_code})，跟踪指数: {fund_info.index_code}")
+                                else:
+                                    logger.info(f"过滤基金 {indicator.fund_name}({indicator.fund_code})，跟踪指数 {fund_info.index_code} 已存在")
                             else:
-                                logger.info(f"过滤基金 {indicator.fund_name}({indicator.fund_code})，跟踪指数 {fund_info.index_code} 已存在")
-                        else:
-                            # 如果获取不到index_code，仍然保留该基金
+                                # 如果获取不到index_code，仍然保留该基金
+                                final_indicators.append(indicator)
+                                logger.info(f"保留基金 {indicator.fund_name}({indicator.fund_code})，未获取到跟踪指数信息")
+                        except Exception as fund_error:
+                            # 如果获取基金信息失败，仍然保留该基金
                             final_indicators.append(indicator)
-                            logger.info(f"保留基金 {indicator.fund_name}({indicator.fund_code})，未获取到跟踪指数信息")
+                            logger.warning(f"获取基金 {indicator.fund_name}({indicator.fund_code}) 信息失败，仍然保留: {str(fund_error)}")
                     else:
                         # 非"000"类型的基金直接保留
                         final_indicators.append(indicator)
@@ -203,6 +214,8 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[List[FundInve
                 logger.info(f"基金类型000去重后剩余 {len(filtered_indicators)} 个基金")
             except Exception as e:
                 logger.warning(f"基金类型000去重处理失败，跳过此步骤: {str(e)}")
+                import traceback
+                logger.warning(f"异常堆栈: {traceback.format_exc()}")
             
             # 根据product_rank从小到大排序
             filtered_indicators.sort(key=lambda x: x.product_rank)

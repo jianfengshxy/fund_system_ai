@@ -29,6 +29,23 @@ from src.common.constant import (
     USER_ID, U_TOKEN, C_TOKEN, PASSPORT_ID, DEFAULT_USER
 )
 
+#解散指定定投计划
+def dissolve_period_smart_investment(user: User,planId: str):
+    """
+    解散指定组合的基金定投计划
+    
+    Args:
+        user: 用户对象
+        planId: 定投计划Id     
+    Returns:
+        API响应结果
+    """
+    return operateRation(
+        user=user,
+        plan_id=planId,
+        operation="2"  # 硬编码为"2"，表示解散计划
+    )
+
 
 def create_period_smart_investment(user: User,fund_code: str, amount: int, period_type: int = 4, period_value: int = 1):
     """
@@ -39,7 +56,7 @@ def create_period_smart_investment(user: User,fund_code: str, amount: int, perio
         fund_code: 基金代码
         amount: 定投金额
         period_type: 定投周期类型，默认为4（按日）
-        period_value: 定投周期值，默认为1（每1周）
+        period_value: 定投周期值，默认为1
     
     Returns:
         API响应结果

@@ -40,59 +40,114 @@ from src.domain.fund.fund_investment_indicator import FundInvestmentIndicator
 from src.service.定投管理.智能定投.智能定投管理 import create_period_smart_investment
 logger = logging.getLogger(__name__)    
 
-# add_plan(user: User) -> None :
-def add_plan(user: User,amount:int = 2000)  :
+def add_plan(user: User, amount: int = 2000):
     """
-    全局智能定投处理
+    全局智能定投处理 - 为加仓风向标中的基金创建日智能定投计划
     :param user: 用户对象
+    :param amount: 定投金额，默认2000
     :return: None
     """
+    logger.info("=== 开始执行add_plan函数 ===")
+    logger.info(f"用户信息: customer_name={getattr(user, 'customer_name', 'N/A')}")
+    
     try:
-        # 获取加仓风向标基金信息
-        result = getFundInvestmentIndicators(DEFAULT_USER,page_size=20)  
-    #     if result:
-    #         print("\n加仓风向标基金信息获取成功:")
-    #         print(f"总共获取到 {len(result)} 条基金信息（已过滤保留名称中包含字母'C'且不包含'债'的基金，并排除基金子类型等于002003的基金，按产品排名从小到大排序）")
-    #         print("===================================")
+        # 步骤1: 获取加仓风向标基金信息
+        logger.info("步骤1: 获取加仓风向标数据...")
+        try:
+            indicators_list = getFundInvestmentIndicators(user)
+            if not indicators_list:
+                logger.warning("获取加仓风向标数据失败或为空")
+                return
+            logger.info(f"成功获取加仓风向标数据，共{len(indicators_list)}个基金")
+        except Exception as e:
+            logger.error(f"调用加仓风向标API失败: {str(e)}")
+            import traceback
+            logger.error(f"异常堆栈: {traceback.format_exc()}")
+            return
+        
+        # 步骤2: 获取所有的定投计划详情
+        logger.info("步骤2: 获取所有定投计划...")
+        fund_plan_details = get_all_fund_plan_details(user)
+        if not fund_plan_details:
+            logger.warning("获取定投计划列表失败或为空")
+            return
+        
+        logger.info(f"获取到 {len(fund_plan_details)} 个定投计划")
+        
+        # 步骤3: 过滤出periodType == 4 且 planType == '1' 的日智能定投计划集合
+        logger.info("步骤3: 过滤日智能定投计划...")
+        filtered_fund_plan_details = [
+            fund_plan_detail for fund_plan_detail in fund_plan_details
+            if (hasattr(fund_plan_detail, 'rationPlan') and 
+                hasattr(fund_plan_detail.rationPlan, 'periodType') and 
+                fund_plan_detail.rationPlan.periodType == 4 and 
+                hasattr(fund_plan_detail.rationPlan, 'planType') and 
+                fund_plan_detail.rationPlan.planType == '1')
+        ]
+        
+        logger.info(f"找到 {len(filtered_fund_plan_details)} 个日智能定投计划")
+        
+        # 提取现有日智能定投计划的基金代码
+        existing_fund_codes = set()
+        for plan in filtered_fund_plan_details:
+            if (hasattr(plan, 'rationPlan') and 
+                hasattr(plan.rationPlan, 'fundCode') and 
+                plan.rationPlan.fundCode):
+                existing_fund_codes.add(plan.rationPlan.fundCode)
+                logger.info(f"  现有日智能定投: {plan.rationPlan.fundName}({plan.rationPlan.fundCode})")
+        
+        logger.info(f"现有日智能定投计划基金代码: {sorted(list(existing_fund_codes))}")
+        
+        # 步骤4: 遍历加仓风向标基金信息集合，检查并创建计划
+        logger.info("步骤4: 检查加仓风向标基金并创建计划...")
+        created_count = 0
+        skipped_count = 0
+        
+        for i, indicator in enumerate(indicators_list):
+            logger.info(f"\n处理第{i+1}个加仓风向标基金: {indicator.fund_name}({indicator.fund_code})")
             
-    #         for i, indicator in enumerate(result, 1):
-    #             print(f"{i}. {indicator.fund_name} ({indicator.fund_code})")
-    #             print(f"   排名: {indicator.product_rank}")
-    #             print(f"   一年收益率: {indicator.one_year_return if indicator.one_year_return != 0 else '暂无'}%")
-    #             print(f"   成立以来收益率: {indicator.since_launch_return}%")
-    #             print(f"   基金类型: {indicator.fund_type}")
-    #             print(f"   基金子类型: {indicator.fund_sub_type}")
-    #             print(f"   更新时间: {indicator.update_time}")
+            # 判断indicator的基金fund_code在现有日智能定投计划中是否存在
+            if indicator.fund_code in existing_fund_codes:
+                logger.info(f"  ✓ {indicator.fund_name}({indicator.fund_code})的日智能定投计划已经存在，跳过")
+                print(f"{indicator.fund_name}的日智能定投计划已经有了，跳过")
+                skipped_count += 1
+            else:
+                logger.info(f"  ✓ {indicator.fund_name}({indicator.fund_code})没有日智能定投计划，准备创建")
+                print(f"要为{indicator.fund_name}添加日智能定投计划")
                 
-    #             # 输出所有属性和值
-    #             print("   所有属性:")
-    #             for attr, value in vars(indicator).items():
-    #                 print(f"      {attr}: {value}")
-                
-    #             print("-----------------------------------")
-    #     else:
-    #         print("获取加仓风向标基金信息失败: 返回结果为空")
+                try:
+                    # 调用创建日智能定投计划函数
+                    result = create_period_smart_investment(
+                        user=user, 
+                        fund_code=indicator.fund_code, 
+                        amount=amount, 
+                        period_type=4, 
+                        period_value=1
+                    )
+                    
+                    # 修正判断逻辑：使用大写的Success属性
+                    if result and hasattr(result, 'Success') and result.Success:
+                        logger.info(f"  ✓ 成功为{indicator.fund_name}({indicator.fund_code})创建日智能定投计划")
+                        created_count += 1
+                    else:
+                        logger.warning(f"  ✗ 为{indicator.fund_name}({indicator.fund_code})创建日智能定投计划失败")
+                        if result:
+                            logger.warning(f"    失败原因: ErrorCode={getattr(result, 'ErrorCode', 'N/A')}, FirstError={getattr(result, 'FirstError', 'N/A')}")
+                        
+                except Exception as e:
+                    logger.error(f"  ✗ 为{indicator.fund_name}({indicator.fund_code})创建日智能定投计划时发生异常: {str(e)}")
+        
+        # 输出最终统计信息
+        logger.info("\n=== 执行结果统计 ===")
+        logger.info(f"加仓风向标基金总数: {len(indicators_list)}")
+        logger.info(f"成功创建计划数: {created_count}")
+        logger.info(f"已存在跳过数: {skipped_count}")
+        logger.info(f"处理完成率: {((created_count + skipped_count) / len(indicators_list) * 100):.1f}%")
+        logger.info("=== add_plan函数执行完成 ===")
+        
     except Exception as e:
-        print(f"执行过程中发生异常: {str(e)}")
-    # 获取所有的定投计划详情
-    fund_plan_details = get_all_fund_plan_details(user)
-    # 过滤出periodType == 4 且 planType == '1' 的定投计划集合
-    filtered_fund_plan_details = [
-        fund_plan_detail for fund_plan_detail in fund_plan_details
-        if fund_plan_detail.rationPlan.periodType == 4 and fund_plan_detail.rationPlan.planType == '1'
-    ]
-    # 遍历加仓风向标基金信息集合    
-    for indicator in result:
-        #判断indicator的基金fund_code在filtered_fund_plan_details中是否存在
-        if not any(indicator.fund_code == fund_plan_detail.rationPlan.fundCode for fund_plan_detail in filtered_fund_plan_details):
-            #输出要为und_plan_detail.rationPlan.fundName添加计划
-            print(f"要为{indicator.fund_name}添加计划")
-            create_period_smart_investment(user=user,fund_code=indicator.fund_code,amount = amount, period_type = 4,period_value = 1)
-        else:
-            #输出indicator.fund_name已经存在计划
-            print(f"{indicator.fund_name}已经存在计划")
-
-if __name__ == '__main__':
-    # 获取所有定投计划详情
-    add_plan(DEFAULT_USER)
+        logger.error(f"add_plan 执行失败: {str(e)}")
+        logger.error(f"异常详情: {type(e).__name__}: {str(e)}")
+        import traceback
+        logger.error(f"异常堆栈: {traceback.format_exc()}")
 

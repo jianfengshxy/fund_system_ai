@@ -17,7 +17,9 @@ from src.common.constant import SERVER_VERSION, PASSPORT_CTOKEN
 from src.common.constant import DEFAULT_USER
 from src.bussiness.全局智能定投处理.increase import increase_all_fund_plans
 from src.bussiness.全局智能定投处理.redeem import redeem_all_fund_plans
-from src.bussiness.全局智能定投处理.dissolve_plan import dissolve_daily_plan 
+from src.bussiness.全局智能定投处理.dissolve_plan import dissolve_daily_plan
+# 添加 add_plan 函数的导入
+from src.bussiness.全局智能定投处理.add_plan import add_plan
 from src.domain.user.User import User
 from src.common.constant import DEFAULT_USER, DEFAULT_FUND_PLAN_DETAIL
 
@@ -34,6 +36,7 @@ def increase(event, context):
     increase_all_users()
 
 def create_period_smart_investment(event, context):   
+    add_plan(DEFAULT_USER, 3000)
     pass
 
 def dissolve_period_smart_investment(event, context):          
@@ -45,4 +48,5 @@ if __name__ == "__main__":
     # 根据需要调用 redeem 或 increase 函数
     # redeem(None, None)
     # increase(None, None)
-    dissolve_period_smart_investment(None, None)
+    # dissolve_period_smart_investment(None, None)
+    create_period_smart_investment(None, None)

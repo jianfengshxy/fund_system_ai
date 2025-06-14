@@ -109,11 +109,8 @@ def dissolve_daily_plan(user: User):
             import traceback
             logger.error(f"异常堆栈: {traceback.format_exc()}")
             return
-        
-        # 添加延迟，避免并发问题
-        import time
-        time.sleep(2)
-        logger.info("加仓风向标数据获取完成，等待2秒后继续处理...")
+            
+        logger.info("加仓风向标数据获取完成...")
         
         # 提取加仓风向标中的基金代码
         indicator_fund_codes = set()

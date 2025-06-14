@@ -109,3 +109,27 @@ resources:
           cronExpression: "CRON_TZ=Asia/Shanghai 0 0 21 * * *"
           enable: ${vars.common.props.triggerConfig.enable}
 
+  create_period_smart_investment:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.create_period_smart_investment"
+      functionName: "create_period_smart_investment"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "create_period_smart_investment"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 0 21 * * *"
+          enable: ${vars.common.props.triggerConfig.enable}
+

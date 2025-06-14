@@ -183,12 +183,12 @@ def dissolve_daily_plan(user: User):
         
         # 输出最终统计信息
         logger.info("\n=== 执行结果统计 ===")
-        logger.info(f"总日定投计划数: {len(daily_plans)}")
-        logger.info(f"成功解散计划数: {dissolved_count}")
-        logger.info(f"在加仓风向标中跳过: {skipped_in_indicator}")
-        logger.info(f"有资产跳过解散: {skipped_has_assets}")
-        logger.info(f"处理完成率: {((dissolved_count + skipped_in_indicator + skipped_has_assets) / len(daily_plans) * 100):.1f}%")
-        logger.info("=== dissolve_daily_plan函数执行完成 ===")
+        logger.info(f"{user.customer_name}总日定投计划数: {len(daily_plans)}")
+        logger.info(f"{user.customer_name}成功解散计划数: {dissolved_count}")
+        logger.info(f"{user.customer_name}在加仓风向标中跳过: {skipped_in_indicator}")
+        logger.info(f"{user.customer_name}有资产跳过解散: {skipped_has_assets}")
+        logger.info(f"{user.customer_name}处理完成率: {((dissolved_count + skipped_in_indicator + skipped_has_assets) / len(daily_plans) * 100):.1f}%")
+        logger.info(f"=== {user.customer_name} dissolve_daily_plan函数执行完成 ===")
         
     except Exception as e:
         logger.error(f"dissolve_daily_plan 执行失败: {str(e)}")

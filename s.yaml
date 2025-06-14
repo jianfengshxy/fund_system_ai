@@ -58,7 +58,7 @@ resources:
         triggerName: "increase"
         triggerConfig:
           payload: ${vars.common.props.triggerConfig.payload}
-          cronExpression: "CRON_TZ=Asia/Shanghai 4 24 11 * * *"
+          cronExpression: "CRON_TZ=Asia/Shanghai 4 24 11 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
   redeem:
@@ -82,7 +82,7 @@ resources:
         triggerName: "redeem"
         triggerConfig:
           payload: ${vars.common.props.triggerConfig.payload}
-          cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * *"
+          cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
   dissolve_period_smart_investment:
@@ -106,7 +106,7 @@ resources:
         triggerName: "dissolve_period_smart_investment"
         triggerConfig:
           payload: ${vars.common.props.triggerConfig.payload}
-          cronExpression: "CRON_TZ=Asia/Shanghai 0 0 21 * * *"
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 0 21 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
   create_period_smart_investment:
@@ -130,6 +130,6 @@ resources:
         triggerName: "create_period_smart_investment"
         triggerConfig:
           payload: ${vars.common.props.triggerConfig.payload}
-          cronExpression: "CRON_TZ=Asia/Shanghai 0 0 21 * * *"
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 0 21 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 

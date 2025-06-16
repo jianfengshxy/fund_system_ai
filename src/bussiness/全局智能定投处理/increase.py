@@ -106,7 +106,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         return True
     logger.info(f"计划{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}当前收益率:{current_profit_rate},估值增长率:{estimated_change},预估收益率:{estimated_profit_rate},在途交易个数:{on_way_transaction_count}.")   
     if estimated_profit_rate > -1.0 :
-        logger.info(f"{customer_name}的组合{sub_account_name}{fund_name}的预估收益率{estimated_profit_rate} > 1.0,Skip......")  
+        logger.info(f"{customer_name}的组合{sub_account_name}{fund_name}的预估收益率{estimated_profit_rate} > -1.0,Skip......")  
         #回撤所有交易
         for trade in trades:
             revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)

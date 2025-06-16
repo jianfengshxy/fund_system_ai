@@ -30,7 +30,7 @@ def super_transfer(user: User, sub_account_no: str, fund_code: str, fund_amount:
     Returns:
         Optional[TradeResult]: 交易结果，如果失败则返回None
     """
-    if fund_amount == 0.00:
+    if abs(fund_amount) < 0.000001:  # 使用绝对值和小阈值来判断接近零的值
         logger = logging.getLogger("SellMrg")
         logger.info("卖出的份额参数为0")
         return None

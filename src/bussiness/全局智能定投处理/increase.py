@@ -76,7 +76,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     if not trades or len(trades) == 0:
         logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}今天没有可以回撤的定投计划交易记录。Skip ..........")
         return True
-    logger.info(f"当前计划:{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}的周期类型{period_type},period_type:{period_value},当前月的值:{day_of_month}")
+    logger.info(f"当前计划:{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}的周期类型{period_type},period_type:{period_value},当前月的值:{day_of_month},当前资产:{plan_assets}")
     #判断是否是月定投延期交易
     if period_type == 3 and  period_value != day_of_month: 
         #回撤所有交易   
@@ -92,7 +92,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         logger.info(f"{customer_name}的组合{sub_account_name}{fund_name}的周延期交易{day_of_week_number + 1},撤回所有交易。")
         return True
 
-    if  math.isclose(float(plan_assets),fund_amount):
+    if  abs(plan_assets) < 1.0:
         logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}资产{plan_assets},属于第一次定投。Skip ..........")
         return True 
 

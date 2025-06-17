@@ -25,7 +25,7 @@ def test_increase():
     """测试 increase 函数"""
     # 打印测试开始信息
     logger.info("开始测试 increase 函数")
-    plan_id = 'db69e31b7eed486cb01c8532c5baa5eb'
+    plan_id = '1283860a7d174e2dafff90aae1530ad8'
     
     # 调用函数进行加仓测试
     detail_response = getPlanDetailPro(plan_id, DEFAULT_USER)

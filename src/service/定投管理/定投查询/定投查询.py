@@ -25,7 +25,7 @@ def get_all_fund_plan_details(user: User) -> List[FundPlanDetail]:
     Returns:
         List[FundPlanDetail]: 定投计划详情列表
     """
-    # 获取所有定投计划
+    # 获取所有定投计划,1是目标止盈,2是组合定投
     response = getFundRations(user, page_index=1, page_size=1000, planTypes=[1,2])
     
     if not response.Success or not response.Data:

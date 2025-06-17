@@ -70,10 +70,14 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         bool: 止盈操作是否成功
     """
     customer_name=user.customer_name
+    logger.info(f"开始执行止盈算法，用户：{customer_name}")
+    
     # 获取基金信息
     fund_code = plan_detail.rationPlan.fundCode
     fund_info = get_all_fund_info(user, fund_code)
     fund_name = fund_info.fund_name
+    logger.info(f"基金信息：{fund_name}({fund_code})，可申购：{fund_info.can_purchase}")
+    
     if fund_info.can_purchase == False:
         logger.info(f"{fund_name}不可申购/赎回")
         return True
@@ -85,42 +89,62 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
     plan_assets = plan_detail.rationPlan.planAssets
     fund_amount = plan_detail.rationPlan.amount 
     stop_rate = 1.0
+    
+    logger.info(f"计划详情：子账户{sub_account_no}，份额数量：{len(shares)}，计划资产：{plan_assets}，定投金额：{fund_amount}")
+    
     asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
     fund_type = fund_info.fund_type
+    
     if asset_detail is not None:
         constant_profit_rate = asset_detail.constant_profit_rate * 100
+        logger.info(f"资产详情：持续收益率：{constant_profit_rate}%，基金类型：{asset_detail.fund_type}")
     else:
         logger.info(f"{fund_name}资产为空，不要计算")
         return False
+        
     on_way_transaction_count = asset_detail.on_way_transaction_count
     times = plan_assets // fund_amount
     volatility = fund_info.volatility * 100
+    
     # 获取当前收益率和估值增长率
     current_profit_rate = constant_profit_rate if constant_profit_rate is not None else 0.0
     estimated_change = fund_info.estimated_change if fund_info.estimated_change is not None else 0.0
     estimated_profit_rate = current_profit_rate + estimated_change
     rank_100 = fund_info.rank_100day
+    
+    logger.info(f"收益率计算：当前收益率{current_profit_rate}%，估值变化{estimated_change}%，预估收益率{estimated_profit_rate}%")
+    logger.info(f"其他指标：波动率{volatility}%，100日排名{rank_100}，投资次数{times}")
    
     if shares == []:
+        logger.info("份额为空，返回False")
         return False
+        
     if estimated_profit_rate < 1.0:
         logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}的收益率{estimated_profit_rate}小于1.0.")
         return True
  
     if shares is not None:
-        if  fund_info.estimated_change != 0.0:
+        logger.info("开始检查止盈条件...")
+        
+        if fund_info.estimated_change != 0.0:
             stop_rate = min(volatility, 5.0)   
             logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}波动率{volatility},取两者小值stop_rate:{stop_rate}")
         else:
-             stop_rate = 5.0
+            stop_rate = 5.0
+            logger.info(f"估值变化为0，设置止盈点为5.0")
+            
         if times > 15.0:
             logger.info(f"{customer_name}计算止盈点：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},times:{times},实际止盈点:5.0")
             stop_rate = 5.0
+            
         #指数基金排名在90以上的时候，大于1%即止盈
-        if fund_type == '000' and estimated_profit_rate > 1.0 and rank_100 > 90 and fund_info.estimated_change != 0.0 :
+        if fund_type == '000' and estimated_profit_rate > 1.0 and rank_100 > 90 and fund_info.estimated_change != 0.0:
             logger.info(f"{customer_name}的止盈操作开始：指数基金{fund_name}{fund_code}预估收益{estimated_profit_rate},100日排名:{rank_100},实际止盈点:1.0")
             sell_low_fee_shares(user,sub_account_no,fund_code,shares)
             return True
+        else:
+            logger.info(f"指数基金条件检查：基金类型{fund_type}，预估收益{estimated_profit_rate}，排名{rank_100}，估值变化{fund_info.estimated_change}")
+            
         #股票型基金
         # if fund_type == '001' and estimated_profit_rate > 1.0 and rank_100 > 90 :
         #     pass           
@@ -132,12 +156,18 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             logger.info(f"{customer_name}的止盈操作开始：QDII基金{fund_name}{fund_code}预估收益{estimated_profit_rate},赎回0费率份额,实际止盈点:3.0")
             sell_0_fee_shares(user,sub_account_no,fund_code,shares)
             return True
+        else:
+            logger.info(f"QDII基金条件检查：资产基金类型{asset_detail.fund_type}，预估收益{estimated_profit_rate}")
 
         if estimated_profit_rate > stop_rate:
             logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},实际止盈点:{stop_rate}")
             sell_low_fee_shares(user,sub_account_no,fund_code,shares)
-            return True    
-            # 获取活期宝银行卡列表
+            return True
+        else:
+            logger.info(f"基本止盈条件检查：预估收益{estimated_profit_rate} <= 止盈点{stop_rate}，不满足条件")
+            
+        # 获取活期宝银行卡列表
+        logger.info("开始检查银行卡余额相关条件...")
         bank_cards = getCashBagAvailableShareV2(user)
         if not bank_cards:
             logger.error("获取银行卡信息失败：没有可用的银行卡")
@@ -145,15 +175,23 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         # 使用第一个银行卡（余额最高的）
         bank_card_info = bank_cards[0]     
         CurrentRealBalance = bank_card_info.CurrentRealBalance
+        logger.info(f"银行卡余额：{CurrentRealBalance}")
+        
         #检查银行卡余额,小于30万，且收益大于1.0，立即卖出费率为0的份额
         if estimated_profit_rate > 1.0 and CurrentRealBalance < 500000 and fund_type == '000' and fund_info.estimated_change != 0.0:
             logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:1.0.")
             sell_0_fee_shares(user,sub_account_no,fund_code,shares)
-            return True     
+            return True
+        else:
+            logger.info(f"指数基金余额条件检查：预估收益{estimated_profit_rate}，余额{CurrentRealBalance}，基金类型{fund_type}，估值变化{fund_info.estimated_change}")
+            
         #检查银行卡余额,小于50万，且收益大于1.0，立即卖出费率为0的份额
-        if estimated_profit_rate > 3.0 and CurrentRealBalance < 500000 and fund_type in ['001','002'] :
+        if estimated_profit_rate > 3.0 and CurrentRealBalance < 500000 and fund_type in ['001','002']:
             logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:1.0.")
             sell_0_fee_shares(user,sub_account_no,fund_code,shares)
-            return True     
+            return True
+        else:
+            logger.info(f"股票/混合基金余额条件检查：预估收益{estimated_profit_rate}，余额{CurrentRealBalance}，基金类型{fund_type}")
 
+    logger.info("所有止盈条件都不满足，返回True")
     return True

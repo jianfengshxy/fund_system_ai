@@ -49,14 +49,15 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     shares = plan_detail.rationPlan.shares
     period_type = plan_detail.rationPlan.periodType
     period_value = plan_detail.rationPlan.periodValue
-    plan_assets = plan_detail.rationPlan.planAssets
     fund_amount = plan_detail.rationPlan.amount 
+    plan_type = plan_detail.rationPlan.planType
     asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
     if asset_detail is not None:
         constant_profit_rate = asset_detail.constant_profit_rate * 100
     else:
         logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}资产为空。Skip ..........")
         return True
+    plan_assets = asset_detail.asset_value
     constant_profit_rate = asset_detail.constant_profit_rate * 100
     on_way_transaction_count = asset_detail.on_way_transaction_count
     times = plan_assets // fund_amount
@@ -76,7 +77,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     if not trades or len(trades) == 0:
         logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}今天没有可以回撤的定投计划交易记录。Skip ..........")
         return True
-    logger.info(f"当前计划:{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}的周期类型{period_type},period_type:{period_value},当前月的值:{day_of_month},当前资产:{plan_assets}")
+    logger.info(f"当前计划:{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}的周期类型{period_type},period_type:{period_value},当前月的值:{day_of_month},当前资产:{plan_assets},计划类型:{plan_type}")
     #判断是否是月定投延期交易
     if period_type == 3 and  period_value != day_of_month: 
         #回撤所有交易   
@@ -91,10 +92,11 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
             revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)
         logger.info(f"{customer_name}的组合{sub_account_name}{fund_name}的周延期交易{day_of_week_number + 1},撤回所有交易。")
         return True
-
-    if  abs(plan_assets) < 1.0:
+        
+    if  math.isclose(float(plan_assets),fund_amount):
         logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}资产{plan_assets},属于第一次定投。Skip ..........")
         return True 
+
 
     # 检查是否有在途交易(在途交易个数大于1,要排除掉当天的定投交易)
     logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}今天有在途交易{on_way_transaction_count}个")

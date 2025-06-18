@@ -160,8 +160,6 @@ def dissolve_daily_plan(user: User):
                     try:
                         logger.info(f"  正在解散计划 {plan_id} {fund_name}...")                    
                         result = dissolve_period_smart_investment(user, plan_id)
-                        # 添加延迟避免并发问题
-                        time.sleep(1)
                         if result and hasattr(result, 'success') and result.success:
                             logger.info(f"  ✓ 成功解散基金 {fund_code} {fund_name}的日定投计划 {plan_id}（资产为空）")
                             dissolved_count += 1

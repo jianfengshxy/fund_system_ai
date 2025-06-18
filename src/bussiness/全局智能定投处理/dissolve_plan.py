@@ -109,7 +109,7 @@ def dissolve_daily_plan(user: User):
             import traceback
             logger.error(f"异常堆栈: {traceback.format_exc()}")
             return
-            
+
         logger.info("加仓风向标数据获取完成...")
         
         # 提取加仓风向标中的基金代码
@@ -175,9 +175,6 @@ def dissolve_daily_plan(user: User):
             else:
                 logger.warning(f"  ✗ 计划缺少基金代码信息，跳过")
             
-            # 在处理每个计划之间添加短暂延迟
-            time.sleep(0.5)
-        
         # 输出最终统计信息
         logger.info("\n=== 执行结果统计 ===")
         logger.info(f"{user.customer_name}总日定投计划数: {len(daily_plans)}")

@@ -81,7 +81,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         logger.error(f"获取资产详情失败: {e}")
         return False
         
-    plan_assets = asset_detail.asset_value
+    plan_assets = plan_detail.rationPlan.planAssets
     constant_profit_rate = asset_detail.constant_profit_rate * 100
     on_way_transaction_count = asset_detail.on_way_transaction_count
     times = plan_assets // fund_amount

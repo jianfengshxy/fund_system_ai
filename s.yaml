@@ -41,7 +41,7 @@ resources:
     component: ${vars.common.component}
     actions: ${vars.common.actions}
     props:
-      handler: "index.increase"
+      handler: "index.increase"  # 确保没有多余空格
       functionName: "increase"
       logConfig: ${vars.common.props.logConfig}
       diskSize: ${vars.common.props.diskSize}

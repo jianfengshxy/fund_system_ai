@@ -20,7 +20,7 @@ from src.domain.user.User import User
 from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
 from src.API.交易管理.sellMrg import super_transfer
 from src.service.基金信息.基金信息 import get_all_fund_info
-from src.API.交易管理.trade import get_trades_list
+from src.API.交易管理.trade import get_trades_list, get_bank_shares
 from src.API.交易管理.revokMrg import revoke_order
 from src.API.交易管理.buyMrg import commit_order
 from src.domain.trade.TradeResult import TradeResult
@@ -83,23 +83,26 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         return True
     sub_account_no = plan_detail.rationPlan.subAccountNo
     sub_account_name = plan_detail.rationPlan.subAccountName
-    shares = plan_detail.shares or []
+    shares = get_bank_shares(user, sub_account_no,fund_code)
     period_type = plan_detail.rationPlan.periodType
     period_value = plan_detail.rationPlan.periodValue
-    plan_assets = plan_detail.rationPlan.planAssets
+    
     fund_amount = plan_detail.rationPlan.amount 
     stop_rate = 1.0
     
-    logger.info(f"计划详情：子账户{sub_account_no}，份额数量：{len(shares)}，计划资产：{plan_assets}，定投金额：{fund_amount}")
-    
-    asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
-    fund_type = fund_info.fund_type
-    
-    if asset_detail is not None:
-        constant_profit_rate = asset_detail.constant_profit_rate * 100
-        logger.info(f"资产详情：持续收益率：{constant_profit_rate}%，基金类型：{asset_detail.fund_type}")
-    else:
-        logger.info(f"{fund_name}资产为空，不要计算")
+    try:
+        asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
+        plan_assets = asset_detail.asset_value
+        fund_type = fund_info.fund_type
+        
+        if asset_detail is not None:
+            constant_profit_rate = asset_detail.constant_profit_rate * 100
+            logger.info(f"资产详情获取成功 - 资产价值: {plan_assets}, 收益率: {constant_profit_rate}%, 基金类型: {asset_detail.fund_type}")
+        else:
+            logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}资产为空。Skip ..........")
+            return True
+    except Exception as e:
+        logger.error(f"获取资产详情失败: {e}")
         return False
         
     on_way_transaction_count = asset_detail.on_way_transaction_count

@@ -34,6 +34,7 @@ import math
 from src.domain.fund_plan.fund_plan import FundPlan
 from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
 from src.API.基金信息.FundRank import get_fund_growth_rate
+from src.API.交易管理.trade import get_trades_list, get_bank_shares
 
 logger = logging.getLogger(__name__)    
 
@@ -59,7 +60,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         
     sub_account_no = plan_detail.rationPlan.subAccountNo
     sub_account_name = plan_detail.rationPlan.subAccountName
-    shares = plan_detail.rationPlan.shares
+    shares = get_bank_shares(user, sub_account_no, fund_code)
     period_type = plan_detail.rationPlan.periodType
     period_value = plan_detail.rationPlan.periodValue
     fund_amount = plan_detail.rationPlan.amount 
@@ -67,7 +68,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     
     logger.info(f"计划详情 - 组合账号: {sub_account_no}, 组合名称: {sub_account_name}")
     logger.info(f"计划详情 - 周期类型: {period_type}, 周期值: {period_value}, 定投金额: {fund_amount}, 计划类型: {plan_type}")
-    logger.info(f"计划详情 - 持仓份额数量: {len(shares) if shares else 0}")
+   
     
     try:
         asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
@@ -81,7 +82,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         logger.error(f"获取资产详情失败: {e}")
         return False
         
-    plan_assets = plan_detail.rationPlan.planAssets
+    plan_assets = asset_detail.asset_value
     constant_profit_rate = asset_detail.constant_profit_rate * 100
     on_way_transaction_count = asset_detail.on_way_transaction_count
     times = plan_assets // fund_amount

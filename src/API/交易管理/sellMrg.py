@@ -220,3 +220,110 @@ def hqbMakeRedemption(user: User, sub_account_no: str, fund_code: str, fund_amou
         return TradeResult(None, None, None, None, None, None, fund_code)
 
 
+def SFT1Transfer(user: User, sub_account_no: str, fund_code: str, fund_amount: float, share_id: str) -> Optional[TradeResult]:
+    """
+    SFT1转换L2
+    Args:
+        user: User对象，包含用户认证信息
+        sub_account_no: 子账户编号
+        fund_code: 基金代码
+        fund_amount: 转换份额
+        share_id: 份额ID
+        secu_id: 安全ID
+        l2_password: L2密码
+    Returns:
+        Optional[TradeResult]: 交易结果，如果失败则返回None
+    """
+    if fund_amount == 0.00:
+        logger = logging.getLogger("SellMrg")
+        logger.info("转换的份额不能为0")
+        return None
+    
+    url = f"https://tradeapilvs{user.index}.1234567.com.cn/Trade/FundTrade/SFT1TransferL2"
+    if not user.index:
+        url = "https://tradeapilvs1.1234567.com.cn/Trade/FundTrade/SFT1TransferL2"
+    
+    headers = {
+        "Connection": "keep-alive",
+        "Content-Type": "application/json",
+        "Host": f"tradeapilvs{user.index}.1234567.com.cn",
+        "tracestate": "pid=0x10630d5a0,taskid=0x282890a00",
+        "Accept": "*/*",
+        "GTOKEN": "4474AFD3E15F441E937647556C01C174",
+        "clientInfo": "ttjj-iPhone 11 Pro-iOS-iOS16.2",
+        "MP-VERSION": "1.0.5",
+        "Accept-Language": "zh-Hans-CN;q=1",
+        "User-Agent": "EMProjJijin/6.6.12 (iPhone; iOS 16.2; Scale/3.00)",
+        "Referer": "https://mpservice.com/fund5e3619595b0346/release/pages/sell-fund/index",
+        "traceparent": "00-c77bf29263684cbcb20397522ee7fa48-0000000000000000-01",
+        "Content-Length": "1151",
+        "Cookie": "acw_tc=0bca392617092637189786468e3ebc1cbaae75aedd2ca760b7029b704565f0"
+    }
+    
+    # 构造请求参数
+    req_no = str(int(time.time() * 1000))  # 当前时间的毫秒级Unix时间戳
+    
+    payload = {
+        "ServerVersion": "6.6.12",
+        "secuId": "feefd4d8095a4dc3b31863dfb71dde3f",
+        "fundAmount": str(fund_amount),
+        "isAllTransfer": True,
+        "reqNo": int(req_no),
+        "shareID": share_id,
+        "CustomerNo": user.customer_no,
+        "PhoneType": "Iphone",
+        "Version": "6.6.12",
+        "MobileKey": MOBILE_KEY,
+        "UserId": user.customer_no,
+        "fundOut": str(fund_code),
+        "fromSubAccountNo": sub_account_no,
+        "fundIn": "007866",
+        "UToken": user.u_token,
+        "l2Password": "JSVdeD7BwMybDJr5Vw95E0hYQaXy4Dx/isL0Shbgof/UpFlCZI+N2IfvUgAKhDsMlG8FM0h7Qkr48JHnnmMXGRyQhR9tusuCASpDuef+p8sVYvd41QWhXeJl83MkutYijoUwGQ8QHCxcUxx7pMz6iIUwRdoC8vIESWHsTHTxWDs=",
+        "largeRedemptionFlag": "1",
+        "AppType": "ttjj",
+        "CToken": user.c_token
+    }
+    
+    logger = logging.getLogger("SellMrg")
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(payload), verify=False)
+        response.raise_for_status()
+        response_data = response.json()
+        logger.info(f"SFT1转换L2的响应: {response_data}")
+        
+        if response_data is not None and "Data" in response_data:
+            data = response_data["Data"]
+            if data is not None:
+                # 解析响应内容
+                apply_workday = data.get("ApplyWorkDay", "")
+                amount = data.get("ApplyAmount", "")
+                status = data.get("Status", "")
+                busin_serial_no = None
+                business_type = None
+                show_com_prop = None
+                
+                if "JumpParams" in data:
+                    jump_params = data["JumpParams"]
+                    busin_serial_no = jump_params.get("BusinSerialNo")
+                    business_type = jump_params.get("BusinessType")
+                
+                result = TradeResult(busin_serial_no, business_type, apply_workday, amount, status, show_com_prop, fund_code)
+                logger.info(f"SFT1转换L2结果: {result}")
+                return result
+            else:
+                # 处理响应中未返回Data的情况
+                logger.error("SFT1转换L2响应中未返回Data")
+                return TradeResult(None, None, None, None, None, None, fund_code)
+        else:
+            # 处理响应数据不完整的情况
+            logger.error("SFT1转换L2响应数据不完整")
+            return TradeResult(None, None, None, None, None, None, fund_code)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"请求失败: {str(e)}")
+        return TradeResult(None, None, None, None, None, None, fund_code)
+    except Exception as e:
+        logger.error(f"SFT1转换L2失败: {str(e)}")
+        return TradeResult(None, None, None, None, None, None, fund_code)
+
+

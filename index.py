@@ -6,6 +6,7 @@ import logging
 import urllib3  # 添加对 urllib3 的导入
 from src.bussiness.最优止盈组合.redeem import redeem_all_users
 from src.bussiness.最优止盈组合.increase import increase_all_users
+from src.bussiness.最优止盈组合.add_new import add_new_all_users
 # 禁用 urllib3 的警告信息
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -41,6 +42,10 @@ def create_period_smart_investment(event, context):
 
 def dissolve_period_smart_investment(event, context):          
     dissolve_daily_plan(DEFAULT_USER)
+    pass
+
+def add_new(event, context):          
+    add_new_all_users()
     pass
 
 

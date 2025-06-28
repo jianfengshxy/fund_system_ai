@@ -38,6 +38,7 @@ from src.API.大数据.加仓风向标 import getFundInvestmentIndicators
 from src.domain.fund.fund_investment_indicator import FundInvestmentIndicator
 # 修改第39行的导入语句
 from src.service.定投管理.智能定投.智能定投管理 import create_period_smart_investment
+from src.service.基金信息.基金信息 import get_all_fund_info
 logger = logging.getLogger(__name__)    
 
 def add_plan(user: User, amount: int = 2000):
@@ -74,6 +75,24 @@ def add_plan(user: User, amount: int = 2000):
         
         logger.info(f"获取到 {len(fund_plan_details)} 个定投计划")
         
+        # 提取所有定投计划中指数基金的跟踪指数（用于避免重复）
+        all_existing_index_codes = set()
+        
+        for plan in fund_plan_details:
+            if (hasattr(plan, 'rationPlan') and 
+                hasattr(plan.rationPlan, 'fundCode') and 
+                plan.rationPlan.fundCode):
+                try:
+                    fund_info = get_all_fund_info(user, plan.rationPlan.fundCode)
+                    if fund_info and hasattr(fund_info, 'fund_type') and fund_info.fund_type == "000":
+                        if hasattr(fund_info, 'index_code') and fund_info.index_code:
+                            all_existing_index_codes.add(fund_info.index_code)
+                            logger.info(f"  所有定投计划中的指数基金: {plan.rationPlan.fundName}({plan.rationPlan.fundCode}) 跟踪指数: {fund_info.index_code}")
+                except Exception as e:
+                    logger.warning(f"获取定投计划基金 {plan.rationPlan.fundCode} 详细信息失败: {e}")
+        
+        logger.info(f"所有定投计划中跟踪的指数: {sorted(list(all_existing_index_codes))}")
+        
         # 步骤3: 过滤出periodType == 4 且 planType == '1' 的日智能定投计划集合
         logger.info("步骤3: 过滤日智能定投计划...")
         filtered_fund_plan_details = [
@@ -89,6 +108,7 @@ def add_plan(user: User, amount: int = 2000):
         
         # 提取现有日智能定投计划的基金代码
         existing_fund_codes = set()
+        
         for plan in filtered_fund_plan_details:
             if (hasattr(plan, 'rationPlan') and 
                 hasattr(plan.rationPlan, 'fundCode') and 
@@ -111,7 +131,30 @@ def add_plan(user: User, amount: int = 2000):
                 logger.info(f"  ✓ {indicator.fund_name}({indicator.fund_code})的日智能定投计划已经存在，跳过")
                 print(f"{indicator.fund_name}的日智能定投计划已经有了，跳过")
                 skipped_count += 1
-            else:
+                continue
+            
+            # 如果是指数基金，检查跟踪指数是否重复
+            should_create = True
+            skip_reason = ""
+            
+            if hasattr(indicator, 'fund_type') and indicator.fund_type == "000":
+                try:
+                    fund_info = get_all_fund_info(user, indicator.fund_code)
+                    if fund_info and hasattr(fund_info, 'index_code') and fund_info.index_code:
+                        if fund_info.index_code in all_existing_index_codes:
+                            should_create = False
+                            skip_reason = f"已有跟踪相同指数({fund_info.index_code})的定投计划"
+                            logger.info(f"  ✓ 跳过指数基金 {indicator.fund_name}({indicator.fund_code}): {skip_reason}")
+                            print(f"跳过{indicator.fund_name}，{skip_reason}")
+                            skipped_count += 1
+                        else:
+                            logger.info(f"  ✓ 指数基金 {indicator.fund_name}({indicator.fund_code}) 跟踪指数 {fund_info.index_code}，未重复")
+                    else:
+                        logger.info(f"  ✓ 指数基金 {indicator.fund_name}({indicator.fund_code}) 无法获取跟踪指数信息，继续创建")
+                except Exception as e:
+                    logger.warning(f"获取指数基金 {indicator.fund_code} 详细信息失败: {e}，继续创建")
+            
+            if should_create:
                 logger.info(f"  ✓ {indicator.fund_name}({indicator.fund_code})没有日智能定投计划，准备创建")
                 print(f"要为{indicator.fund_name}添加日智能定投计划")
                 

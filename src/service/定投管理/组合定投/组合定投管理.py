@@ -30,6 +30,14 @@ from src.common.constant import (
     USER_ID, U_TOKEN, C_TOKEN, PASSPORT_ID, DEFAULT_USER
 )
 
+# 配置logger
+logger = logging.getLogger("SmartPlan")
+logger.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
 
 def create_period_investment_by_group(user: User, sub_account_name: str, fund_code: str, amount: int, period_type: int = 4, period_value: int = 1):
     """
@@ -107,13 +115,6 @@ def dissolve_period_investment_by_group(user: User, sub_account_name: str, fund_
     )
 
 if __name__ == '__main__':
-    # 配置logger
-    logger = logging.getLogger("SmartPlan")
-    logger.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
     
     response = create_period_investment_by_group(
         user=DEFAULT_USER,
@@ -121,10 +122,10 @@ if __name__ == '__main__':
         amount= "2000.0",  
         period_type=4,
         period_value=1,  # 修改为整数
-        sub_account_name="最优止盈"
+        sub_account_name="低风险组合"
     )
     sleep(10)
-    dissolve_period_investment_by_group(
-        user=DEFAULT_USER,
-        sub_account_name="最优止盈", 
-         fund_code="021490")
+    # dissolve_period_investment_by_group(
+    #     user=DEFAULT_USER,
+    #     sub_account_name="最优止盈", 
+    #      fund_code="021490")

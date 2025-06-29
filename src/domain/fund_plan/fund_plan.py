@@ -69,3 +69,41 @@ class FundPlan:
     @property
     def status(self) -> str:
         return f"{self.planState}-{self.planExtendStatus}" if self.planExtendStatus else str(self.planState)
+    
+    def __str__(self) -> str:
+        """返回定投计划的详细信息字符串表示"""
+        profit_info = ""
+        if self.rationProfit is not None and self.totalProfit is not None:
+            profit_info = f"\n  定投收益: {self.rationProfit:.2f}元, 总收益: {self.totalProfit:.2f}元"
+        elif self.rationProfit is not None:
+            profit_info = f"\n  定投收益: {self.rationProfit:.2f}元"
+        elif self.totalProfit is not None:
+            profit_info = f"\n  总收益: {self.totalProfit:.2f}元"
+        
+        profit_rate_info = ""
+        if self.rationProfitRate is not None and self.totalProfitRate is not None:
+            profit_rate_info = f"\n  定投收益率: {self.rationProfitRate:.2%}, 总收益率: {self.totalProfitRate:.2%}"
+        elif self.rationProfitRate is not None:
+            profit_rate_info = f"\n  定投收益率: {self.rationProfitRate:.2%}"
+        elif self.totalProfitRate is not None:
+            profit_rate_info = f"\n  总收益率: {self.totalProfitRate:.2%}"
+        
+        target_info = ""
+        if self.targetRate:
+            target_info = f"\n  目标收益率: {self.targetRate}"
+        if self.retreatPercentage:
+            target_info += f", 回撤比例: {self.retreatPercentage}"
+        
+        return f"""定投计划详情:
+  计划ID: {self.planId}
+  基金代码: {self.fundCode}
+  基金名称: {self.fundName}
+  基金类型: {self.fundType}
+  计划状态: {self.status}
+  计划类型: {self.planType}
+  定投金额: {self.amount:.2f}元
+  定投周期: {self.periodType}({self.periodValue})
+  子账户: {self.subAccountName}({self.subAccountNo})
+  计划资产: {self.planAssets:.2f}元{profit_info}{profit_rate_info}{target_info}
+  下次扣款: {self.nextDeductDate}
+  银行卡: {self.shortBankCardNo}({self.showBankCode})"""

@@ -23,6 +23,7 @@ from src.domain.user.User import User
 from src.service.定投管理.定投查询.定投查询 import get_portfolio_plan_details
 from src.API.大数据.加仓风向标 import getFundInvestmentIndicators
 from src.API.定投计划管理.SmartPlan import createPlanV3, getFundPlanList
+from src.service.定投管理.智能定投.智能定投管理 import dissolve_period_smart_investment
 from src.service.定投管理.组合定投.组合定投管理 import create_period_investment_by_group
 # 用户配置列表
 # 第一列：手机号 account
@@ -123,7 +124,7 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
                                 profit_rate = asset.hold_profit_rate * 100  # 转换为百分比
                                 profit_info = f" (收益率: {profit_rate:+.2f}%)"
                             
-                            print(f"  基金{i+1}: {asset.fund_name} ({asset.fund_code}) - 持有金额: {asset_value:,.2f} 元{profit_info}")
+                            print(f"  基金{i+1}: {asset.fund_name} ({asset.fund_code}) - 持有金额: {asset.asset_value} 元")
                         except (ValueError, TypeError):
                             print(f"  基金{i+1}: {asset.fund_name} ({asset.fund_code}) - 持有金额: {asset.asset_value} 元")
                     if len(asset_details) > 5:
@@ -550,34 +551,32 @@ def dissolve_plan_by_group(user: User, sub_account_name: str, budget: float):
             print("✅ 没有找到需要解散的定投计划")
         else:
             print(f"\n💡 准备解散以下 {len(plans_to_dissolve)} 个定投计划:")
-            
+                
             for plan_info in plans_to_dissolve:
                 print(f"  🗑️  解散计划: {plan_info['fund_name']}({plan_info['fund_code']}) - {plan_info['reason']}")
-                
+                    
                 try:
-                    # 这里需要调用解散定投计划的API
-                    # 由于没有看到具体的解散API，这里使用伪代码示例
-                    # from src.API.定投计划管理.SmartPlan import dissolvePlan
-                    # response = dissolvePlan(user, plan_info['plan_id'])
-                    
-                    # 模拟解散操作
-                    print(f"    ⚠️  注意: 解散定投计划功能需要实现具体的API调用")
-                    print(f"    📋 计划ID: {plan_info['plan_id']}")
-                    print(f"    📋 基金代码: {plan_info['fund_code']}")
-                    print(f"    📋 解散原因: {plan_info['reason']}")
-                    
-                    # 实际实现时需要:
-                    # if response and response.Success:
-                    #     print(f"    ✅ 成功解散定投计划 {plan_info['fund_name']}")
-                    # else:
-                    #     print(f"    ❌ 解散定投计划失败: {response.Message if response else '未知错误'}")
-                    
+                        # 调用真实的解散定投计划API
+                        plan_id = plan_info['plan_id']
+                        fund_code = plan_info['fund_code']
+                        fund_name = plan_info['fund_name']
+                        
+                        print(f"    📋 正在解散计划ID: {plan_id}")
+                        result = dissolve_period_smart_investment(user, plan_id)
+                        
+                        if result and hasattr(result, 'success') and result.success:
+                            print(f"    ✅ 成功解散定投计划: {fund_name}({fund_code})")
+                        else:
+                            print(f"    ❌ 解散定投计划失败: {fund_name}({fund_code})")
+                            if result and hasattr(result, 'message'):
+                                print(f"       错误信息: {result.message}")
+                        
                 except Exception as e:
-                    print(f"    ❌ 解散定投计划时发生异常: {str(e)}")
-                    import traceback
-                    print(f"       详细错误信息: {traceback.format_exc()}")
-        
-        print(f"\n✅ 组合 '{sub_account_name}' 定投计划解散分析完成")
+                        print(f"    ❌ 解散定投计划时发生异常: {str(e)}")
+                        import traceback
+                        print(f"       详细错误信息: {traceback.format_exc()}")
+                
+            print(f"\n✅ 组合 '{sub_account_name}' 定投计划解散分析完成")
         
     except Exception as e:
         print(f"❌ 处理组合定投计划解散时发生错误: {str(e)}")

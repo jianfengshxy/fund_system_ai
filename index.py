@@ -56,6 +56,6 @@ def add_new(event, context):
 if __name__ == "__main__":
     # 根据需要调用 redeem 或 increase 函数
     # redeem(None, None)
-    create_period_smart_investment(None, None)
-    # dissolve_period_smart_investment(None, None)
+    # create_period_smart_investment(None, None)
+    dissolve_period_smart_investment(None, None)
     # create_period_smart_investment(None, None)

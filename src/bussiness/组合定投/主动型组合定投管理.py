@@ -233,7 +233,7 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
             # 计算建议的定投金额
             suggested_monthly_amount = budget / 200  # 预算值除以200
             
-            for i, indicator in enumerate(recommended_funds[:3], 1):  # 最多推荐3个基金
+            for i, indicator in enumerate(recommended_funds[:5], 1):  # 最多推荐3个基金
                 fund_code = indicator.fund_code
                 fund_name = indicator.fund_name
                 print(f"  {i}. {fund_name}({fund_code}) - 建议月定投: {suggested_monthly_amount:,.0f} 元")

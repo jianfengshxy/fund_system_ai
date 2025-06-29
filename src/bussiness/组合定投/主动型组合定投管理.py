@@ -231,7 +231,7 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
             print(f"\n💡 建议为以下 {len(recommended_funds)} 个基金创建定投计划:")
             
             # 计算建议的定投金额
-            suggested_monthly_amount = 5000.0  # 剩余预算的10%或1万，取较小值
+            suggested_monthly_amount = budget / 20  # 预算值除以20
             
             for i, indicator in enumerate(recommended_funds[:3], 1):  # 最多推荐3个基金
                 fund_code = indicator.fund_code

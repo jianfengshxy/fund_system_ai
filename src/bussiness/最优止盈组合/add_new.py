@@ -64,10 +64,11 @@ user_list = [
 def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budget: float = 10000.0) -> bool:
     """
     新增基金算法实现：
-    1. 获取加仓风向标数据
-    2. 获取用户组合中的所有基金
-    3. 筛选出用户未持有的基金或指数基金
-    4. 执行买入操作
+    1. 获取用户组合中的所有基金
+    2. 判断用户所有的基金数量是否大于等于50，如果是，直接退出
+    3. 获取加仓风向标数据
+    4. 筛选出用户未持有的基金或指数基金
+    5. 执行买入操作
     
     Args:
         user: 用户对象
@@ -86,25 +87,14 @@ def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budg
     logger.info(f"计算得出单个基金购买金额：{budget_per_fund}元")
     
     customer_name = user.customer_name
-    logger.info(f"========== 开始执行新增基金算法 ==========")
+    logger.info(f"========== 开始执行新增基金算法 ===========")
     logger.info(f"用户: {customer_name}")
     logger.info(f"组合名称: {sub_account_name}")
     logger.info(f"每个基金预算: {budget_per_fund}元")
     
     try:
-        # 步骤1: 获取加仓风向标数据
-        logger.info("=== 步骤1: 获取加仓风向标数据 ===")
-        wind_vane_funds = getFundInvestmentIndicators(user, page_size=20)
-        if not wind_vane_funds:
-            logger.error("获取加仓风向标数据失败")
-            return False
-        
-        logger.info(f"获取到 {len(wind_vane_funds)} 个加仓风向标基金")
-        for i, fund in enumerate(wind_vane_funds, 1):
-            logger.info(f"  风向标基金{i}: {fund.fund_name}({fund.fund_code}) - 类型:{fund.fund_type} - 排名:{fund.product_rank}")
-        
-        # 步骤2: 获取用户对应组合里面所有的基金
-        logger.info("=== 步骤2: 获取用户组合中的所有基金 ===")
+        # 步骤1: 获取用户对应组合里面所有的基金
+        logger.info("=== 步骤1: 获取用户组合中的所有基金 ===")
         user_assets = get_sub_account_asset_by_name(user, sub_account_name)
         if user_assets is None:
             logger.error(f"获取用户组合 {sub_account_name} 资产失败")
@@ -132,8 +122,27 @@ def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budg
         logger.info(f"用户持有基金代码: {user_fund_codes}")
         logger.info(f"用户持有指数基金跟踪的指数: {user_index_codes}")
         
-        # 步骤3: 检查用户预算
-        logger.info("=== 步骤3: 检查用户可用资金 ===")
+        # 步骤2: 判断用户所有的基金数量是否大于等于50
+        logger.info("=== 步骤2: 检查用户基金数量限制 ===")
+        if len(user_assets) >= 50:
+            logger.info(f"用户 {customer_name} 的基金数量已达到50个，无需新增基金，退出操作")
+            return True
+        
+        logger.info(f"用户当前基金数量: {len(user_assets)}，可以继续新增基金")
+        
+        # 步骤3: 获取加仓风向标数据
+        logger.info("=== 步骤3: 获取加仓风向标数据 ===")
+        wind_vane_funds = getFundInvestmentIndicators(user, page_size=20)
+        if not wind_vane_funds:
+            logger.error("获取加仓风向标数据失败")
+            return False
+        
+        logger.info(f"获取到 {len(wind_vane_funds)} 个加仓风向标基金")
+        for i, fund in enumerate(wind_vane_funds, 1):
+            logger.info(f"  风向标基金{i}: {fund.fund_name}({fund.fund_code}) - 类型:{fund.fund_type} - 排名:{fund.product_rank}")
+        
+        # 步骤4: 检查用户预算
+        logger.info("=== 步骤4: 检查用户可用资金 ===")
         bank_cards = getCashBagAvailableShareV2(user)
         if not bank_cards:
             logger.error("获取银行卡信息失败")
@@ -155,8 +164,8 @@ def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budg
         
         logger.info(f"组合账号: {sub_account_no}")
         
-        # 步骤4: 筛选需要买入的基金
-        logger.info("=== 步骤4: 筛选需要买入的基金 ===")
+        # 步骤5: 筛选需要买入的基金
+        logger.info("=== 步骤5: 筛选需要买入的基金 ===")
         funds_to_buy = []
         
         for fund in wind_vane_funds:

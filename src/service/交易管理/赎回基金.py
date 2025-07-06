@@ -99,11 +99,11 @@ def sell_low_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:Lis
             logger.error(f"{user.customer_name}超级转换基金{fund_code}的银行卡份额{amount}失败切换成普通赎回")
             result2 = SFT1Transfer(user, sub_account_no, fund_code,amount, share.shareId)
             if result2 is not None and result2.status == 1:
-                logger.error(f"{user.customer_name}普通赎回基金{fund_code}的银行卡份额成功")
+                logger.info(f"{user.customer_name}普通赎回基金{fund_code}的银行卡份额成功")
             else:
                 logger.error(f"{user.customer_name}普通赎回基金{fund_code}的银行卡份额失败")
                 result3 =  hqbMakeRedemption(user, sub_account_no, fund_code,amount,share.shareId)  
                 if result3 is not None and result3.status == 1:
-                    logger.error(f"{user.customer_name}普通赎回银行{fund_code}的银行卡份额成功")
+                    logger.info(f"{user.customer_name}普通赎回银行{fund_code}的银行卡份额成功")
                 else:
                     logger.error(f"{user.customer_name}普通赎回银行{fund_code}的银行卡份额成功")

@@ -88,7 +88,8 @@ def test_get_all_fund_info_basic_info_failure():
 def test_get_all_fund_info_success():
     """测试成功获取基金完整信息的情况（直接调用实际函数）"""
     # 直接调用函数获取基金信息
-    fund_code = '016531'
+    #fund_code = '015916'   
+    fund_code = '020152'
     result = get_all_fund_info(DEFAULT_USER, fund_code)
     
     # 验证结果

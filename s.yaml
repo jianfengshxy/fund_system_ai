@@ -157,3 +157,51 @@ resources:
           cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
+  dissolve_period_index_investment:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.dissolve_period_index_investment"
+      functionName: "dissolve_period_index_investment"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "dissolve_period_index_investment"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 5 21 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+  create_period_index_investment:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.create_period_index_investment"
+      functionName: "create_period_index_investment"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "create_period_index_investment"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 10 21 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+

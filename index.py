@@ -22,9 +22,12 @@ from src.bussiness.全局智能定投处理.dissolve_plan import dissolve_daily_
 # 添加 add_plan 函数的导入
 from src.bussiness.全局智能定投处理.add_plan import add_plan
 # 添加组合定投管理函数的导入
-from src.bussiness.组合定投.主动型组合定投管理 import create_plan_by_group,dissolve_plan_by_group
+from src.bussiness.组合定投.指数型组合定投管理 import create_plan_by_group_for_index_funds,dissolve_plan_by_group_for_index_funds
 from src.domain.user.User import User
 from src.common.constant import DEFAULT_USER, DEFAULT_FUND_PLAN_DETAIL
+
+# 在现有导入语句后添加
+from src.bussiness.组合定投.主动型组合定投管理 import create_plan_by_group, dissolve_plan_by_group
 
 # 初始化日志记录器
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -39,7 +42,7 @@ def increase(event, context):
     increase_all_users()
 
 def create_period_smart_investment(event, context):   
-    add_plan(DEFAULT_USER, 3000)
+    # add_plan(DEFAULT_USER, 3000)
     create_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0)
     pass
 
@@ -52,6 +55,15 @@ def add_new(event, context):
     add_new_all_users()
     pass
 
+def create_period_index_investment(event, context):
+    """创建指数型基金定投计划"""
+    create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 2000.0)
+    pass
+
+def dissolve_period_index_investment(event, context):
+    """解散指数型基金定投计划"""
+    dissolve_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 1000000.0)
+    pass
 
 if __name__ == "__main__":
     # 根据需要调用 redeem 或 increase 函数

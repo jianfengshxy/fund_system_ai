@@ -564,7 +564,7 @@ def dissolve_plan_by_group(user: User, sub_account_name: str, budget: float):
                         print(f"    📋 正在解散计划ID: {plan_id}")
                         result = dissolve_period_smart_investment(user, plan_id)
                         
-                        if result and hasattr(result, 'success') and result.success:
+                        if result and hasattr(result, 'Success') and result.success:
                             print(f"    ✅ 成功解散定投计划: {fund_name}({fund_code})")
                         else:
                             print(f"    ❌ 解散定投计划失败: {fund_name}({fund_code})")

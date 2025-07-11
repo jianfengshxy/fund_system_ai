@@ -193,8 +193,5 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0.")
             sell_0_fee_shares(user,sub_account_no,fund_code,shares)
             return True
-        else:
-            logger.info(f"股票/混合基金余额条件检查：预估收益{estimated_profit_rate}，余额{CurrentRealBalance}，基金类型{fund_type}")
-
     logger.info("所有止盈条件都不满足，返回True")
     return True

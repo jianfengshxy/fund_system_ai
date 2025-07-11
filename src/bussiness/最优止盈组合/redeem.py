@@ -154,14 +154,15 @@ def redeem(user: User, sub_account_name:str = "最优止盈") -> bool:
         logger.info(f"{customer_name}的基金{fund_name}{fund_code}的收益{constant_profit_rate}加上估值增长率{fund_info.estimated_change}结果{result},计算止盈点:{volatility},实际止盈点:{stop_profit_rate}")
         
         if available_vol == 0.0:
-            return True
+            logger.info(f"{customer_name}的基金{fund_name}{fund_code}可用份额为0, 跳过赎回.")
+            continue
         # 执行止盈操作
         if result >  stop_profit_rate and result > 1.0:
             bank_shares = get_bank_shares(user,sub_account_no, fund_code)
-            logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{result},计算止盈点:{volatility},实际止盈点:{stop_profit_rate}")
+            logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{result},计算止盈点:{volatility},实际止盈点:{stop_profit_rate}. 满足止盈条件: result({result}) > stop_profit_rate({stop_profit_rate}) and result({result}) > 1.0")
             sell_low_fee_shares(user,sub_account_no,fund_code,bank_shares)
         else:
-            logger.info(f"{customer_name}的基金{fund_name}{fund_code}的收益{constant_profit_rate}加上估值增长率{fund_info.estimated_change}结果{result},计算止盈点:{volatility},实际止盈点:{stop_profit_rate}.Skip...........")
+            logger.info(f"{customer_name}的基金{fund_name}{fund_code}的收益{constant_profit_rate}加上估值增长率{fund_info.estimated_change}结果{result},计算止盈点:{volatility},实际止盈点:{stop_profit_rate}. 未满足止盈条件: result > stop_profit_rate ({result > stop_profit_rate}), result > 1.0 ({result > 1.0}). Skip...........")
  
     return True
         

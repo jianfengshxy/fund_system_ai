@@ -133,7 +133,7 @@ def getFundRations(user, page_index=1, page_size=1000, planTypes=None, fundTypes
         response = requests.post(url, json=body, headers=headers, verify=False)
         response.raise_for_status()
         json_data = response.json()
-        logger.debug(f"响应数据: {json_data}")
+        # logger.debug(f"响应数据: {json_data}")
         try:
             data = json_data.get('Data')
             if data is None:

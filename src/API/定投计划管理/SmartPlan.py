@@ -253,7 +253,7 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
         response = requests.get(full_url, headers=headers, verify=False)
         response.raise_for_status()
         json_data = response.json()
-        logger.info(f"响应数据: {json_data}")
+        # logger.info(f"响应数据: {json_data}")
         
         # 检查API调用是否成功
         if not json_data.get('Success', False):

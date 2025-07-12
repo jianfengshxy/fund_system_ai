@@ -77,7 +77,7 @@ def getFundReductionInvestmentIndicators(user, page_size=20) -> ApiResponse[List
         response = requests.post(url, data=data, headers=headers, verify=False)
         response.raise_for_status()
         json_data = response.json()
-        logger.info(f"响应数据: {json_data}")
+        # logger.info(f"响应数据: {json_data}")
         
         try:
             if not json_data.get('success', False):

@@ -66,7 +66,7 @@ def createSubAccount(user, name: str, style: str = 'S1') -> ApiResponse[SubAccou
         response = requests.post(url, data=data, headers=headers, verify=False)
         response.raise_for_status()
         json_data = response.json()
-        logger.info(f"响应数据: {json_data}")
+        # logger.info(f"响应数据: {json_data}")
         try:
             data = json_data.get('Data')
             if data is None:
@@ -165,7 +165,7 @@ def disbandSubAccount(user, sub_account_no: str) -> ApiResponse[SubAccountRespon
         response = requests.post(url, json=data, headers=headers, verify=False)
         response.raise_for_status()
         json_data = response.json()
-        logger.info(f"响应数据: {json_data}")
+        # logger.info(f"响应数据: {json_data}")
         try:
             data = json_data.get('Data')
             if data is None:
@@ -270,7 +270,7 @@ def updateSubAccount(user, sub_account_no: str, open_state: int) -> ApiResponse[
         response = requests.post(url, json=data, headers=headers, verify=False)
         response.raise_for_status()
         json_data = response.json()
-        logger.info(f"响应数据: {json_data}")
+        # logger.info(f"响应数据: {json_data}")
         try:
             data = json_data.get('Data')
             if data is None:
@@ -427,7 +427,7 @@ def getSubAccountList(user) -> ApiResponse[List[SubAccount]]:
         response = requests.post(url, json=data, headers=headers, verify=False)
         response.raise_for_status()
         json_data = response.json()
-        logger.info(f"响应数据: {json_data}")
+        # logger.info(f"响应数据: {json_data}")
         try:
             data = json_data.get('Data')
             if data is None:
@@ -597,7 +597,7 @@ def getSubAssetMultList(user) -> ApiResponse[SubAssetMultListResponse]:
         response = requests.post(url, json=data, headers=headers, verify=False)
         response.raise_for_status()
         json_data = response.json()
-        logger.info(f"响应数据: {json_data}")
+        # logger.info(f"响应数据: {json_data}")
         try:
             data = json_data.get('Data')
             if data is None:

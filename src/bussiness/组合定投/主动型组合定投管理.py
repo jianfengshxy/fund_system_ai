@@ -464,10 +464,10 @@ def dissolve_plan_by_group(user: User, sub_account_name: str, budget: float):
         print(f"预算阈值 (100%): {budget_threshold:,.2f} 元")
         
         if current_asset_value <= budget_threshold:
-            print(f"✅ 当前资产价值 {current_asset_value:,.2f} 元未超过预算的70%，不需要解散定投计划")
+            print(f"✅ 当前资产价值 {current_asset_value:,.2f} 元未超过预算的100%，不需要解散定投计划")
             return
         else:
-            print(f"⚠️  当前资产价值 {current_asset_value:,.2f} 元已超过预算的70% ({budget_threshold:,.2f} 元)")
+            print(f"⚠️  当前资产价值 {current_asset_value:,.2f} 元已超过预算的100% ({budget_threshold:,.2f} 元)")
             print("⚠️  根据风控规则，需要考虑解散部分定投计划")
         
         # 4. 找出加仓风向标里面的基金组合

@@ -38,7 +38,7 @@ user_list = [
 ]
 
 
-def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float = 1000000.0):
+def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float = 1000000.0,investment_amount:float = 10000.0):
     """
     主动型组合定投管理函数
     
@@ -137,8 +137,8 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
         
         # 3. 检查资产配置条件
         print("步骤3: 检查资产配置条件...")
-        budget_threshold = budget * 0.7  # 70%预算阈值
-        print(f"预算阈值 (70%): {budget_threshold:,.2f} 元")
+        budget_threshold = budget * 1.0  # 70%预算阈值
+        print(f"预算阈值 (100%): {budget_threshold:,.2f} 元")
         
         # 计算剩余预算
         remaining_budget = budget - current_asset_value
@@ -232,9 +232,9 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
             print(f"\n💡 建议为以下 {len(recommended_funds)} 个基金创建定投计划:")
             
             # 计算建议的定投金额
-            suggested_monthly_amount = budget / 200  # 预算值除以200
+            suggested_monthly_amount = investment_amount  # 预算值除以200
             
-            for i, indicator in enumerate(recommended_funds[:5], 1):  # 最多推荐3个基金
+            for i, indicator in enumerate(recommended_funds[:5], 1):  # 最多推荐5个基金
                 fund_code = indicator.fund_code
                 fund_name = indicator.fund_name
                 print(f"  {i}. {fund_name}({fund_code}) - 建议月定投: {suggested_monthly_amount:,.0f} 元")
@@ -295,7 +295,7 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
         print(f"错误详情: {traceback.format_exc()}")
 
 
-def create_plan_by_group(user: User, sub_account_name: str, budget: float):
+def create_plan_by_group(user: User, sub_account_name: str, budget: float, investment_amount: float):
     """
     为指定组合创建定投计划
     
@@ -307,7 +307,7 @@ def create_plan_by_group(user: User, sub_account_name: str, budget: float):
     print(f"🚀 开始为组合 '{sub_account_name}' 创建定投计划，预算: {budget:,.2f} 元")
     
     # 调用主要的分析函数
-    setup_logger_plan_by_group(user, sub_account_name, budget)
+    setup_logger_plan_by_group(user, sub_account_name, budget,investment_amount)
 
 
 def batch_process_users():
@@ -329,7 +329,7 @@ def batch_process_users():
             print(f"{'='*60}")
             
             # 执行组合定投管理
-            create_plan_by_group(user, sub_account_name, budget)
+            create_plan_by_group(user, sub_account_name, budget,1000.0)
             
         except Exception as e:
             print(f"❌ 处理用户 {user_info} 时发生错误: {str(e)}")
@@ -369,7 +369,7 @@ def main():
             account, password, paypassword, name, _, budget = user_info
             user = User(account, password, paypassword)
             user.customer_name = name
-            create_plan_by_group(user, args.account, budget)
+            create_plan_by_group(user, args.account, budget,1000.0)
         else:
             print(f"❌ 未找到用户 {args.user}")
     else:
@@ -380,7 +380,7 @@ def main():
             user.customer_name = name
             
             print("🧪 使用默认用户进行测试")
-            create_plan_by_group(user, sub_account_name, budget)
+            create_plan_by_group(user, sub_account_name, budget,1000.0)
         else:
             print("❌ 用户列表为空")
     
@@ -460,8 +460,8 @@ def dissolve_plan_by_group(user: User, sub_account_name: str, budget: float):
         
         # 3. 检查资产配置条件(组合的总资产大于70%)
         print("步骤3: 检查资产配置条件...")
-        budget_threshold = budget * 0.7  # 70%预算阈值
-        print(f"预算阈值 (70%): {budget_threshold:,.2f} 元")
+        budget_threshold = budget * 1.0  # 70%预算阈值
+        print(f"预算阈值 (100%): {budget_threshold:,.2f} 元")
         
         if current_asset_value <= budget_threshold:
             print(f"✅ 当前资产价值 {current_asset_value:,.2f} 元未超过预算的70%，不需要解散定投计划")
@@ -584,5 +584,5 @@ def dissolve_plan_by_group(user: User, sub_account_name: str, budget: float):
         print(f"错误详情: {traceback.format_exc()}")
 
 if __name__ == '__main__':
-    # create_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0)
+    # create_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0,1000.0)
     dissolve_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0)

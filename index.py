@@ -43,7 +43,7 @@ def increase(event, context):
 
 def create_period_smart_investment(event, context):   
     # add_plan(DEFAULT_USER, 3000)
-    create_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0)
+    create_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0,10000.0)
     pass
 
 def dissolve_period_smart_investment(event, context):          

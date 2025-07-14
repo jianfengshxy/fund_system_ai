@@ -51,6 +51,7 @@ from src.API.登录接口.login import inference_passport_for_bind,login
 from src.domain.user import User
 from src.common.constant import DEFAULT_USER
 from src.API.基金信息.FundRank import get_fund_growth_rate
+from src.bussiness.全局智能定投处理.increase import increase_all_fund_plans
 
 logger = logging.getLogger(__name__)
 
@@ -104,8 +105,9 @@ def increase_all_users():
             # 执行加仓操作
             increase(user, sub_account_name)
             logger.info(f"用户：{user.customer_name} 加仓完成")
+            logger.info(f"用户：{user.customer_name} 开始对定投处理")
             increase_all_fund_plans(user)
-            logger.info(f"用户{user}的定投计划已处理完成")
+            logger.info(f"用户：{user.customer_name} 定投处理完成")
         except Exception as e:
             logger.error(f"登录失败的账号：{account}，用户名：{name}，错误信息：{str(e)}")
             continue

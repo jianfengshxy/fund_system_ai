@@ -51,6 +51,7 @@ import requests
 from src.API.登录接口.login import inference_passport_for_bind,login
 from src.domain.user import User
 from src.common.constant import DEFAULT_USER
+from src.service.定投管理.组合定投.组合定投管理 import dissolve_period_investment_by_group
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,15 @@ def redeem(user: User, sub_account_name:str = "最优止盈") -> bool:
             bank_shares = get_bank_shares(user,sub_account_no, fund_code)
             logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{result},计算止盈点:{volatility},实际止盈点:{stop_profit_rate}. 满足止盈条件: result({result}) > stop_profit_rate({stop_profit_rate}) and result({result}) > 1.0")
             sell_low_fee_shares(user,sub_account_no,fund_code,bank_shares)
+            # 止盈卖出成功后，检查并解散定投计划
+            try:
+                dissolve_result = dissolve_period_investment_by_group(user, sub_account_name, fund_code)
+                if dissolve_result:
+                    logger.info(f"基金{fund_name}({fund_code})在组合{sub_account_name}的定投计划已解散")
+                else:
+                    logger.info(f"基金{fund_name}({fund_code})在组合{sub_account_name}无可解散定投计划或资产不为空")
+            except Exception as e:
+                logger.error(f"解散基金{fund_name}({fund_code})在组合{sub_account_name}定投计划时异常: {e}")
         else:
             logger.info(f"{customer_name}的基金{fund_name}{fund_code}的收益{constant_profit_rate}加上估值增长率{fund_info.estimated_change}结果{result},计算止盈点:{volatility},实际止盈点:{stop_profit_rate}. 未满足止盈条件: result > stop_profit_rate ({result > stop_profit_rate}), result > 1.0 ({result > 1.0}). Skip...........")
  

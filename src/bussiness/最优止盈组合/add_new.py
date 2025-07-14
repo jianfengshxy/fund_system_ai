@@ -23,6 +23,7 @@ from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.domain.fund.fund_info import FundInfo
 from src.domain.asset.asset_details import AssetDetails
+from src.service.定投管理.组合定投.组合定投管理 import create_period_investment_by_group
 
 # 配置日志
 logging.basicConfig(
@@ -229,6 +230,24 @@ def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budg
                 
                 if trade_result:
                     logger.info(f"买入成功: {fund.fund_name}({fund.fund_code}) - 金额: {budget_per_fund}元 - 订单号: {trade_result.busin_serial_no}")
+                    # 买入成功后为该基金创建定投计划，参考主动型组合定投管理实现
+                    try:
+                        period_type = 4  # 日定投
+                        period_value = 1
+                        plan_result = create_period_investment_by_group(
+                            user=user,
+                            fund_code=fund.fund_code,
+                            amount=int(budget_per_fund),
+                            period_type=period_type,
+                            period_value=period_value,
+                            sub_account_name=sub_account_name
+                        )
+                        if plan_result:
+                            logger.info(f"定投创建成功: {fund.fund_name}({fund.fund_code}) - 金额: {budget_per_fund}元")
+                        else:
+                            logger.warning(f"定投创建失败或已存在: {fund.fund_name}({fund.fund_code})")
+                    except Exception as e:
+                        logger.error(f"为基金 {fund.fund_name}({fund.fund_code}) 创建定投时异常: {e}")
                     success_count += 1
                 else:
                     logger.error(f"买入失败: {fund.fund_name}({fund.fund_code})")

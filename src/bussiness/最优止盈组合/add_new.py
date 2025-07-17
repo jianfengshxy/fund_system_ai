@@ -150,6 +150,7 @@ def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budg
             return False
         
         available_balance = bank_cards[0].CurrentRealBalance
+        user.max_hqb_bank = bank_cards[0]
         logger.info(f"用户可用余额: {available_balance}元")
         
         if available_balance < budget_per_fund:
@@ -228,29 +229,31 @@ def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budg
                 # 执行买入
                 trade_result = commit_order(user, sub_account_no, fund.fund_code, budget_per_fund)
                 
-                if trade_result:
-                    logger.info(f"买入成功: {fund.fund_name}({fund.fund_code}) - 金额: {budget_per_fund}元 - 订单号: {trade_result.busin_serial_no}")
-                    # 买入成功后为该基金创建定投计划，参考主动型组合定投管理实现
-                    try:
-                        period_type = 4  # 日定投
-                        period_value = 1
-                        plan_result = create_period_investment_by_group(
-                            user=user,
-                            fund_code=fund.fund_code,
-                            amount=int(budget_per_fund),
-                            period_type=period_type,
-                            period_value=period_value,
-                            sub_account_name=sub_account_name
-                        )
-                        if plan_result:
-                            logger.info(f"定投创建成功: {fund.fund_name}({fund.fund_code}) - 金额: {budget_per_fund}元")
-                        else:
-                            logger.warning(f"定投创建失败或已存在: {fund.fund_name}({fund.fund_code})")
-                    except Exception as e:
-                        logger.error(f"为基金 {fund.fund_name}({fund.fund_code}) 创建定投时异常: {e}")
-                    success_count += 1
-                else:
-                    logger.error(f"买入失败: {fund.fund_name}({fund.fund_code})")
+                # if trade_result:
+                #     logger.info(f"买入成功: {fund.fund_name}({fund.fund_code}) - 金额: {budget_per_fund}元 - 订单号: {trade_result.busin_serial_no}")
+                #     # 买入成功后为该基金创建定投计划，参考主动型组合定投管理实现
+                #     try:
+                #         period_type = 4  # 日定投
+                #         period_value = 1
+                #         plan_result = create_period_investment_by_group(
+                #             user=user,
+                #             fund_code=fund.fund_code,
+                #             amount=int(budget_per_fund),
+                #             period_type=period_type,
+                #             period_value=period_value,
+                #             sub_account_name=sub_account_name
+                #         )
+                #         logger.info(f"plan_result: {plan_result}")
+                #         if plan_result:
+                #             logger.info(f"定投创建成功: {fund.fund_name}({fund.fund_code}) - 金额: {budget_per_fund}元")
+                #         else:
+                #             logger.warning(f"定投创建失败或已存在: {fund.fund_name}({fund.fund_code})")
+                        
+                #     except Exception as e:
+                #         logger.error(f"为基金 {fund.fund_name}({fund.fund_code}) 创建定投时异常: {e}")
+                #     success_count += 1
+                # else:
+                #     logger.error(f"买入失败: {fund.fund_name}({fund.fund_code})")
                     
             except Exception as e:
                 logger.error(f"买入基金 {fund.fund_name}({fund.fund_code}) 时发生异常: {e}")
@@ -296,13 +299,18 @@ def add_new_all_users():
 if __name__ == "__main__":
     # 测试单个用户的新增基金流程
     try:
-        test_user = DEFAULT_USER    
-        logging.info(f"测试用户 {test_user.customer_name} 登录成功")
-        
-        # 测试新增基金
-        add_new_funds(test_user, "最优止盈", 10000)
-        
-        logging.info("测试新增基金操作完成")
+        # 登录用户
+        user = login("13500819290", "guojing1985")
+        user = inference_passport_for_bind(user)
+        user.pay_password = "guojing1985"
+        user.budget = 200000
+        logging.info(f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{user.budget}元")
+            
+        # 执行新增基金操作
+        add_new_funds(user, "最优止盈",  user.budget)
+            
+        logging.info(f"用户 {user.customer_name} 新增基金操作完成")
+
         
     except Exception as e:
         logging.error(f"测试用户登录失败：{str(e)}")

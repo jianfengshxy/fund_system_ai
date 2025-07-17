@@ -751,7 +751,7 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
     Returns:
         ApiResponse[FundPlan]: 定投计划创建结果
     """
- 
+    md5_password = hashlib.md5(user.password.encode('utf-8')).hexdigest()
     
     url = f'https://ibgapi{user.index}.1234567.com.cn/ration/createPlanV3'
     
@@ -779,7 +779,7 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
         "targetProfitRate": "5%",
         "plat": "Android",
         "CToken": user.c_token,
-        "Password": "bb473d54f50393883b0c741c40459a90",
+        "Password": md5_password,
         "amount": amount,
         "product": "EFund",
         "orderNo": "",

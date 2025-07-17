@@ -6,7 +6,7 @@ import logging
 import hashlib
 import random
 import time
-from API.银行卡信息.CashBag import getCashBagAvailableShareV2
+from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 

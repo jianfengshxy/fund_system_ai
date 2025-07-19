@@ -25,11 +25,11 @@ from src.service.基金信息.基金信息 import get_all_fund_info
 # 第六列：budget 预算
 user_list = [
     # ("13918797997","Zj951103","Zj951103","仇晓钰","最优止盈",1000000.0),
-    ("13918199137", "sWX15706", "sWX15706", "施小雨", "低风险组合", 3000000.0)
+    ("13918199137", "sWX15706", "sWX15706", "施小雨", "低风险组合", 500000.0)
 ]
 
 
-def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, investment_amount: float = 2000.0):
+def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget: float = 1000000.0, investment_amount: float = 2000.0):
     """
     指数型组合定投管理函数
     
@@ -39,6 +39,7 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, investm
         investment_amount: 定投金额，默认2000元
     """
     print(f"开始处理用户 {user.customer_name or user.account} 的指数型组合 '{sub_account_name}' 定投管理")
+    print(f"预算金额: {budget:,.2f} 元")  # 添加预算打印以匹配主动型
     print(f"定投金额: {investment_amount:,.2f} 元")
     
     try:
@@ -279,7 +280,7 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, investm
         print(f"错误详情: {traceback.format_exc()}")
 
 
-def create_plan_by_group_for_index_funds(user: User, sub_account_name: str, investment_amount: float):
+def create_plan_by_group_for_index_funds(user: User, sub_account_name: str, budget: float, investment_amount: float):
     """
     为指定组合创建指数基金定投计划
     
@@ -288,10 +289,8 @@ def create_plan_by_group_for_index_funds(user: User, sub_account_name: str, inve
         sub_account_name: 组合名称
         investment_amount: 定投金额
     """
-    print(f"🚀 开始为指数型组合 '{sub_account_name}' 创建定投计划，定投金额: {investment_amount:,.2f} 元")
-    
-    # 调用主要的分析函数
-    setup_logger_plan_for_index_funds(user, sub_account_name, investment_amount)
+    print(f"🚀 开始为指数型组合 '{sub_account_name}' 创建定投计划，预算: {budget:,.2f} 元，定投金额: {investment_amount:,.2f} 元")
+    setup_logger_plan_for_index_funds(user, sub_account_name, budget, investment_amount)
 
 
 def dissolve_plan_by_group_for_index_funds(user: User, sub_account_name: str, budget: float):
@@ -366,16 +365,16 @@ def dissolve_plan_by_group_for_index_funds(user: User, sub_account_name: str, bu
             print(f"获取资产信息时出错: {e}")
         
         # 3. 检查资产配置条件(组合的总资产大于70%)
-        # print("步骤3: 检查资产配置条件...")
-        # budget_threshold = budget * 0.7  # 70%预算阈值
-        # print(f"预算阈值 (70%): {budget_threshold:,.2f} 元")
+        print("步骤3: 检查资产配置条件...")
+        budget_threshold = budget * 1.0  # 100%预算阈值
+        print(f"预算阈值 (100%): {budget_threshold:,.2f} 元")
         
-        # if current_asset_value <= budget_threshold:
-        #     print(f"✅ 当前资产价值 {current_asset_value:,.2f} 元未超过预算的70%，不需要解散定投计划")
-        #     return
-        # else:
-        #     print(f"⚠️  当前资产价值 {current_asset_value:,.2f} 元已超过预算的70% ({budget_threshold:,.2f} 元)")
-        #     print("⚠️  根据风控规则，需要考虑解散部分定投计划")
+        if current_asset_value <= budget_threshold:
+            print(f"✅ 当前资产价值 {current_asset_value:,.2f} 元未超过预算的100%，不需要解散定投计划")
+            return
+        else:
+            print(f"⚠️  当前资产价值 {current_asset_value:,.2f} 元已超过预算的100% ({budget_threshold:,.2f} 元)")
+            print("⚠️  根据风控规则，需要考虑解散部分定投计划")
         
         # 4. 找出加仓风向标里面的指数基金组合
         print("步骤4: 获取加仓风向标指数基金...")
@@ -583,7 +582,7 @@ def main():
 
 if __name__ == '__main__':
     # 测试创建指数基金定投计划
-    create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 2000.0)
+    create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合",1000000.0,2000.0)
     
     # 测试解散指数基金定投计划
     dissolve_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 1000000.0)

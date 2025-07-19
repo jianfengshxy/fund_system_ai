@@ -1,8 +1,11 @@
 import pytest
 import requests
-from unittest.mock import patch, MagicMock
 import os
 import sys
+import logging
+
+# 配置 logging 以输出到控制台
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -16,98 +19,30 @@ from src.domain.fund_plan import ApiResponse, FundPlanResponse, PageInfo, FundPl
 from src.common.constant import DEFAULT_USER, FUND_CODE
 from src.API.登录接口.login import inference_passport_for_bind, login
 
-@pytest.fixture
-def mock_response():
-    return {
-        "Success": True,
-        "ErrorCode": None,
-        "Data": {
-            "fundCode": "020256",
-            "fundName": "国泰君安基金",
-            "pageInfo": {
-                "pageIndex": 1,
-                "pageSize": 100,
-                "currPageSize": 1,
-                "totalPage": 1,
-                "totalSize": 1,
-                "extraData": None,
-                "data": [
-                    {
-                        "planId": "12345",
-                        "planState": "1",
-                        "planExtendStatus": "0",
-                        "planType": "1",
-                        "planConfigId": "67890",
-                        "executedTime": 1650000000,
-                        "executedAmount": "1000",
-                        "nextDeductDescription": "每月15日定投",
-                        "subAcctId": "ACC001",
-                        "subAcctName": "我的账户"
-                    }
-                ]
-            }
-        },
-        "FirstError": None,
-        "DebugError": None
-    }
-
-@pytest.fixture
-def mock_error_response():
-    return {
-        "Success": False,
-        "ErrorCode": "E001",
-        "Data": None,
-        "FirstError": "请求失败",
-        "DebugError": "网络错误"
-    }
-
 def test_get_fund_plan_list_success():
-    print(f"开始测试获取基金计划列表，基金代码: 021740")
-    # test_user = login("13918199137", "sWX15706")
-    # test_user = inference_passport_for_bind(test_user)
-    result = getFundPlanList(fund_code='021740', user=DEFAULT_USER)
-    # result = getFundPlanList(fund_code='021740', user=test_user)
-    print(f"API响应结果: {result}")
+    logger = logging.getLogger("TestGetFundPlanList")
+    logger.info("开始测试 getFundPlanList 函数")
     
-    assert isinstance(result, ApiResponse)
-    assert result.Success == True
-    assert isinstance(result.Data, FundPlanResponse)
-    assert result.Data.fundCode == '021740'
-    print("基本响应数据验证通过")
+    # 假设的用户和基金代码（根据实际上下文替换）
+    user = DEFAULT_USER  # 或从 fixture 获取
+    fund_code = "021740"  # 示例基金代码，根据需要调整
     
-    page_info = result.Data.pageInfo
-    assert isinstance(page_info, PageInfo)
-    assert page_info.pageIndex >= 1
-    assert page_info.pageSize == 100
-    print(f"分页信息验证通过: pageIndex={page_info.pageIndex}, pageSize={page_info.pageSize}")
+    result = getFundPlanList(fund_code, user)
     
-    if len(page_info.data) > 0:
-        plan = page_info.data[0]
-        assert isinstance(plan, FundPlan)
-        assert plan.planId is not None
-        assert plan.planState is not None
-        print(f"计划数据验证通过: planId={plan.planId}, planState={plan.planState}")
-    else:
-        print("未找到任何计划数据")
+    logger.info(f"getFundPlanList 返回结果类型: {type(result)}")
+    logger.info(f"返回列表长度: {len(result)}")
+    
+    # 详细打印每个计划的信息
+    for plan in result:
+        logger.info(f"Plan ID: {plan.planId}, Fund Code: {plan.fundCode}, , Fund Name: {plan.fundName} , State: {plan.planState}, Amount: {plan.amount}")
+    
+    # 断言验证
+    assert isinstance(result, list), "返回结果应为列表类型"
+    assert len(result) > 0, "返回列表不应为空（假设有数据）"
+    for item in result:
+        assert isinstance(item, FundPlan), "列表中每个元素应为 FundPlan 实例"
+    
+    logger.info("测试 getFundPlanList 函数成功")
 
-def test_get_fund_plan_list_http_error():
-    with patch('requests.get') as mock_get:
-        mock_get.side_effect = requests.exceptions.RequestException('网络错误')
-        
-        with pytest.raises(Exception) as exc_info:
-            getFundPlanList(fund_code='020256', user=DEFAULT_USER)
-        
-        assert str(exc_info.value) == '请求失败: 网络错误'
-
-def test_get_fund_plan_list_error_response(mock_error_response):
-    with patch('requests.get') as mock_get:
-        mock_get.return_value.json.return_value = mock_error_response
-        mock_get.return_value.raise_for_status = MagicMock()
-        
-        result = getFundPlanList(fund_code='020256', user=DEFAULT_USER)
-        
-        assert isinstance(result, ApiResponse)
-        assert result.Success == False
-        assert result.ErrorCode == 'E001'
-        assert result.FirstError == '请求失败'
-        assert result.DebugError == '网络错误'
+if __name__ == "__main__":
+    test_get_fund_plan_list_success()

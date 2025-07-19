@@ -213,7 +213,7 @@ def inference_passport_for_bind(user: User) -> User:
         response = requests.post(url, json=data, headers=headers, verify=False)
         response.raise_for_status()
         json_data = response.json()
-        logger.info(f"Passport绑定信息响应数据: {json_data}")
+        # logger.info(f"Passport绑定信息响应数据: {json_data}")
         
         if not json_data.get('Success', False):
             logger.error("获取Passport绑定信息失败，接口返回Success=False")

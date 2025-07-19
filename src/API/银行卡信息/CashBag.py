@@ -85,7 +85,7 @@ def getCashBagAvailableShareV2(user) -> List[HqbBank]:
         
         # 按照余额从高到低排序
         hqb_banks.sort(key=lambda x: float(x.BankAvaVol) if x.BankAvaVol else 0, reverse=True)
-        logger.info(f"排序后的银行卡数量: {len(hqb_banks)}")
+        # logger.info(f"排序后的银行卡数量: {len(hqb_banks)}")
                 
         return hqb_banks
             

@@ -67,7 +67,7 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
         response = requests.post(url, headers=headers, json=data, verify=False)
         response.raise_for_status()
         response_data = response.json()
-        logger.info(f"响应数据: {response_data}")
+        # logger.info(f"响应数据: {response_data}")
         
         if response_data.get("Succeed", False):
             results = []
@@ -142,13 +142,13 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
         response = requests.post(url, headers=headers, data=data, verify=False)
         response.raise_for_status()
         response_data = response.json()
-        logger.info(f"响应数据: {response_data}")
+        # logger.info(f"响应数据: {response_data}")
         
         bank_shares = []
         if response_data.get("Data") and response_data["Data"].get("Shares"):
             shares_list = response_data["Data"]["Shares"]
             for share_data in shares_list:
-                logger.info(f"share_data: {share_data}")
+                # logger.info(f"share_data: {share_data}")
                 # 使用正确的参数名称创建Share对象
                 bank_share = Share(
                     bankName=share_data.get("BankName", ""),
@@ -163,7 +163,7 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
                 bank_shares.append(bank_share)
             return bank_shares
         else:
-            logger.error(f"获取银行份额信息失败: {response_data}")
+            # logger.error(f"获取银行份额信息失败: {response_data}")
             return []
     except requests.exceptions.RequestException as e:
         logger.error(f"请求失败: {str(e)}")

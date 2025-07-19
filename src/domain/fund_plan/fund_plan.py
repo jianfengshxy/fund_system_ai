@@ -107,3 +107,5 @@ class FundPlan:
   计划资产: {self.planAssets:.2f}元{profit_info}{profit_rate_info}{target_info}
   下次扣款: {self.nextDeductDate}
   银行卡: {self.shortBankCardNo}({self.showBankCode})"""
+    def __repr__(self):
+        return self.__str__()

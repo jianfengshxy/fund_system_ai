@@ -46,7 +46,8 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     
     # 获取基金信息
     fund_code = plan_detail.rationPlan.fundCode
-    logger.info(f"处理基金代码: {fund_code}")
+    fund_name = plan_detail.rationPlan.fundName
+    logger.info(f"处理基金: {fund_name} {fund_code}")
     
     try:
         fund_info = get_all_fund_info(user, fund_code)

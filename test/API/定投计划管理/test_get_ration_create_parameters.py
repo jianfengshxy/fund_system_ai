@@ -1,9 +1,23 @@
 import pytest
 import requests
 from unittest.mock import patch, MagicMock
-from API.定投计划管理.SmartPlan import getRationCreateParameters
-from domain.fund_plan import ApiResponse, RationCreateParameters, DiscountRate
-from common.constant import DEFAULT_USER
+import os
+import sys
+import logging
+
+# 获取项目根目录路径
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+# 如果项目根目录不在Python路径中，则添加
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+
+from src.API.定投计划管理.SmartPlan import getRationCreateParameters
+from src.domain.fund_plan import ApiResponse, RationCreateParameters, DiscountRate
+from src.common.constant import DEFAULT_USER
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 @pytest.fixture
 def mock_ration_response():
@@ -122,3 +136,37 @@ def test_get_ration_create_parameters_error_response(mock_error_response):
         assert result.ErrorCode == 'E001'
         assert result.FirstError == '请求失败'
         assert result.DebugError == '网络错误'
+
+def test_get_ration_create_parameters_actual():
+    """测试实际API调用获取定投创建参数"""
+    fund_code = '020256'  # 假设的基金代码，可根据需要修改
+    logger.info(f"开始测试实际获取定投创建参数，基金代码: {fund_code}")
+    
+    result = getRationCreateParameters(fund_code=fund_code, user=DEFAULT_USER)
+    
+    logger.info(f"API响应结果: Success={result.Success}, ErrorCode={result.ErrorCode}")
+    assert isinstance(result, ApiResponse)
+    assert result.Success, "API调用应成功"
+    
+    if result.Data:
+        data = result.Data
+        assert isinstance(data, RationCreateParameters)
+        logger.info(f"基金代码: {data.fundCode}, 基金名称: {data.fundName}")
+        logger.info(f"基金类型: {data.fundType}, 风险等级: {data.fundRisk}")
+        logger.info(f"支持子账户: {data.supportSubAccount}, 自动支付: {data.rationAutoPay}")
+        logger.info(f"最小/最大限额: {data.minBusinLimit} - {data.maxBusinLimit}")
+        
+        if data.discountRateList:
+            for rate in data.discountRateList:
+                logger.info(f"折扣率: 限额 {rate.lowerLimit}-{rate.upperLimit}, 费率 {rate.rate}%, 折扣 {rate.discount}")
+        else:
+            logger.info("无折扣率信息")
+        
+        assert data.fundCode == fund_code, "基金代码应匹配"
+    else:
+        logger.warning("无返回数据")
+    
+    logger.info("测试完成")
+
+if __name__ == "__main__":
+    test_get_ration_create_parameters_actual()

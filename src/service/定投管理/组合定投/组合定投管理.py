@@ -66,13 +66,6 @@ def create_period_investment_by_group(user: User, sub_account_name: str, fund_co
                 logger.info(f"基金 {plan.fundName} 在子账户 '{sub_account_name}' 中已存在定投计划")
                 return None
     
-    # 获取银行卡信息并设置user.max_hqb_bank
-    from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
-    bank_cards = getCashBagAvailableShareV2(user)
-    if not bank_cards:
-        logger.error("获取银行卡信息失败")
-        return None
-    user.max_hqb_bank = bank_cards[0]
     
     # 调用现有的createPlanV3函数，硬编码strategy_type=3（组合定投）
     return createPlanV3(

@@ -8,7 +8,7 @@ import hashlib
 import requests
 from urllib.parse import quote_plus
 from typing import Dict, Any, Optional, Union,List
-
+from src.domain.user.User import User 
 # 添加项目根目录到路径
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(0, project_root)
@@ -76,7 +76,7 @@ def getFundRations(user, page_index=1, page_size=1000, planTypes=None, fundTypes
     user: 用户对象
     page_index: 页码，默认为1
     page_size: 每页数量，默认为1000
-    planTypes: 计划类型数组，1代表普通定投，2代表目标止盈定投，默认为空数组
+    planTypes: 计划类型数组，1代表目标止盈定投，2代表普通组合定投
     fundTypes: 基金类型数组，0代表指数基金，1代表股票型，2代表混合型，5代表QDII,默认为空数组
     """
     # 初始化参数默认值
@@ -336,7 +336,7 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
                 logger.error(f'解析单个计划失败: {str(e)}')
                 continue
                 
-        logger.info(f'获取基金定投计划列表成功，共{len(fund_plans)}个计划')
+        logger.info(f'{user.customer_name}获取基金{fund_name}{fund_code}定投计划列表成功，共{len(fund_plans)}个计划')
         return fund_plans
         
     except requests.exceptions.RequestException as e:
@@ -751,20 +751,21 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
     Returns:
         ApiResponse[FundPlan]: 定投计划创建结果
     """
-    md5_password = hashlib.md5(user.password.encode('utf-8')).hexdigest()
-    
+    logger = logging.getLogger("SmartPlan")
+    md5_password = hashlib.md5(user.password.encode('utf-8')).hexdigest()  
     url = f'https://ibgapi{user.index}.1234567.com.cn/ration/createPlanV3'
     
     # 如果指定了子账户名称，获取子账户编号
     sub_account_no = None
     if sub_account_name is not None:
         sub_account_no = getSubAccountNoByName(user, sub_account_name)
-    
-    # 构建请求体
+
+    # 构建请求体，添加安全检查
+    bank_acct_no = user.max_hqb_bank.AccountNo if hasattr(user.max_hqb_bank, 'AccountNo') else 'Not Available'
     body = {
         "minTimes": 0,
         "ServerVersion": "6.7.1",
-        "bankAcctNo": user.max_hqb_bank.AccountNo,
+        "bankAcctNo": bank_acct_no,
         "buyStrategy": 1,
         "userid": user.customer_no,
         "periodValue": period_value,
@@ -1048,30 +1049,23 @@ def updatePlanStatus(user, plan_id: str, buyStrategySwitch: bool):
 
 
 if __name__ == '__main__':
-    # 配置logger
-    logger = logging.getLogger("SmartPlan")
-    logger.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    getFundPlanList("021490", DEFAULT_USER) 
-    # 测试创建定投计划
-    # response = createPlanV3(
-    #     user=DEFAULT_USER,
-    #     fund_code="021490",
-    #     amount="2000.0",
-    #     period_type=4,
-    #     period_value= "1",
-    #     sub_account_name="最优止盈",
-    #     strategy_type= 3
-    # )
-
-    # # 检查响应
-    # if response.Success:
-    #     plan = response.Data
-    #     print(f"创建成功! 计划ID: {plan.planId}")
-    #     print(f"基金名称: {plan.fundName}")
-    #     print(f"下次扣款日期: {plan.nextDeductDate}")
-    # else:
-    #     print(f"创建失败: {response.FirstError}")
+    result = getFundPlanList("021490", DEFAULT_USER)
+    print(f"返回结果类型: {type(result)}")
+    print(f"返回结果长度: {len(result) if isinstance(result, list) else '非列表'}")
+    if result:
+        for i, plan in enumerate(result):
+            print(f"计划 {i+1}:")
+            print(f"  planId: {plan.planId}")
+            print(f"  fundCode: {plan.fundCode}")
+            print(f"  fundName: {plan.fundName}")
+            print(f"  planState: {plan.planState}")
+            print(f"  planType: {plan.planType}")
+            print(f"  amount: {plan.amount}")
+            print(f"  executedAmount: {plan.executedAmount}")
+            print(f"  executedTime: {plan.executedTime}")
+            print(f"  nextDeductDescription: {plan.nextDeductDescription}")
+            print(f"  subAccountNo: {plan.subAccountNo}")
+            print(f"  subAccountName: {plan.subAccountName}")
+            print("---")
+    else:
+        print("未找到任何计划数据")

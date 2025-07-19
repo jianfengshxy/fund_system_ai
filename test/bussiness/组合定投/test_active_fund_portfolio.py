@@ -52,5 +52,5 @@ def test_dissolve_plan_by_group():
     logger.info("测试完成")
 
 if __name__ == "__main__":
-    # test_create_plan_by_group()
+    test_create_plan_by_group()
     test_dissolve_plan_by_group()

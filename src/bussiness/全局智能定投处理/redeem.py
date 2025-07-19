@@ -96,7 +96,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         if asset_detail is not None:
             plan_assets = asset_detail.asset_value
             fund_type = fund_info.fund_type
-            constant_profit_rate = asset_detail.constant_profit_rate * 100
+            constant_profit_rate = asset_detail.constant_profit_rate  # 移除 * 100
             logger.info(f"{fund_name}资产详情获取成功 - 资产价值: {plan_assets}, 收益率: {constant_profit_rate}%, 基金类型: {asset_detail.fund_type}")
         else:
             logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}资产为空。Skip ..........")

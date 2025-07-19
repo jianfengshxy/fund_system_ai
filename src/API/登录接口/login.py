@@ -57,7 +57,7 @@ def login(account: str, password: str) -> User:
         response = requests.post(url, json=data, headers=headers, verify=False)
         response.raise_for_status()
         json_data = response.json()
-        logger.info(f"登录响应数据: {json_data}")
+        # logger.info(f"登录响应数据: {json_data}")
         
         if not json_data.get('Success', False):
             logger.error("登录失败，接口返回Success=False")

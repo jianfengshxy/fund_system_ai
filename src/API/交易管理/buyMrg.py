@@ -1,12 +1,6 @@
 import sys
 import os
-import requests
-import json
-import logging
-import hashlib
-import random
-import time
-from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
+
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -14,6 +8,13 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
+import requests
+import json
+import logging
+import hashlib
+import random
+import time
+from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
 from src.domain.trade.TradeResult import TradeResult
 from src.domain.user.User import User
 from typing import List, Optional, Dict, Any
@@ -39,13 +40,8 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
         return None
     
     # 获取活期宝银行卡列表
-    bank_cards = getCashBagAvailableShareV2(user)
-    if not bank_cards:
-        logger.error("获取银行卡信息失败：没有可用的银行卡")
-        raise Exception("获取银行卡信息失败：没有可用的银行卡")
-    
-    # 使用第一个银行卡（余额最高的）
-    bank_card_info = bank_cards[0]
+    bank_card_info = user.max_hqb_bank
+
     
     # 处理购买金额
     if float(amount) < 10:
@@ -54,7 +50,7 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
         amount = str(float(amount) - round(random.uniform(0.01, 1), 2))
     
     # 从AccountNo中提取实际的银行账号（第一个#之前的部分）
-    bank_account_no = bank_card_info.AccountNo.split('#')[0]
+    bank_account_no = bank_card_info.AccountNo
       
     # 检查银行卡余额
     if bank_card_info.CurrentRealBalance < 100:
@@ -111,7 +107,7 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
         response = requests.post(url, headers=headers, data=data, verify=False)
         response.raise_for_status()
         result = response.json()
-        logger.info(f"提交订单响应: {result}")
+        # logger.info(f"提交订单响应: {result}")
         
         # 处理响应结果
         if 'Success' in result and result['Success']:
@@ -185,7 +181,7 @@ def get_trace_id(user: User) -> Optional[str]:
         
         if 'Success' in result and result['Success'] and 'Data' in result and 'TraceID' in result['Data']:
             trace_id = result['Data']['TraceID']
-            logger.info(f"获取交易ID成功: {trace_id}")
+            # logger.info(f"获取交易ID成功: {trace_id}")
             return trace_id
         else:
             logger.error("获取交易ID失败")

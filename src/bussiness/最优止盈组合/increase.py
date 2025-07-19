@@ -52,7 +52,8 @@ from src.domain.user import User
 from src.common.constant import DEFAULT_USER
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.bussiness.全局智能定投处理.increase import increase_all_fund_plans
-
+from src.service.用户管理.用户信息 import get_user_all_info
+from src.service.定投管理.定投查询.定投查询 import get_portfolio_plan_details
 logger = logging.getLogger(__name__)
 
 #第一列：手机号 account
@@ -98,18 +99,33 @@ def increase_all_users():
         budget = user_info[5]
         
         try:
-            user = login(account, password)
-            user = inference_passport_for_bind(user)
+            user = get_user_all_info(account, password)
+            if not user:
+                logger.error(f"获取用户 {name} 信息失败")
+                continue
             user.budget = budget
             logger.info(f"开始加仓用户：{user.customer_name}")
             # 执行加仓操作
             increase(user, sub_account_name)
             logger.info(f"用户：{user.customer_name} 加仓完成")
             logger.info(f"用户：{user.customer_name} 开始对定投处理")
-            increase_all_fund_plans(user)
+            # 调整：获取指定组合下的所有定投计划详情并执行全局 increase
+            from src.bussiness.全局智能定投处理.increase import increase as global_increase  # 导入全局 increase 函数并起别名
+            
+            all_plan_details = get_portfolio_plan_details(user)  # 获取所有组合定投计划详情
+            plan_details = []
+            for detail in all_plan_details:
+                if detail.rationPlan and detail.rationPlan.subAccountName == sub_account_name:
+                    plan_details.append(detail)
+            if plan_details:
+                for plan_detail in plan_details:
+                    global_increase(user, plan_detail)  # 调用全局的 increase 函数
+                logger.info(f"用户：{user.customer_name} 全局智能定投加仓处理完成")
+            else:
+                logger.warning(f"用户：{user.customer_name} 无定投计划详情")
             logger.info(f"用户：{user.customer_name} 定投处理完成")
         except Exception as e:
-            logger.error(f"登录失败的账号：{account}，用户名：{name}，错误信息：{str(e)}")
+            logger.error(f"处理用户 {name} 失败，错误信息：{str(e)}")
             continue
 
 # 止盈算法实现
@@ -156,7 +172,7 @@ def increase(user: User, sub_account_name:str = "最优止盈") -> bool:
 
         stop_profit_rate = min(volatility * 100, 5.0) if fund_info.estimated_change != 0.0 else 5.0
         # 处理固定收益率
-        constant_profit_rate = asset_detail.constant_profit_rate * 100
+        constant_profit_rate = asset_detail.constant_profit_rate
 
         # 计算总收益率
         result = constant_profit_rate + fund_info.estimated_change

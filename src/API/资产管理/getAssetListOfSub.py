@@ -6,7 +6,7 @@ import urllib3
 import warnings
 import requests
 from typing import List
-from domain.asset.asset_details import AssetDetails
+from src.domain.asset.asset_details import AssetDetails
 # 添加项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -65,25 +65,25 @@ def get_asset_list_of_sub(user, sub_account_no):
         if hold_profit_str in ("--", "", None):
             asset_detail.hold_profit = 0.0
         else:
-            asset_detail.hold_profit = float(hold_profit_str) / 100
+            asset_detail.hold_profit = float(hold_profit_str)
 
         hold_profit_rate_str = asset.get("HoldProfitRate", "0").strip('%')
         if hold_profit_rate_str in ("--", "", None):
             asset_detail.hold_profit_rate = 0.0
         else:
-            asset_detail.hold_profit_rate = float(hold_profit_rate_str) / 100
+            asset_detail.hold_profit_rate = float(hold_profit_rate_str)
 
         constant_profit_str = asset.get("ConstantProfit", 0)
         if constant_profit_str in ("--", "", None):
             asset_detail.constant_profit = 0.0
         else:
-            asset_detail.hold_profit = float(hold_profit_str) / 100
+            asset_detail.constant_profit = float(constant_profit_str)
 
         constant_profit_rate_str = asset.get("ConstantProfitRate", "0").strip('%')
         if constant_profit_rate_str in ("--", "", None):
             asset_detail.constant_profit_rate = 0.0
         else:
-            asset_detail.constant_profit_rate = float(constant_profit_rate_str) / 100
+            asset_detail.constant_profit_rate = float(constant_profit_rate_str)
         asset_detail.profit_value = float(asset.get("ProfitValue", 0))
         asset_detail.daily_profit = float(asset.get("DailyProfit", 0))
         asset_detail.asset_value = float(asset.get("AssetValue", 0))

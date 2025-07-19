@@ -3,8 +3,6 @@ from typing import Dict, List, Optional
 import sys
 import os
 
-from common.constant import DEFAULT_USER
-
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -12,6 +10,9 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
+import logging
+from typing import Dict, List, Optional
+from src.common.constant import DEFAULT_USER
 from src.API.基金信息.FundInfo import getFundInfo, updateFundEstimatedValue
 from src.API.基金信息.FundRank import get_nav_rank, get_fund_volatility as get_fund_volatility_api
 from src.domain.fund.fund_info import FundInfo
@@ -108,5 +109,5 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
 
 if __name__ == '__main__':
     fund_info = get_all_fund_info(DEFAULT_USER, '110026')
-    print(fund_info)
+    # print(fund_info)
     pass

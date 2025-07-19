@@ -74,7 +74,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     try:
         asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
         if asset_detail is not None:
-            constant_profit_rate = asset_detail.constant_profit_rate * 100
+            constant_profit_rate = asset_detail.constant_profit_rate  # 移除 * 100
             logger.info(f"{fund_name}资产详情获取成功 - 资产价值: {asset_detail.asset_value}, 收益率: {constant_profit_rate}%, 在途交易数: {asset_detail.on_way_transaction_count}")
         else:
             logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}资产为空。Skip ..........")
@@ -84,7 +84,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         return False
         
     plan_assets = asset_detail.asset_value
-    constant_profit_rate = asset_detail.constant_profit_rate * 100
+    constant_profit_rate = asset_detail.constant_profit_rate  # 移除 * 100
     on_way_transaction_count = asset_detail.on_way_transaction_count
     times = round(plan_assets / fund_amount, 2)
     logger.info(f"计算结果 - 资产倍数: {times}")

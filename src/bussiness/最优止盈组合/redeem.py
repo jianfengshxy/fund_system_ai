@@ -52,6 +52,7 @@ from src.API.登录接口.login import inference_passport_for_bind,login
 from src.domain.user import User
 from src.common.constant import DEFAULT_USER
 from src.service.定投管理.组合定投.组合定投管理 import dissolve_period_investment_by_group
+from src.service.用户管理.用户信息 import get_user_all_info
 
 logger = logging.getLogger(__name__)
 
@@ -98,14 +99,16 @@ def redeem_all_users():
         budget = user_info[5]
         
         try:
-            user = login(account, password)
-            user = inference_passport_for_bind(user)
+            user = get_user_all_info(account, password)
+            if not user:
+                logger.error(f"获取用户 {name} 信息失败")
+                continue
             logger.info(f"开始赎回用户：{user.customer_name}")
             # 执行止盈操作
             redeem(user, sub_account_name)
             logger.info(f"用户：{user.customer_name} 赎回完成")
         except Exception as e:
-            logger.error(f"登录失败的账号：{account}，用户名：{name}，错误信息：{str(e)}")
+            logger.error(f"处理用户 {name} 失败，错误信息：{str(e)}")
             continue
 
 # 止盈算法实现
@@ -148,7 +151,7 @@ def redeem(user: User, sub_account_name:str = "最优止盈") -> bool:
 
         stop_profit_rate = min(volatility * 100, 5.0) if fund_info.estimated_change != 0.0 else 5.0
         # 处理固定收益率
-        constant_profit_rate = asset_detail.constant_profit_rate * 100
+        constant_profit_rate = asset_detail.constant_profit_rate
 
         # 计算总收益率
         result = constant_profit_rate + fund_info.estimated_change

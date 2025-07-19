@@ -82,7 +82,7 @@ def revoke_order(user: User, busin_serial_no: str, business_type: str, fund_code
         response = requests.post(url, headers=headers, data=data, verify=False)
         response.raise_for_status()
         response_data = response.json()
-        logger.info(f"响应数据: {response_data}")
+        # logger.info(f"响应数据: {response_data}")
         
         success = response_data.get("Success", False)
         result = {
@@ -91,7 +91,7 @@ def revoke_order(user: User, busin_serial_no: str, business_type: str, fund_code
         }
         
         if success:
-            logger.info(f"撤回交易成功. 业务流水号: {busin_serial_no}")
+            logger.info(f"{user.customer_name}的基金{fund_code}撤回交易成功. 业务流水号: {busin_serial_no}")
         else:
             logger.error(f"撤回交易失败: {result['Message']}")
         

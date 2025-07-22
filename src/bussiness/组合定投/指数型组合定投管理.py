@@ -203,8 +203,19 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
             try:
                 fund_info = get_all_fund_info(user, fund_code)
                 if fund_info and hasattr(fund_info, 'index_code') and fund_info.index_code:
-                    if fund_info.index_code in all_existing_index_codes:
-                        print(f"  跳过基金 {fund_name}({fund_code}): 已有跟踪相同指数({fund_info.index_code})的定投计划")
+                    index_code = fund_info.index_code  # 补充定义index_code
+                    if index_code in all_existing_index_codes:
+                        # 找出所有跟踪该指数的基金
+                        exist_funds = []
+                        for plan in all_fund_plan_details:
+                            try:
+                                plan_fund_info = get_all_fund_info(user, plan.rationPlan.fundCode)
+                                if plan_fund_info and hasattr(plan_fund_info, 'index_code') and plan_fund_info.index_code == index_code:
+                                    exist_funds.append((plan.rationPlan.fundName, plan.rationPlan.fundCode))
+                            except Exception:
+                                pass
+                        print(f"已有跟踪指数{index_code}的定投基金: " + ", ".join([f"{name}({code})" for name, code in exist_funds]))
+                        print(f"  跳过基金 {fund_name}({fund_code}): 已有跟踪相同指数({index_code})的定投计划")
                         continue
                     else:
                         print(f"  推荐基金: {fund_name}({fund_code}) - 跟踪指数: {fund_info.index_code}，无重复")

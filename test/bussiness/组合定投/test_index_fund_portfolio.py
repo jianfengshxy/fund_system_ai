@@ -46,12 +46,12 @@ def test_dissolve_plan_by_group_for_index_funds():
     
     # 第二步：调用解散定投计划函数
     sub_account_name = "指数基金组合"
-    budget = 500000.0
+    budget = 200000.0
     dissolve_plan_by_group_for_index_funds(user, sub_account_name, budget)
     
     # 这里可以添加更多断言，依赖日志验证
     logger.info("测试完成")
 
 if __name__ == "__main__":
-    test_create_plan_by_group_for_index_funds()
+    # test_create_plan_by_group_for_index_funds()
     test_dissolve_plan_by_group_for_index_funds()

@@ -26,18 +26,22 @@ logger = logging.getLogger(__name__)
 def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     """
     获取基金的完整信息，包括基础信息、估值信息、排名信息和波动率
-    
-    Args:
-        user: 用户对象
-        fund_code: 基金代码
-        
-    Returns:
-        FundInfo: 包含完整信息的基金对象，如果获取失败则返回None
     """
     # 第0步：从缓存中查找基金信息
     if fund_code in fund_info_cache:
-        logger.info(f"从缓存中获取基金信息: {fund_code}")
-        return fund_info_cache[fund_code]
+        fund_info = fund_info_cache[fund_code]
+        # 即便从缓存取，也要刷新估值信息
+        try:
+            updated_fund_info = updateFundEstimatedValue(fund_info)
+            if updated_fund_info:
+                fund_info = updated_fund_info
+                fund_info_cache[fund_code] = fund_info  # 更新缓存
+                # logger.info(f"{fund_info.fund_name}刷新基金估值信息: 估算净值={fund_info.estimated_value}, 估算涨跌={fund_info.estimated_change}%")
+            else:
+                logger.warning(f"{fund_info.fund_name}刷新基金估值信息失败: {fund_code}")
+        except Exception as e:
+            logger.error(f"{fund_info.fund_name}刷新基金估值信息时发生异常: {str(e)}")
+        return fund_info
     
     logger.info(f"开始获取基金 {fund_code} 的完整信息")
     

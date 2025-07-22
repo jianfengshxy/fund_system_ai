@@ -9,10 +9,11 @@ root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
+from src.domain.user import User
 # 在这里添加通用的fixtures
 @pytest.fixture
 def DEFAULT_USER():
-    from code.src.domain.user import User
+
     return User(
         customer_no="cd0b7906b53b43ffa508a99744b4055b",
         mobile_phone="13918199137"

@@ -57,7 +57,7 @@ def add_new(event, context):
 
 def create_period_index_investment(event, context):
     """创建指数型基金定投计划"""
-    create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 200000.0, 2000.0)
+    create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 200000.0, 5000.0)
     pass
 
 def dissolve_period_index_investment(event, context):

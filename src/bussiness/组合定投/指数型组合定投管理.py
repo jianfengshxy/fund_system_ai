@@ -179,7 +179,7 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
             fund_sub_type = getattr(indicator, 'fund_sub_type', None)
             
             # 只处理指数基金且子类型为000001的基金
-            if fund_type == '000' and fund_sub_type == '000001':
+            if fund_type == '000' and fund_sub_type in ('000001','000003'):
                 index_funds.append(indicator)
                 print(f"  候选指数基金: {fund_name}({fund_code}) - 类型: {fund_type}, 子类型: {fund_sub_type}")
             else:

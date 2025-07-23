@@ -171,12 +171,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             
         # 获取活期宝银行卡列表
         logger.info("开始检查银行卡余额相关条件...")
-        bank_cards = getCashBagAvailableShareV2(user)
-        if not bank_cards:
-            logger.error("获取银行卡信息失败：没有可用的银行卡")
-            raise Exception("获取银行卡信息失败：没有可用的银行卡")   
-        # 使用第一个银行卡（余额最高的）
-        bank_card_info = bank_cards[0]     
+        bank_card_info = user.max_hqb_bank    
         CurrentRealBalance = bank_card_info.CurrentRealBalance
         logger.info(f"银行卡余额：{CurrentRealBalance}")
         

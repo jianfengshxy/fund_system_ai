@@ -145,13 +145,8 @@ def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budg
         
         # 步骤4: 检查用户预算
         logger.info("=== 步骤4: 检查用户可用资金 ===")
-        bank_cards = getCashBagAvailableShareV2(user)
-        if not bank_cards:
-            logger.error("获取银行卡信息失败")
-            return False
-        
-        available_balance = bank_cards[0].CurrentRealBalance
-        user.max_hqb_bank = bank_cards[0]
+        bank_card = user.max_hqb_bank
+        available_balance = bank_card.CurrentRealBalance
         logger.info(f"用户可用余额: {available_balance}元")
         
         if available_balance < budget_per_fund:

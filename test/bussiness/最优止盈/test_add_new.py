@@ -26,7 +26,7 @@ def test_add_new_funds():
     # 调用函数进行新增基金测试
     user = get_user_all_info("13500819290", "guojing1985")
     user.budget = 200000.0
-    result = add_new_funds(user, "最优止盈", 10000.0)
+    result = add_new_funds(user, "最优止盈", user.budget)
     
     # 验证返回结果是布尔值
     assert isinstance(result, bool), "返回结果应该是布尔值"

@@ -165,7 +165,7 @@ def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
             # 响应格式为: jsonpgz({...});，需要提取JSON部分
             content = response.text
             if content.strip() == "jsonpgz();":
-                logger.info(f"{fund_info.fund_name}响应为空，设置估算涨跌为0.0")
+                # logger.info(f"{fund_info.fund_name}响应为空，设置估算涨跌为0.0")
                 fund_info.estimated_change = 0.0
                 return fund_info
             

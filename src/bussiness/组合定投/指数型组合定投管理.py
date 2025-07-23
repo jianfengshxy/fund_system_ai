@@ -214,19 +214,22 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
                                     exist_funds.append((plan.rationPlan.fundName, plan.rationPlan.fundCode))
                             except Exception:
                                 pass
-                        print(f"已有跟踪指数{index_code}的定投基金: " + ", ".join([f"{name}({code})" for name, code in exist_funds]))
-                        print(f"  跳过基金 {fund_name}({fund_code}): 已有跟踪相同指数({index_code})的定投计划")
+                        if exist_funds:
+                            exist_funds_str = ', '.join([f'{name}({code})' for name, code in exist_funds])
+                            print(f'  跳过基金 {fund_name}({fund_code}): 已有跟踪相同指数({index_code})的定投计划: {exist_funds_str}')
+                        else:
+                            print(f'  跳过基金 {fund_name}({fund_code}): 已有跟踪相同指数({index_code})的定投计划')
                         continue
                     else:
-                        print(f"  推荐基金: {fund_name}({fund_code}) - 跟踪指数: {fund_info.index_code}，无重复")
+                        print(f'  推荐基金: {fund_name}({fund_code}) - 跟踪指数: {fund_info.index_code}，无重复')
                         recommended_funds.append(indicator)
                         # 添加到已存在集合中，避免本次处理中的重复
                         all_existing_index_codes.add(fund_info.index_code)
                 else:
-                    print(f"  跳过基金 {fund_name}({fund_code}): 无法获取跟踪指数信息")
+                    print(f'  跳过基金 {fund_name}({fund_code}): 无法获取跟踪指数信息')
                     
             except Exception as e:
-                print(f"  警告: 检查基金 {fund_code} 跟踪指数时出错: {e}，跳过该基金")
+                print(f'  警告: 检查基金 {fund_code} 跟踪指数时出错: {e}，跳过该基金')
         
         if not recommended_funds:
             print("✅ 所有符合条件的指数基金都已有跟踪相同指数的定投计划，无需创建新计划")
@@ -377,7 +380,7 @@ def dissolve_plan_by_group_for_index_funds(user: User, sub_account_name: str, bu
         
         # 3. 检查资产配置条件(组合的总资产大于70%)
         print("步骤3: 检查资产配置条件...")
-        budget_threshold = budget * 1.0  # 100%预算阈值
+        budget_threshold = budget * 0.1  # 100%预算阈值
         print(f"预算阈值 (100%): {budget_threshold:,.2f} 元")
         
         if current_asset_value <= budget_threshold:
@@ -387,10 +390,10 @@ def dissolve_plan_by_group_for_index_funds(user: User, sub_account_name: str, bu
             print(f"⚠️  当前资产价值 {current_asset_value:,.2f} 元已超过预算的100% ({budget_threshold:,.2f} 元)")
             print("⚠️  根据风控规则，需要考虑解散部分定投计划")
         
-        # 4. 找出加仓风向标里面的指数基金组合
-        print("步骤4: 获取加仓风向标指数基金...")
+        # 4. 找出加仓风向标里面的指数代码集合
+        print("步骤4: 获取加仓风向标指数...")
         
-        recommended_fund_codes = set()
+        recommended_index_codes = set()
         try:
             indicators_response = getFundInvestmentIndicators(user, page_size=20)
             if indicators_response:
@@ -400,22 +403,24 @@ def dissolve_plan_by_group_for_index_funds(user: User, sub_account_name: str, bu
                 else:
                     indicators_data = indicators_response
                 
-                # 过滤出指数基金且fund_sub_type为'000001'的基金
+                # 过滤出指数基金且fund_sub_type为'000001'的基金，并获取追踪指数
                 for indicator in indicators_data:
                     fund_type = getattr(indicator, 'fund_type', None)
                     fund_sub_type = getattr(indicator, 'fund_sub_type', None)
                     if fund_type == '000' and fund_sub_type == '000001':
-                        recommended_fund_codes.add(indicator.fund_code)
-                        print(f"  加仓风向标指数基金: {indicator.fund_name}({indicator.fund_code})")
+                        fund_info = get_all_fund_info(user, indicator.fund_code)
+                        if fund_info and hasattr(fund_info, 'index_code') and fund_info.index_code:
+                            recommended_index_codes.add(fund_info.index_code)
+                            print(f"  加仓风向标指数: {fund_info.index_code} from {indicator.fund_name}({indicator.fund_code})")
                 
-                print(f"获取到 {len(recommended_fund_codes)} 个加仓风向标指数基金")
+                print(f"获取到 {len(recommended_index_codes)} 个加仓风向标指数")
             else:
                 print("❌ 获取加仓风向标数据失败")
                 
         except Exception as e:
             print(f"获取加仓风向标时出错: {e}")
         
-        # 5. 检查定投计划的基金，如果资金为0或者为空，且不在加仓风向标的基金中，则解散这个组合
+        # 5. 检查定投计划的基金，如果资产<=0或有效份额==0，且追踪指数不在加仓风向标中，则解散这个组合
         print("步骤5: 检查并解散符合条件的定投计划...")
         
         plans_to_dissolve = []
@@ -428,15 +433,18 @@ def dissolve_plan_by_group_for_index_funds(user: User, sub_account_name: str, bu
             
             # 检查该基金的资产情况
             fund_asset_value = 0.0
+            fund_available_vol = 0.0
             for asset in asset_details:
                 if asset.fund_code == fund_code:
                     try:
                         fund_asset_value = float(asset.asset_value or 0)
+                        fund_available_vol = float(asset.available_vol or 0)
                     except (ValueError, TypeError):
                         fund_asset_value = 0.0
+                        fund_available_vol = 0.0
                     break
             
-            # 判断是否需要解散：资金为0或为空，且不在加仓风向标中
+            # 判断是否需要解散
             should_dissolve = False
             reason = ""
             
@@ -444,20 +452,15 @@ def dissolve_plan_by_group_for_index_funds(user: User, sub_account_name: str, bu
             try:
                 fund_info = get_all_fund_info(user, fund_code)
                 if fund_info and hasattr(fund_info, 'fund_type') and fund_info.fund_type == "000":
-                    # 是指数基金，进行进一步判断
-                    if fund_asset_value <= 0:
-                        if fund_code not in recommended_fund_codes:
+                    index_code = getattr(fund_info, 'index_code', None)
+                    if fund_asset_value <= 0 or fund_available_vol == 0:
+                        if index_code and index_code in recommended_index_codes:
+                            reason = f"指数基金资产<=0或份额==0，但追踪指数 {index_code} 在加仓风向标中，保留"
+                        else:
                             should_dissolve = True
-                            reason = f"指数基金资产为0且不在加仓风向标中"
-                        else:
-                            reason = f"指数基金资产为0但在加仓风向标中，保留"
+                            reason = f"指数基金资产<=0或份额==0，且追踪指数 {index_code} 不在加仓风向标中"
                     else:
-                        if fund_code not in recommended_fund_codes:
-                            reason = f"指数基金有资产({fund_asset_value:,.2f}元)但不在加仓风向标中，考虑解散"
-                            # 可以根据具体业务规则决定是否解散有资产但不在风向标中的基金
-                            # should_dissolve = True
-                        else:
-                            reason = f"指数基金有资产({fund_asset_value:,.2f}元)且在加仓风向标中，保留"
+                        reason = f"指数基金有资产({fund_asset_value:,.2f}元)和份额({fund_available_vol:,.2f})，保留"
                 else:
                     reason = f"非指数基金，跳过解散判断"
             except Exception as e:
@@ -491,7 +494,7 @@ def dissolve_plan_by_group_for_index_funds(user: User, sub_account_name: str, bu
                     print(f"    📋 正在解散计划ID: {plan_id}")
                     result = dissolve_period_smart_investment(user, plan_id)
                     
-                    if result and hasattr(result, 'Success') and result.success:
+                    if result and hasattr(result, 'Success') and result.Success:
                         print(f"    ✅ 成功解散定投计划: {fund_name}({fund_code})")
                     else:
                         print(f"    ❌ 解散定投计划失败: {fund_name}({fund_code})")
@@ -593,7 +596,7 @@ def main():
 
 if __name__ == '__main__':
     # 测试创建指数基金定投计划
-    create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合",1000000.0,2000.0)
+    # create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合",1000000.0,5000.0)
     
     # 测试解散指数基金定投计划
     dissolve_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 1000000.0)

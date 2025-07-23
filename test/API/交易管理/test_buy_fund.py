@@ -21,14 +21,14 @@ def test_buy_fund_and_revoke():
     logger.info("开始测试基金购买并撤销")
     
     # 第一步：获取用户全部信息
-    account = DEFAULT_USER.account
-    password = DEFAULT_USER.password
+    account = "13500819290"
+    password = "guojing1985"
     user = get_user_all_info(account, password)
     logger.info(f"获取用户: {user.customer_name if user else '获取失败'}")
     assert user is not None, "获取用户失败"
     
     # 测试参数
-    name = "低风险组合"
+    name = "最优止盈"
     fund_code = "016531"
     amount = 1000.0
     

@@ -40,8 +40,12 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
         return None
     
     # 获取活期宝银行卡列表
-    bank_card_info = user.max_hqb_bank
-
+    try:
+        bank_card_info = user.max_hqb_bank
+    except AttributeError:
+        logger.error(f"提交订单失败: 银行卡信息未设置。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}")
+        return None
+    
     
     # 处理购买金额
     if float(amount) < 10:
@@ -51,10 +55,11 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
     
     # 从AccountNo中提取实际的银行账号（第一个#之前的部分）
     bank_account_no = bank_card_info.AccountNo
+    logger.info(f"提交订单，用户：{user.account}，基金代码：{fund_code}，购买金额：{amount}，银行账号：{bank_account_no}")
       
     # 检查银行卡余额
     if bank_card_info.CurrentRealBalance < 100:
-        logger.error(f'银行卡余额不足: {bank_card_info.CurrentRealBalance}')
+        logger.error(f"银行卡余额不足: {bank_card_info.CurrentRealBalance} < 100。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}")
         return None
     
     # 构建请求URL
@@ -134,10 +139,10 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
             logger.error("提交订单失败: 未知错误")
             return None
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}")
+        logger.error(f"请求失败: {str(e)}。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}")
         return None
     except Exception as e:
-        logger.error(f"提交订单失败: {str(e)}")
+        logger.error(f"提交订单失败: {str(e)}。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}")
         return None
 
 

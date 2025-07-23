@@ -137,15 +137,15 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
         
         # 3. 检查资产配置条件
         print("步骤3: 检查资产配置条件...")
-        budget_threshold = budget * 1.0  # 70%预算阈值
-        print(f"预算阈值 (100%): {budget_threshold:,.2f} 元")
+        budget_threshold = budget * 2.0 
+        print(f"预算阈值: {budget_threshold:,.2f} 元")
         
         # 计算剩余预算
         remaining_budget = budget - current_asset_value
         print(f"剩余可投资金额: {remaining_budget:,.2f} 元")
         
         if current_asset_value >= budget_threshold:
-            print(f"⚠️  当前资产价值 {current_asset_value:,.2f} 元已超过预算的70% ({budget_threshold:,.2f} 元)")
+            print(f"⚠️  当前资产价值 {current_asset_value:,.2f} 元已超过预算的阈值 ({budget_threshold:,.2f} 元)")
             print("⚠️  根据风控规则，当前资产已接近预算上限")
             if remaining_budget <= 0:
                 print("❌ 剩余预算不足，不建议创建新的定投计划")

@@ -16,6 +16,11 @@ from src.service.交易管理.交易查询 import get_withdrawable_trades
 from src.API.交易管理.revokMrg import revoke_order
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # 用户列表，与参考文件相同

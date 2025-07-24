@@ -54,6 +54,11 @@ from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.bussiness.全局智能定投处理.increase import increase_all_fund_plans
 from src.service.用户管理.用户信息 import get_user_all_info
 from src.service.定投管理.定投查询.定投查询 import get_portfolio_plan_details
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 #第一列：手机号 account

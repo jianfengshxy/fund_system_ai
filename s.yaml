@@ -6,6 +6,16 @@ access: "default"
 vars:
   # 公共配置模板
   common:
+    database:
+        vpc_id: vpc-uf6ewma5cv187wp8m1yej
+        cidr: 172.16.0.0/12
+        internal_host: rm-uf614tc8841ee6nwi.rwlb.rds.aliyuncs.com
+        external_host: rm-uf614tc8841ee6nwiwo.rwlb.rds.aliyuncs.com
+        port: 3306
+        DB_USER: jianfengshxy
+        DB_PASSWORD: jianfeng1984Aa+
+        DB_PORT: 3306
+        DB_NAME: kuafudb
     component: "fc3"
     actions:
       complete-deploy:
@@ -204,4 +214,5 @@ resources:
           payload: ${vars.common.props.triggerConfig.payload}
           cronExpression: "CRON_TZ=Asia/Shanghai 0 10 21 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
+
 

@@ -5,7 +5,7 @@ from typing import Optional
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import os
-import sys
+import sys  # 添加此行，如果未导入
 
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -54,6 +54,11 @@ from src.common.constant import DEFAULT_USER
 from src.service.定投管理.组合定投.组合定投管理 import dissolve_period_investment_by_group
 from src.service.用户管理.用户信息 import get_user_all_info
 
+logging.basicConfig(
+    stream=sys.stdout,  # 添加此行
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 #第一列：手机号 account

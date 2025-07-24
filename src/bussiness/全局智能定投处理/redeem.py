@@ -37,6 +37,11 @@ from src.service.交易管理.赎回基金 import sell_0_fee_shares
 from src.service.交易管理.赎回基金 import sell_low_fee_shares
 from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
 
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 def default_user_redeem_all_fund_plans():

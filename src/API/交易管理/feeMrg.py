@@ -36,7 +36,7 @@ def getFee(user, fund_code: str):
         response = requests.post(url, headers=headers, data=data, verify=False)
         response.raise_for_status()
         result = response.json()
-        logger.info(f"手续费查询响应: {result}")
+        # logger.info(f"手续费查询响应: {result}")
         if result.get("Success") and "Data" in result:
             return result["Data"]
         else:

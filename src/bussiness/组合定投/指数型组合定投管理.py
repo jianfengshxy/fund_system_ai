@@ -380,14 +380,14 @@ def dissolve_plan_by_group_for_index_funds(user: User, sub_account_name: str, bu
         
         # 3. 检查资产配置条件(组合的总资产大于70%)
         print("步骤3: 检查资产配置条件...")
-        budget_threshold = budget * 0.1  # 100%预算阈值
+        budget_threshold = budget * 0.2  # 100%预算阈值
         print(f"预算阈值 (100%): {budget_threshold:,.2f} 元")
         
         if current_asset_value <= budget_threshold:
-            print(f"✅ 当前资产价值 {current_asset_value:,.2f} 元未超过预算的100%，不需要解散定投计划")
+            print(f"✅ 当前资产价值 {current_asset_value:,.2f} 元未超过{budget_threshold:,.2f}，不需要解散定投计划")
             return
         else:
-            print(f"⚠️  当前资产价值 {current_asset_value:,.2f} 元已超过预算的100% ({budget_threshold:,.2f} 元)")
+            print(f"⚠️  当前资产价值 {current_asset_value:,.2f} 元已超过({budget_threshold:,.2f} 元)")
             print("⚠️  根据风控规则，需要考虑解散部分定投计划")
         
         # 4. 找出加仓风向标里面的指数代码集合

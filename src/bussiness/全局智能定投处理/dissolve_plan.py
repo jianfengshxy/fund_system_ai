@@ -30,7 +30,7 @@ from datetime import datetime
 from src.domain.fund_plan.fund_plan import FundPlan
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.API.定投计划管理.SmartPlan import getFundPlanList
-from src.API.大数据.加仓风向标 import getFundInvestmentIndicators
+from src.service.大数据.加仓风向标服务 import process_fund_investment_indicators
 from src.service.定投管理.智能定投.智能定投管理 import dissolve_period_smart_investment
 
 logger = logging.getLogger(__name__)    
@@ -99,7 +99,7 @@ def dissolve_daily_plan(user: User):
         # 获取加仓风向标中的基金代码列表
         logger.info("步骤3: 获取加仓风向标数据...")
         try:
-            indicators_list = getFundInvestmentIndicators(user)
+            indicators_list = process_fund_investment_indicators(user)
             if not indicators_list:
                 logger.warning("获取加仓风向标数据失败或为空")
                 return

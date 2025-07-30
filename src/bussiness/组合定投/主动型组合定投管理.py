@@ -21,7 +21,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
 from src.common.constant import DEFAULT_USER
 from src.domain.user.User import User
 from src.service.定投管理.定投查询.定投查询 import get_portfolio_plan_details
-from src.API.大数据.加仓风向标 import getFundInvestmentIndicators
+from src.service.大数据.加仓风向标服务 import process_fund_investment_indicators
 from src.API.定投计划管理.SmartPlan import createPlanV3, getFundPlanList
 from src.service.定投管理.智能定投.智能定投管理 import dissolve_period_smart_investment
 from src.service.定投管理.组合定投.组合定投管理 import create_period_investment_by_group
@@ -160,7 +160,7 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
         
         # 调用加仓风向标函数，获取推荐基金
         print("获取加仓风向标数据...")
-        indicators_response = getFundInvestmentIndicators(user, page_size=20)
+        indicators_response = process_fund_investment_indicators(user, page_size=20)
         if not indicators_response:
             print("❌ 获取加仓风向标数据失败")
             return

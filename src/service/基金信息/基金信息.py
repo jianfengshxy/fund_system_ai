@@ -36,14 +36,14 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
             if updated_fund_info:
                 fund_info = updated_fund_info
                 fund_info_cache[fund_code] = fund_info  # 更新缓存
-                # logger.info(f"{fund_info.fund_name}刷新基金估值信息: 估算净值={fund_info.estimated_value}, 估算涨跌={fund_info.estimated_change}%")
+                # logger.debug(f"{fund_info.fund_name}刷新基金估值信息: 估算净值={fund_info.estimated_value}, 估算涨跌={fund_info.estimated_change}%")
             else:
                 logger.warning(f"{fund_info.fund_name}刷新基金估值信息失败: {fund_code}")
         except Exception as e:
             logger.error(f"{fund_info.fund_name}刷新基金估值信息时发生异常: {str(e)}")
         return fund_info
     
-    logger.info(f"开始获取基金 {fund_code} 的完整信息")
+    logger.debug(f"开始获取基金 {fund_code} 的完整信息")
     
     # 第1步：获取基金基础信息
     fund_info = getFundInfo(user, fund_code)
@@ -51,14 +51,14 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
         logger.error(f"获取基金基础信息失败: {fund_code}")
         return None
     
-    logger.info(f"{fund_info.fund_name}成功获取基金基础信息: {fund_info.fund_name}({fund_code})")
+    logger.debug(f"{fund_info.fund_name}成功获取基金基础信息: {fund_info.fund_name}({fund_code})")
     
     # 第2步：获取基金估值信息
     try:
         updated_fund_info = updateFundEstimatedValue(fund_info)
         if updated_fund_info:
             fund_info = updated_fund_info
-            logger.info(f"{fund_info.fund_name}成功获取基金估值信息: 估算净值={fund_info.estimated_value}, 估算涨跌={fund_info.estimated_change}%")
+            logger.debug(f"{fund_info.fund_name}成功获取基金估值信息: 估算净值={fund_info.estimated_value}, 估算涨跌={fund_info.estimated_change}%")
         else:
             logger.warning(f"{fund_info.fund_name}获取基金估值信息失败: {fund_code}")
     except Exception as e:
@@ -69,7 +69,7 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
         rank_30 = get_nav_rank(user, fund_info, 30)
         if rank_30 is not None:
             fund_info.rank_30day = rank_30
-            logger.info(f"{fund_info.fund_name}成功获取基金30日排名信息: {rank_30}")
+            logger.debug(f"{fund_info.fund_name}成功获取基金30日排名信息: {rank_30}")
         else:
             logger.warning(f"{fund_info.fund_name}获取基金30日排名信息失败: {fund_code}")
     except Exception as e:
@@ -80,7 +80,7 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
         rank_100 = get_nav_rank(user, fund_info, 100)
         if rank_100 is not None:
             fund_info.rank_100day = rank_100
-            logger.info(f"{fund_info.fund_name}成功获取基金100日排名信息: {rank_100}")
+            logger.debug(f"{fund_info.fund_name}成功获取基金100日排名信息: {rank_100}")
         else:
             logger.warning(f"{fund_info.fund_name}获取基金100日排名信息失败: {fund_code}")
     except Exception as e:
@@ -92,7 +92,7 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
         if volatility_result is not None:
             _, _, volatility = volatility_result
             fund_info.volatility = volatility
-            logger.info(f"{fund_info.fund_name}成功获取基金30日波动率信息: {volatility}")
+            logger.debug(f"{fund_info.fund_name}成功获取基金30日波动率信息: {volatility}")
         else:
             logger.warning(f"{fund_info.fund_name}获取基金30日波动率信息失败: {fund_code}")
     except Exception as e:
@@ -100,13 +100,13 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     
     # 打印基金跟踪的指数信息
     if hasattr(fund_info, 'index_code') and fund_info.index_code:
-        logger.info(f"{fund_info.fund_name}跟踪指数代码: {fund_info.index_code}")
+        logger.debug(f"{fund_info.fund_name}跟踪指数代码: {fund_info.index_code}")
     else:
-        logger.info(f"{fund_info.fund_name}未跟踪任何指数或指数代码为空")
+        logger.debug(f"{fund_info.fund_name}未跟踪任何指数或指数代码为空")
     
     # 第6步：将基金信息加入缓存
     fund_info_cache[fund_code] = fund_info
-    logger.info(f"基金 {fund_code} {fund_info.fund_name}的完整信息已加入缓存")
+    logger.debug(f"基金 {fund_code} {fund_info.fund_name}的完整信息已加入缓存")
     
     # 第7步：返回基金信息对象
     return fund_info

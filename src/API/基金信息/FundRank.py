@@ -88,7 +88,7 @@ def get_nav_rank(user, fund_info: FundInfo, N: int, nav: Optional[float] = None)
             
             # 计算排名
             rank = sorted_navs.index(nav) + 1
-            logger.info(f"基金{fund_info.fund_code}{fund_info.fund_name}，当前净值：{nav}，在最近{N}个交易日中的排名：{rank}")
+            logger.debug(f"基金{fund_info.fund_code}{fund_info.fund_name}，当前净值：{nav}，在最近{N}个交易日中的排名：{rank}")
             
             return rank
             
@@ -186,7 +186,7 @@ def get_fund_volatility(user, fund_info: FundInfo, N: int) -> Optional[Tuple[flo
                 else:
                     # 计算波动率（标准差）
                     volatility = np.sqrt(variance)
-                    logger.info(f"基金{fund_info.fund_code}{fund_info.fund_name}，"
+                    logger.debug(f"基金{fund_info.fund_code}{fund_info.fund_name}，"
                               f"平均净值：{mean:.4f}，方差：{variance:.4f}，波动率：{volatility:.4f}")
                     return mean, variance, volatility
             else:
@@ -291,7 +291,7 @@ def get_fund_growth_rate(fund_info: FundInfo, period_type: str) -> tuple[float, 
                 item_rank = safe_int(item.get("rank"))
                 item_sc = safe_int(item.get("sc"))
 
-                logger.info(f"基金{fund_code}在{period_type}期间的增长率: {growth_rate:.2f}%, "
+                logger.debug(f"基金{fund_code}在{period_type}期间的增长率: {growth_rate:.2f}%, "
                             f"排名: {item_rank}/{item_sc}")
 
                 return growth_rate, item_rank, item_sc

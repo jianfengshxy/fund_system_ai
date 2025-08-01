@@ -36,7 +36,7 @@ from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.service.交易管理.赎回基金 import sell_0_fee_shares
 from src.service.交易管理.赎回基金 import sell_low_fee_shares
 from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
-
+from service.大数据.加仓风向标服务 import process_fund_investment_indicators
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
@@ -82,6 +82,21 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
     fund_info = get_all_fund_info(user, fund_code)
     fund_name = fund_info.fund_name
     logger.info(f"基金信息：{fund_name}({fund_code})，可申购：{fund_info.can_purchase}")
+    
+    # 检查当前基金是否属于加仓基金列表，如果是则不执行止盈
+    try:      
+        # 获取加仓基金列表
+        addition_funds = process_fund_investment_indicators(user, page_size=20)
+        addition_fund_codes = {fund.fund_code for fund in addition_funds}
+        
+        if fund_code in addition_fund_codes:
+            logger.info(f"基金{fund_name}({fund_code})属于加仓风向标基金，跳过止盈操作")
+            return True
+        else:
+            logger.info(f"基金{fund_name}({fund_code})不属于加仓风向标基金，继续执行止盈判断")
+            
+    except Exception as e:
+        logger.warning(f"获取加仓基金列表失败，继续执行止盈判断: {str(e)}")
     
     if fund_info.can_purchase == False:
         logger.info(f"{fund_name}不可申购/赎回")

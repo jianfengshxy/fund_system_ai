@@ -453,7 +453,7 @@ def dissolve_plan_by_group_for_index_funds(user: User, sub_account_name: str, bu
                 fund_info = get_all_fund_info(user, fund_code)
                 if fund_info and hasattr(fund_info, 'fund_type') and fund_info.fund_type == "000":
                     index_code = getattr(fund_info, 'index_code', None)
-                    if fund_asset_value <= 0 or fund_available_vol == 0:
+                    if fund_asset_value <= 0 :
                         if index_code and index_code in recommended_index_codes:
                             reason = f"指数基金资产<=0或份额==0，但追踪指数 {index_code} 在加仓风向标中，保留"
                         else:

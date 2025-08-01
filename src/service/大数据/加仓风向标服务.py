@@ -255,8 +255,16 @@ if __name__ == "__main__":
             print("===================================")
 
             for i, indicator in enumerate(result, 1):
+                # 获取基金的详细信息，包括估算涨幅
+                fund_info = get_all_fund_info(DEFAULT_USER, indicator.fund_code)
+                estimated_change = fund_info.estimated_change if fund_info else 'N/A'
+                index_code = fund_info.index_code if fund_info and fund_info.index_code else '无'
+
                 print(f"{i}. {indicator.fund_name} ({indicator.fund_code})")
                 print(f"   排名: {indicator.product_rank}")
+                print(f"   今日估算涨幅: {estimated_change}%")
+                if indicator.fund_type == '000':
+                    print(f"   跟踪指数: {index_code}")
                 print(f"   一年收益率: {indicator.one_year_return if indicator.one_year_return != 0 else '暂无'}%")
                 print(f"   成立以来收益率: {indicator.since_launch_return}%")
                 print(f"   基金类型: {indicator.fund_type}")

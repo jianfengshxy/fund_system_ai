@@ -14,6 +14,24 @@ class AssetDetails:
         self.on_way_transaction_count = None
         self.asset_rank = 0.0
         
+    def to_dict(self):
+        return {
+            'fund_name': self.fund_name,
+            'fund_code': self.fund_code,
+            'fund_type': self.fund_type,
+            'hold_profit': self.hold_profit,
+            'hold_profit_rate': self.hold_profit_rate,
+            'constant_profit': self.constant_profit,
+            'constant_profit_rate': self.constant_profit_rate,
+            'profit_value': self.profit_value,
+            'daily_profit': self.daily_profit,
+            'asset_value': self.asset_value,
+            'available_vol': self.available_vol,
+            'on_way_transaction_count': self.on_way_transaction_count,
+            'asset_rank': self.asset_rank,
+            'estimated_change': getattr(self, 'estimated_change', 0.0) # 确保 estimated_change 存在
+        }
+
     def __str__(self):
         return f"""AssetDetails(
             fund_name={self.fund_name},

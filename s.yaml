@@ -212,7 +212,32 @@ resources:
         triggerName: "create_period_index_investment"
         triggerConfig:
           payload: ${vars.common.props.triggerConfig.payload}
-          cronExpression: "CRON_TZ=Asia/Shanghai 0 10 21 * * 1-5"
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 5 21 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
+
+  fund_dashboard:
+    component: ${vars.common.component}
+    props:
+      handler: "app.handler"
+      functionName: "fund_dashboard"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      triggers:
+      - triggerName: http_trigger
+        triggerType: http
+        description: 'HTTP trigger for fund dashboard'
+        qualifier: LATEST
+        triggerConfig:
+          authType: anonymous
+          methods:
+          - GET
+          - POST
 
 

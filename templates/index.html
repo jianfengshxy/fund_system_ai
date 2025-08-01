@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基金组合资产看板</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f9;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        h1, h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+        .portfolio-selector {
+            margin-bottom: 20px;
+        }
+        .portfolio-selector select {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+        }
+        .summary, .portfolio-details {
+            margin-bottom: 20px;
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        .summary-item {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .summary-item h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #7f8c8d;
+        }
+        .summary-item p {
+            margin: 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+        .profit {
+            color: #e74c3c;
+        }
+        .loss {
+            color: #2ecc71;
+        }
+        .positive {
+            color: #e74c3c;
+        }
+        .negative {
+            color: #2ecc71;
+        }
+        .loader {
+            text-align: center;
+            padding: 50px;
+            font-size: 18px;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>基金组合资产看板</h1>
+
+        <div class="portfolio-selector">
+            <label for="portfolio-name">选择组合:</label>
+            <select id="portfolio-name">
+                {% for p in portfolios %}
+                    <option value="{{ p.sub_account_name }}" {% if p.sub_account_name == selected_portfolio_name %}selected{% endif %}>
+                        {{ p.sub_account_name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div id="portfolio-content">
+            <div class="loader">正在加载数据...</div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const portfolioSelector = document.getElementById('portfolio-name');
+            const portfolioContent = document.getElementById('portfolio-content');
+
+            function updatePortfolioDetails(portfolioName) {
+                portfolioContent.innerHTML = '<div class="loader">正在加载数据...</div>';
+
+                fetch(`/api/portfolio/${portfolioName}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            portfolioContent.innerHTML = `<p>加载数据失败: ${data.error}</p>`;
+                            return;
+                        }
+
+                        let summaryHtml = `
+                            <div class="summary">
+                                <h2>组合概览: ${portfolioName}</h2>
+                                <div class="summary-grid">
+                                    <div class="summary-item">
+                                        <h3>总资产 (元)</h3>
+                                        <p>${data.total_assets.toFixed(2)}</p>
+                                    </div>
+                                    <div class="summary-item">
+                                        <h3>持有盈亏 (元)</h3>
+                                        <p class="${data.total_profit >= 0 ? 'profit' : 'loss'}">${data.total_profit.toFixed(2)}</p>
+                                    </div>
+                                    <div class="summary-item">
+                                        <h3>今日估算涨跌幅 (%)</h3>
+                                        <p class="${data.estimated_portfolio_change_ratio >= 0 ? 'positive' : 'negative'}">${data.estimated_portfolio_change_ratio.toFixed(2)}%</p>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+
+                        let detailsHtml = `
+                            <div class="portfolio-details">
+                                <h2>持仓详情</h2>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>基金名称</th>
+                                            <th>基金代码</th>
+                                            <th>资产</th>
+                                            <th>持有份额</th>
+                                            <th>持有收益/率</th>
+                                            <th>今日估算涨跌幅 (%)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                        `;
+
+                        if (data.portfolio_details && data.portfolio_details.length > 0) {
+                            data.portfolio_details.forEach(asset => {
+                                detailsHtml += `
+                                    <tr>
+                                        <td>${asset.fund_name}</td>
+                                        <td>${asset.fund_code}</td>
+                                        <td>${asset.asset_value.toFixed(2)}</td>
+                                        <td>${asset.available_vol.toFixed(2)}</td>
+                                        <td>
+                                            <p class="${asset.hold_profit >= 0 ? 'profit' : 'loss'}">${asset.hold_profit.toFixed(2)}</p>
+                                            <p class="${asset.hold_profit_rate >= 0 ? 'profit' : 'loss'}">${asset.hold_profit_rate.toFixed(2)}%</p>
+                                        </td>
+                                        <td class="${asset.estimated_change >= 0 ? 'positive' : 'negative'}">${asset.estimated_change.toFixed(2)}%</td>
+                                    </tr>
+                                `;
+                            });
+                        } else {
+                            detailsHtml += '<tr><td colspan="6" style="text-align:center;">暂无持仓数据</td></tr>';
+                        }
+
+                        detailsHtml += `</tbody></table></div>`;
+                        portfolioContent.innerHTML = summaryHtml + detailsHtml;
+                    })
+                    .catch(error => {
+                        portfolioContent.innerHTML = `<p>加载数据时发生网络错误: ${error}</p>`;
+                    });
+            }
+
+            portfolioSelector.addEventListener('change', (event) => {
+                updatePortfolioDetails(event.target.value);
+            });
+
+            // 页面加载时自动加载第一个组合的数据
+            if (portfolioSelector.value) {
+                updatePortfolioDetails(portfolioSelector.value);
+            }
+        });
+    </script>
+</body>
+</html>

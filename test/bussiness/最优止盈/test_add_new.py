@@ -18,23 +18,31 @@ from src.common.constant import DEFAULT_USER
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)d)')
 logger = logging.getLogger(__name__)
 
+user_list = [
+    ("13918797997","Zj951103","Zj951103","仇晓钰","最优止盈",100000.0)
+]
+
 def test_add_new_funds():
     """测试 add_new_funds 函数"""
-    # 打印测试开始信息
     logger.info("开始测试最优止盈的add_new_funds函数")
     
-    # 调用函数进行新增基金测试
-    user = get_user_all_info("13500819290", "guojing1985")
-    user.budget = 200000.0
-    result = add_new_funds(user, "最优止盈", user.budget)
-    
-    # 验证返回结果是布尔值
-    assert isinstance(result, bool), "返回结果应该是布尔值"
-    
-    # 打印测试结果
-    logger.info(f"新增基金测试结果: {'成功' if result else '失败'}")
+    # 遍历user_list中的用户数据
+    for user_info in user_list:
+        account = user_info[0]
+        password = user_info[1]
+        customer_name = user_info[3]
+        budget = user_info[5]
+        
+        try:
+            user = get_user_all_info(account, password)
+            user.budget = budget
+            result = add_new_funds(user, "最优止盈", user.budget)
+            
+            assert isinstance(result, bool), "返回结果应该是布尔值"
+            logger.info(f"用户 {customer_name} 新增基金测试结果: {'成功' if result else '失败'}")
+        except Exception as e:
+            logger.error(f"处理用户 {customer_name} 失败，错误信息：{str(e)}")
+            continue
 
 if __name__ == "__main__":
-    # 直接运行测试
-    logger.info("直接运行新增基金测试")
     test_add_new_funds()

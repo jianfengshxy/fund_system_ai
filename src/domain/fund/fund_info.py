@@ -111,7 +111,7 @@ class FundInfo:
             f"  近三月: {format_return(self.three_month_return)}\n"
             f"  近六月: {format_return(self.six_month_return)}\n"
             f"  近一年: {format_return(self.year_return)}\n"
-            f"  今年来: {format_return(this.year_return)}\n"
+            f"  今年来: {format_return(self.this_year_return)}\n"
             f"交易信息:\n"
             f"  最大申购金额: {self.max_purchase:,.2f}元\n"
             f"  是否可购买: {'是' if self.can_purchase else '否'}\n"

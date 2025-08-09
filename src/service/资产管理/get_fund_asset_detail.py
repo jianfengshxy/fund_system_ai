@@ -59,6 +59,22 @@ def get_sub_account_asset_by_name(user: User, sub_account_name: str) -> Optional
     if not sub_account_no:
         logging.error(f"未找到组合名称 {sub_account_name} 对应的组合账号")
         return None
-    asset_details_list = get_asset_list_of_sub(user, sub_account_no)
-    return asset_details_list   
     
+    # 获取资产列表并添加详细日志
+    asset_details_list = get_asset_list_of_sub(user, sub_account_no)
+    
+    if asset_details_list:
+        logging.info(f"获取到组合 {sub_account_name} 的资产详情:")
+        for asset in asset_details_list:
+            logging.info(f"  基金 {asset.fund_name}({asset.fund_code}): "
+                       f"资产值={asset.asset_value}, "
+                       f"可用份额={asset.available_vol}, "
+                       f"收益率={asset.constant_profit_rate or asset.hold_profit_rate}")
+    else:
+        logging.warning(f"组合 {sub_account_name} 没有资产详情")
+    
+    return asset_details_list
+    
+if __name__ == "__main__":
+    get_sub_account_asset_by_name(DEFAULT_USER,"低风险组合")
+    pass

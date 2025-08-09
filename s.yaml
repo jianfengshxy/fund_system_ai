@@ -188,7 +188,7 @@ resources:
         triggerName: "dissolve_period_index_investment"
         triggerConfig:
           payload: ${vars.common.props.triggerConfig.payload}
-          cronExpression: "CRON_TZ=Asia/Shanghai 0 5 21 * * 1-5"
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 5 23 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
   create_period_index_investment:

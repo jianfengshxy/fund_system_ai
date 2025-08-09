@@ -22,7 +22,7 @@ from src.service.基金信息.基金信息 import get_all_fund_info
 # 第三列：支付密码
 # 第四列：姓名
 # 第五列：sub_account_name组合名称
-# 第六列：budget 预算
+# 第六列：预算 预算
 user_list = [
     # ("13918797997","Zj951103","Zj951103","仇晓钰","最优止盈",1000000.0),
     ("13918199137", "sWX15706", "sWX15706", "施小雨", "低风险组合", 500000.0)
@@ -201,33 +201,35 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
             
             # 获取基金详细信息，检查跟踪指数
             try:
+                # 修改前的日志输出
+                logger.info(f"找到定投计划: 计划ID={plan_id}, 基金={fund_name}({fund_code})")
+                
+                # 修改后的日志输出
                 fund_info = get_all_fund_info(user, fund_code)
-                if fund_info and hasattr(fund_info, 'index_code') and fund_info.index_code:
-                    index_code = fund_info.index_code  # 补充定义index_code
-                    if index_code in all_existing_index_codes:
-                        # 找出所有跟踪该指数的基金
-                        exist_funds = []
-                        for plan in all_fund_plan_details:
-                            try:
-                                plan_fund_info = get_all_fund_info(user, plan.rationPlan.fundCode)
-                                if plan_fund_info and hasattr(plan_fund_info, 'index_code') and plan_fund_info.index_code == index_code:
-                                    exist_funds.append((plan.rationPlan.fundName, plan.rationPlan.fundCode))
-                            except Exception:
-                                pass
-                        if exist_funds:
-                            exist_funds_str = ', '.join([f'{name}({code})' for name, code in exist_funds])
-                            print(f'  跳过基金 {fund_name}({fund_code}): 已有跟踪相同指数({index_code})的定投计划: {exist_funds_str}')
-                        else:
-                            print(f'  跳过基金 {fund_name}({fund_code}): 已有跟踪相同指数({index_code})的定投计划')
-                        continue
+                index_code = fund_info.index_code if fund_info and hasattr(fund_info, 'index_code') else "未知"
+                logger.info(f"找到定投计划: 计划ID={plan_id}, 基金={fund_name}({fund_code}), 追踪指数={index_code}")
+                
+                if index_code in all_existing_index_codes:
+                    # 找出所有跟踪该指数的基金
+                    exist_funds = []
+                    for plan in all_fund_plan_details:
+                        try:
+                            plan_fund_info = get_all_fund_info(user, plan.rationPlan.fundCode)
+                            if plan_fund_info and hasattr(plan_fund_info, 'index_code') and plan_fund_info.index_code == index_code:
+                                exist_funds.append((plan.rationPlan.fundName, plan.rationPlan.fundCode))
+                        except Exception:
+                            pass
+                    if exist_funds:
+                        exist_funds_str = ', '.join([f'{name}({code})' for name, code in exist_funds])
+                        print(f'  跳过基金 {fund_name}({fund_code}): 已有跟踪相同指数({index_code})的定投计划: {exist_funds_str}')
                     else:
-                        print(f'  推荐基金: {fund_name}({fund_code}) - 跟踪指数: {fund_info.index_code}，无重复')
-                        recommended_funds.append(indicator)
-                        # 添加到已存在集合中，避免本次处理中的重复
-                        all_existing_index_codes.add(fund_info.index_code)
+                        print(f'  跳过基金 {fund_name}({fund_code}): 已有跟踪相同指数({index_code})的定投计划')
+                    continue
                 else:
-                    print(f'  跳过基金 {fund_name}({fund_code}): 无法获取跟踪指数信息')
-                    
+                    print(f'  推荐基金: {fund_name}({fund_code}) - 跟踪指数: {fund_info.index_code}，无重复')
+                    recommended_funds.append(indicator)
+                    # 添加到已存在集合中，避免本次处理中的重复
+                    all_existing_index_codes.add(fund_info.index_code)
             except Exception as e:
                 print(f'  警告: 检查基金 {fund_code} 跟踪指数时出错: {e}，跳过该基金')
         
@@ -395,7 +397,7 @@ def dissolve_plan_by_group_for_index_funds(user: User, sub_account_name: str, bu
         
         recommended_index_codes = set()
         try:
-            indicators_response = getFundInvestmentIndicators(user, page_size=20)
+            indicators_response = process_fund_investment_indicators(user, page_size=20)
             if indicators_response:
                 # 检查返回的数据类型
                 if hasattr(indicators_response, 'Data'):
@@ -453,12 +455,12 @@ def dissolve_plan_by_group_for_index_funds(user: User, sub_account_name: str, bu
                 fund_info = get_all_fund_info(user, fund_code)
                 if fund_info and hasattr(fund_info, 'fund_type') and fund_info.fund_type == "000":
                     index_code = getattr(fund_info, 'index_code', None)
-                    if fund_asset_value <= 0 :
+                    if fund_asset_value == 0 :
                         if index_code and index_code in recommended_index_codes:
-                            reason = f"指数基金资产<=0或份额==0，但追踪指数 {index_code} 在加仓风向标中，保留"
+                            reason = f"指数基金资产==0，但追踪指数 {index_code} 在加仓风向标中，保留"
                         else:
                             should_dissolve = True
-                            reason = f"指数基金资产<=0或份额==0，且追踪指数 {index_code} 不在加仓风向标中"
+                            reason = f"指数基金资产==0，且追踪指数 {index_code} 不在加仓风向标中"
                     else:
                         reason = f"指数基金有资产({fund_asset_value:,.2f}元)和份额({fund_available_vol:,.2f})，保留"
                 else:
@@ -596,8 +598,8 @@ def main():
 
 if __name__ == '__main__':
     # 测试创建指数基金定投计划
-    create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合",1000000.0,5000.0)
+    # create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合",1000000.0,5000.0)
     
     # 测试解散指数基金定投计划
-    # dissolve_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 1000000.0)
+    dissolve_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 1000000.0)
 

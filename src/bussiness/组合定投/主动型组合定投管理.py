@@ -25,6 +25,9 @@ from src.service.大数据.加仓风向标服务 import process_fund_investment_
 from src.API.定投计划管理.SmartPlan import createPlanV3, getFundPlanList
 from src.service.定投管理.智能定投.智能定投管理 import dissolve_period_smart_investment
 from src.service.定投管理.组合定投.组合定投管理 import create_period_investment_by_group
+from src.domain.fund.fund_info import FundInfo
+from src.service.基金信息.基金信息 import get_all_fund_info
+
 # 用户配置列表
 # 第一列：手机号 account
 # 第二列：密码 password
@@ -245,10 +248,12 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
                     
                     # 调用创建定投计划API
                     period_type = 4  # 3=月定投, 4=日定投
+
+                    # 然后调用create_period_investment_by_group
                     response = create_period_investment_by_group(
                         user=user,
                         fund_code=fund_code,
-                        amount=int(suggested_monthly_amount),  
+                        amount=int(suggested_monthly_amount),
                         period_type=period_type,
                         period_value=1,
                         sub_account_name=sub_account_name
@@ -475,7 +480,7 @@ def dissolve_plan_by_group(user: User, sub_account_name: str, budget: float):
         
         recommended_fund_codes = set()
         try:
-            indicators_response = getFundInvestmentIndicators(user, page_size=20)
+            indicators_response = process_fund_investment_indicators(user, page_size=20)
             if indicators_response:
                 # 检查返回的数据类型
                 if hasattr(indicators_response, 'Data'):
@@ -513,8 +518,13 @@ def dissolve_plan_by_group(user: User, sub_account_name: str, budget: float):
             for asset in asset_details:
                 if asset.fund_code == fund_code:
                     try:
+                        # 更精确地处理资产值判断
                         fund_asset_value = float(asset.asset_value or 0)
+                        if fund_asset_value < 0.01:  # 小于1分钱视为0
+                            fund_asset_value = 0.0
                     except (ValueError, TypeError):
+                        # 添加更详细的错误日志
+                        print(f"  基金 {fund_name}({fund_code}) 资产值转换错误: {asset.asset_value}")
                         fund_asset_value = 0.0
                     break
             
@@ -584,5 +594,5 @@ def dissolve_plan_by_group(user: User, sub_account_name: str, budget: float):
         print(f"错误详情: {traceback.format_exc()}")
 
 if __name__ == '__main__':
-    create_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0,10000.0)
+    # create_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0,10000.0)
     dissolve_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0)

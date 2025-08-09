@@ -8,12 +8,15 @@ import hashlib
 import requests
 from urllib.parse import quote_plus
 from typing import Dict, Any, Optional, Union,List
-from src.domain.user.User import User 
+
 # 添加项目根目录到路径
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(0, project_root)
 
 # 然后进行其他导入
+from src.service.基金信息.基金信息 import get_all_fund_info
+from src.domain.fund.fund_info import FundInfo
+from src.domain.user.User import User 
 from src.domain.fund_plan import ApiResponse, FundPlanResponse, PageInfo, FundPlan
 from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
 from src.domain.fund_plan import RationCreateParameters, DiscountRate
@@ -752,6 +755,33 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
         ApiResponse[FundPlan]: 定投计划创建结果
     """
     logger = logging.getLogger("SmartPlan")
+    
+    # 获取基金限额并检查
+    try:
+        fund_info = get_all_fund_info(user, fund_code)
+        if not fund_info:
+            logger.warning(f"无法获取基金{fund_code}的信息")
+            return ApiResponse(Success=False, ErrorCode="FUND_INFO_MISSING", Data=None, FirstError="基金信息获取失败", DebugError=None)
+            
+        if not hasattr(fund_info, 'max_purchase') or not fund_info.max_purchase:
+            logger.warning(f"基金{fund_code}缺少限额信息")
+            return ApiResponse(Success=False, ErrorCode="LIMIT_INFO_MISSING", Data=None, FirstError="基金限额信息缺失", DebugError=None)
+            
+        max_amount = float(fund_info.max_purchase)
+        request_amount = float(amount)
+        
+        logger.info(f"基金{fund_code}限额检查: 请求金额{request_amount}, 限额{max_amount}")
+        
+        if request_amount > max_amount:
+            logger.warning(f"定投金额{request_amount}超过基金限额{max_amount}")
+            # 自动调整为限额金额
+            amount = str(max_amount)
+            logger.info(f"已自动调整定投金额为限额值: {amount}")
+            
+    except Exception as e:
+        logger.error(f"限额检查失败: {str(e)}")
+        return ApiResponse(Success=False, ErrorCode="LIMIT_CHECK_FAILED", Data=None, FirstError="基金限额检查失败", DebugError=str(e))
+    
     md5_password = hashlib.md5(user.password.encode('utf-8')).hexdigest()  
     url = f'https://ibgapi{user.index}.1234567.com.cn/ration/createPlanV3'
     

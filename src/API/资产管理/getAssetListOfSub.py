@@ -6,18 +6,17 @@ import urllib3
 import warnings
 import requests
 from typing import List
-from src.domain.asset.asset_details import AssetDetails
-# 添加项目根目录到路径
+
+# 确保路径添加在导入之前
+import sys
+import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-# 禁用SSL证书验证警告
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-from typing import Optional, List
+# 使用绝对导入
 from src.domain.fund_plan import ApiResponse
-from src.common.constant import (
-    SERVER_VERSION, PHONE_TYPE, MOBILE_KEY
-)
+from src.common.constant import SERVER_VERSION, PHONE_TYPE, MOBILE_KEY
+from src.domain.asset.asset_details import AssetDetails
+
 def get_asset_list_of_sub(user, sub_account_no):
     url = f"https://tradeapilvs{user.index}.1234567.com.cn/User/Asset/GetFundAssetListOfSubV2"
     headers = {
@@ -65,24 +64,32 @@ def get_asset_list_of_sub(user, sub_account_no):
         if hold_profit_str in ("--", "", None):
             asset_detail.hold_profit = 0.0
         else:
+            # 处理带逗号的数字字符串
+            hold_profit_str = str(hold_profit_str).replace(',', '')
             asset_detail.hold_profit = float(hold_profit_str)
 
         hold_profit_rate_str = asset.get("HoldProfitRate", "0").strip('%')
         if hold_profit_rate_str in ("--", "", None):
             asset_detail.hold_profit_rate = 0.0
         else:
+            # 处理带逗号的百分比字符串
+            hold_profit_rate_str = str(hold_profit_rate_str).replace(',', '')
             asset_detail.hold_profit_rate = float(hold_profit_rate_str)
 
         constant_profit_str = asset.get("ConstantProfit", 0)
         if constant_profit_str in ("--", "", None):
             asset_detail.constant_profit = 0.0
         else:
+            # 处理带逗号的数字字符串
+            constant_profit_str = str(constant_profit_str).replace(',', '')
             asset_detail.constant_profit = float(constant_profit_str)
 
         constant_profit_rate_str = asset.get("ConstantProfitRate", "0").strip('%')
         if constant_profit_rate_str in ("--", "", None):
             asset_detail.constant_profit_rate = 0.0
         else:
+            # 处理带逗号的百分比字符串
+            constant_profit_rate_str = str(constant_profit_rate_str).replace(',', '')
             asset_detail.constant_profit_rate = float(constant_profit_rate_str)
         asset_detail.profit_value = float(asset.get("ProfitValue", 0))
         asset_detail.daily_profit = float(asset.get("DailyProfit", 0))

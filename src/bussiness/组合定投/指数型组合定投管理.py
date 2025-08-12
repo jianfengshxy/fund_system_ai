@@ -1,8 +1,16 @@
 
+import logging
 import sys
 import os
 from time import sleep
 from typing import List, Optional
+
+# 初始化logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+logger.addHandler(handler)
 
 # 添加项目根目录到Python路径
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
@@ -231,7 +239,7 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
                     # 添加到已存在集合中，避免本次处理中的重复
                     all_existing_index_codes.add(fund_info.index_code)
             except Exception as e:
-                print(f'  警告: 检查基金 {fund_code} 跟踪指数时出错: {e}，跳过该基金')
+                logger.warning(f"检查基金 {fund_code} 跟踪指数时出错: {str(e)}，跳过该基金")
         
         if not recommended_funds:
             print("✅ 所有符合条件的指数基金都已有跟踪相同指数的定投计划，无需创建新计划")
@@ -598,8 +606,8 @@ def main():
 
 if __name__ == '__main__':
     # 测试创建指数基金定投计划
-    # create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合",1000000.0,5000.0)
+    create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合",1000000.0,5000.0)
     
     # 测试解散指数基金定投计划
-    dissolve_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 1000000.0)
+    # dissolve_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 1000000.0)
 

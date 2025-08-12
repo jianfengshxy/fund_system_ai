@@ -27,7 +27,8 @@ from src.service.定投管理.智能定投.智能定投管理 import dissolve_pe
 from src.service.定投管理.组合定投.组合定投管理 import create_period_investment_by_group
 from src.domain.fund.fund_info import FundInfo
 from src.service.基金信息.基金信息 import get_all_fund_info
-
+from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
+from src.API.交易管理.buyMrg import commit_order
 # 用户配置列表
 # 第一列：手机号 account
 # 第二列：密码 password
@@ -285,13 +286,38 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
                         elif response and hasattr(response, 'DebugError') and response.DebugError:
                             error_msg = response.DebugError
                         print(f"  ❌ 创建定投计划失败: {error_msg}")
-                        
+                        # 第五步: 在组合下买入一笔该基金，金额等于定投金额
+                        print("步骤5: 为新创建的定投基金买入一笔...")
+                        try:
+                            # 获取组合账号
+                            sub_account_no = getSubAccountNoByName(user, sub_account_name)
+                            if not sub_account_no:
+                                print(f"  ❌ 未找到组合 '{sub_account_name}' 的账号")
+                                continue
+                            
+                            # 执行买入
+                            buy_amount = int(suggested_monthly_amount)
+                            trade_result = commit_order(user, sub_account_no, fund_code, buy_amount)
+                            
+                            if trade_result and hasattr(trade_result, 'Success') and trade_result.Success:
+                                print(f"  ✅ 成功买入 {fund_name}({fund_code}) - 金额: {buy_amount} 元 - 订单号: {trade_result.busin_serial_no}")
+                            else:
+                                error_msg = trade_result.FirstError if hasattr(trade_result, 'FirstError') else '未知错误'
+                                print(f"  ❌ 买入失败: {error_msg}")
+                        except Exception as buy_e:
+                            print(f"  ❌ 买入时发生异常: {str(buy_e)}")                      
+                except Exception as e:
+                    print(f"  ❌ 创建定投计划时发生异常: {str(e)}")
+                    # 打印更详细的错误信息用于调试
+                    import traceback
+                    print(f"     详细错误信息: {traceback.format_exc()}")               
                 except Exception as e:
                     print(f"  ❌ 创建定投计划时发生异常: {str(e)}")
                     # 打印更详细的错误信息用于调试
                     import traceback
                     print(f"     详细错误信息: {traceback.format_exc()}")
-        
+    
+
         print(f"\n✅ 组合 '{sub_account_name}' 定投管理分析完成")
         
     except Exception as e:

@@ -12,6 +12,9 @@ from domain.fund.fund_investment_indicator import FundInvestmentIndicator
 from service.基金信息.基金信息 import get_all_fund_info
 from API.大数据.加仓风向标 import getFundInvestmentIndicators as getBasicFundInvestmentIndicators
 
+# 添加全局缓存变量
+_cached_indicators = None
+
 def process_fund_name(name):
     """
     去除基金名称中的字母'A'和'C'
@@ -56,16 +59,12 @@ def get_reduction_fund_names(user):
         return set()
 
 def process_fund_investment_indicators(user, page_size=20) -> List[FundInvestmentIndicator]:
-    """
-    处理加仓风向标基金信息，包含所有业务逻辑
+    global _cached_indicators
+    if _cached_indicators is not None:
+        logger = logging.getLogger("FundInvestmentIndicatorService")
+        logger.info("从缓存中读取加仓风向标基金信息")
+        return _cached_indicators
     
-    参数:
-    user: 用户对象
-    page_size: 每页数量，默认为20
-    
-    返回:
-    List[FundInvestmentIndicator]: 处理后的基金信息列表
-    """
     logger = logging.getLogger("FundInvestmentIndicatorService")
     
     try:
@@ -230,6 +229,8 @@ def process_fund_investment_indicators(user, page_size=20) -> List[FundInvestmen
         else:
             logger.error("警告: 所有基金都被过滤掉了，返回空列表！")
         
+        # 在返回前缓存结果
+        _cached_indicators = filtered_indicators
         return filtered_indicators
         
     except Exception as e:

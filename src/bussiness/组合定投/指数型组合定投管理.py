@@ -70,9 +70,13 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
             else:
                 print(f"找到 {len(target_plans)} 个相关定投计划")
                 
+                # 新增判断：如果定投计划数量大于20个，则跳出，不创建新计划
+                if len(target_plans) > 20:
+                    print(f"组合 '{sub_account_name}' 的定投计划数量已超过20个 ({len(target_plans)} 个)，跳过新增定投计划")
+                    return
         except Exception as e:
             print(f"查询定投计划时出错: {e}")
-            target_plans = []
+            return  # 或根据需要处理
         
         # 2. 获取组合的资产信息
         print("步骤2: 获取组合资产信息...")

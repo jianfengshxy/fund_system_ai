@@ -594,5 +594,5 @@ def dissolve_plan_by_group(user: User, sub_account_name: str, budget: float):
         print(f"错误详情: {traceback.format_exc()}")
 
 if __name__ == '__main__':
-    # create_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0,10000.0)
-    dissolve_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0)
+    create_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0,20000.0)
+    # dissolve_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0)

@@ -63,6 +63,25 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     except Exception as e:
         logger.error(f"获取基金信息失败: {e}")
         return False
+
+    #获取当前日期
+    current_date = datetime.now()
+    # 提取当天的日期（即本月的第几天）
+    day_of_month = current_date.day
+    # 获取星期几的数字表示（0 表示周一，1 表示周二，依此类推）
+    day_of_week_number = current_date.weekday()     
+    logger.info(f"时间信息 - 当前日期: {current_date.strftime('%Y-%m-%d')}, 月份第{day_of_month}天, 星期{day_of_week_number + 1}")
+  
+    # 检查是否有可回撤的定投交易，4是定投业务类型，7是可以回撤交易状态
+    try:
+        trades = get_trades_list(user, sub_account_no=sub_account_no, fund_code = fund_code,bus_type="4", status="7")
+        logger.info(f"查询可回撤交易 - 找到{len(trades) if trades else 0}笔可回撤的定投交易")
+        if not trades or len(trades) == 0:
+            logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}今天没有可以回撤的定投计划交易记录。Skip ..........")
+            return True
+    except Exception as e:
+        logger.error(f"查询可回撤交易失败: {e}")
+        return False      
         
     sub_account_no = plan_detail.rationPlan.subAccountNo
     sub_account_name = plan_detail.rationPlan.subAccountName
@@ -100,27 +119,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     estimated_profit_rate = current_profit_rate + estimated_change
     
     logger.info(f"收益率计算 - 当前收益率: {current_profit_rate}%, 估值增长率: {estimated_change}%, 预估收益率: {estimated_profit_rate}%")
-    
-    #获取当前日期
-    current_date = datetime.now()
-    # 提取当天的日期（即本月的第几天）
-    day_of_month = current_date.day
-    # 获取星期几的数字表示（0 表示周一，1 表示周二，依此类推）
-    day_of_week_number = current_date.weekday() 
-    
-    logger.info(f"时间信息 - 当前日期: {current_date.strftime('%Y-%m-%d')}, 月份第{day_of_month}天, 星期{day_of_week_number + 1}")
-  
-    # 检查是否有可回撤的定投交易，4是定投业务类型，7是可以回撤交易状态
-    try:
-        trades = get_trades_list(user, sub_account_no=sub_account_no, fund_code = fund_code,bus_type="4", status="7")
-        logger.info(f"查询可回撤交易 - 找到{len(trades) if trades else 0}笔可回撤的定投交易")
-        if not trades or len(trades) == 0:
-            logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}今天没有可以回撤的定投计划交易记录。Skip ..........")
-            return True
-    except Exception as e:
-        logger.error(f"查询可回撤交易失败: {e}")
-        return False
-        
+            
     logger.info(f"当前计划:{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}的周期类型{period_type},period_type:{period_value},当前月的值:{day_of_month},当前资产:{plan_assets},计划类型:{plan_type}")
     if times <= 1.0 and times > 0.0:
             logger.info(f"首次定投判定：资产价值为{plan_assets}，定投金额为{fund_amount}，满足首次定投条件，跳过本次操作。")

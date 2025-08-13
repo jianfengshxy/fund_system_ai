@@ -29,7 +29,7 @@ def home():
             return "获取组合列表失败", 500
 
         all_portfolios = sorted(sub_accounts_response.Data, key=lambda x: x.asset_value, reverse=True)
-        top_5_portfolios = all_portfolios[:5]
+        top_5_portfolios = all_portfolios[:10]
 
         # 2. 确定默认选择的组合
         selected_portfolio_name = ''

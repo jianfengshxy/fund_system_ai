@@ -280,7 +280,6 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
                         if response.Data:
                             plan = response.Data
                             print(f"  ✅ 成功创建定投计划 - 计划ID: {plan.planId}")
-                            
                             # 第五步: 在组合下买入一笔该基金，金额等于定投金额
                             print("步骤5: 为新创建的定投基金买入一笔...")
                             try:
@@ -289,11 +288,9 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
                                 if not sub_account_no:
                                     print(f"  ❌ 未找到组合 '{sub_account_name}' 的账号")
                                     continue
-                                
                                 # 执行买入
                                 buy_amount = int(investment_amount)
                                 trade_result = commit_order(user, sub_account_no, fund_code, buy_amount)
-                                
                                 if trade_result and hasattr(trade_result, 'Success') and trade_result.Success:
                                     print(f"  ✅ 成功买入 {fund_name}({fund_code}) - 金额: {buy_amount} 元 - 订单号: {trade_result.busin_serial_no}")
                                 else:

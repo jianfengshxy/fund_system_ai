@@ -277,6 +277,24 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
                             print(f"     组合名称: {sub_account_name}")
                             print(f"     子账户编号: {plan.subAccountNo}")
                             print(f"     下次扣款日期: {plan.nextDeductDate}")
+                            # 第五步: 在组合下买入一笔该基金，金额等于定投金额
+                            print("步骤5: 为新创建的定投基金买入一笔...")
+                            try:
+                                # 获取组合账号
+                                sub_account_no = getSubAccountNoByName(user, sub_account_name)
+                                if not sub_account_no:
+                                    print(f"  ❌ 未找到组合 '{sub_account_name}' 的账号")
+                                    continue
+                                # 执行买入
+                                buy_amount = int(suggested_monthly_amount)
+                                trade_result = commit_order(user, sub_account_no, fund_code, buy_amount)
+                                if trade_result and hasattr(trade_result, 'Success') and trade_result.Success:
+                                    print(f"  ✅ 成功买入 {fund_name}({fund_code}) - 金额: {buy_amount} 元 - 订单号: {trade_result.busin_serial_no}")
+                                else:
+                                    error_msg = trade_result.FirstError if hasattr(trade_result, 'FirstError') else '未知错误'
+                                    print(f"  ❌ 买入失败: {error_msg}")
+                            except Exception as buy_e:
+                                print(f"  ❌ 买入时发生异常: {str(buy_e)}")                      
                         else:
                             print(f"  ❌ 创建定投计划失败: 响应数据为空")
                     else:
@@ -285,27 +303,7 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
                             error_msg = response.FirstError
                         elif response and hasattr(response, 'DebugError') and response.DebugError:
                             error_msg = response.DebugError
-                        print(f"  ❌ 创建定投计划失败: {error_msg}")
-                        # 第五步: 在组合下买入一笔该基金，金额等于定投金额
-                        print("步骤5: 为新创建的定投基金买入一笔...")
-                        try:
-                            # 获取组合账号
-                            sub_account_no = getSubAccountNoByName(user, sub_account_name)
-                            if not sub_account_no:
-                                print(f"  ❌ 未找到组合 '{sub_account_name}' 的账号")
-                                continue
-                            
-                            # 执行买入
-                            buy_amount = int(suggested_monthly_amount)
-                            trade_result = commit_order(user, sub_account_no, fund_code, buy_amount)
-                            
-                            if trade_result and hasattr(trade_result, 'Success') and trade_result.Success:
-                                print(f"  ✅ 成功买入 {fund_name}({fund_code}) - 金额: {buy_amount} 元 - 订单号: {trade_result.busin_serial_no}")
-                            else:
-                                error_msg = trade_result.FirstError if hasattr(trade_result, 'FirstError') else '未知错误'
-                                print(f"  ❌ 买入失败: {error_msg}")
-                        except Exception as buy_e:
-                            print(f"  ❌ 买入时发生异常: {str(buy_e)}")                      
+                        print(f"  ❌ 创建定投计划失败: {error_msg}")                    
                 except Exception as e:
                     print(f"  ❌ 创建定投计划时发生异常: {str(e)}")
                     # 打印更详细的错误信息用于调试

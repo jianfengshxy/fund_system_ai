@@ -69,7 +69,7 @@ logger = logging.getLogger(__name__)
 # 第六列：budget 预算
 user_list = [
     ("13918797997","Zj951103","Zj951103","仇晓钰","最优止盈",1000000.0),
-#     ("13918199137", "sWX15706","sWX15706","施小雨","最优止盈",1000000.0),
+    # ("13918199137", "sWX15706","sWX15706","最优止盈","低风险组合",1000000.0),
     ("13820198186", "tang8186","tang8186","唐祖华","最优止盈",450000.0),
     ("17782571152", "s00127479","s00127479","邵科","最优止盈",150000.0),
     # ("13830702104", "chb201106?","chb201106?","程斌","最优止盈",100000.0),
@@ -170,14 +170,14 @@ def redeem(user: User, sub_account_name:str = "最优止盈") -> bool:
             bank_shares = get_bank_shares(user, sub_account_no, fund_code)
             logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{result},计算止盈点:{volatility},实际止盈点:{stop_profit_rate}. 满足止盈条件: result({result}) > stop_profit_rate({stop_profit_rate}) and result({result}) > 1.0")
             sell_result = sell_low_fee_shares(user, sub_account_no, fund_code, bank_shares)
-            if sell_result:  # 新增：检查止盈是否成功
-                logger.info(f"{customer_name}的基金{fund_name}({fund_code})止盈成功")
+            if sell_result and sell_result.busin_serial_no:  # 新增：检查卖出止盈是否成功
+                logger.info(f"{customer_name}的基金{fund_name}({fund_code})卖出止盈成功")
                 # 检查资产是否为空
                 updated_assets = get_sub_account_asset_by_name(user, sub_account_name)
-                asset_empty = True
+                asset_empty = False
                 for asset in updated_assets:
-                    if asset.fund_code == fund_code and asset.available_vol > 0:
-                        asset_empty = False
+                    if asset.fund_code == fund_code and asset.available_vol == 0.0:
+                        asset_empty = True
                         break
                 if asset_empty:
                     try:
@@ -192,18 +192,7 @@ def redeem(user: User, sub_account_name:str = "最优止盈") -> bool:
                     logger.warning(f"基金{fund_name}({fund_code})仍有剩余资产，无法解散定投")
             else:
                 logger.warning(f"{customer_name}的基金{fund_name}({fund_code})止盈失败")
-            # 止盈卖出成功后，检查并解散定投计划
-            try:
-                dissolve_result = dissolve_period_investment_by_group(user, sub_account_name, fund_code)
-                if dissolve_result:
-                    logger.info(f"基金{fund_name}({fund_code})在组合{sub_account_name}的定投计划已解散")
-                else:
-                    logger.info(f"基金{fund_name}({fund_code})在组合{sub_account_name}无可解散定投计划或资产不为空")
-            except Exception as e:
-                logger.error(f"解散基金{fund_name}({fund_code})在组合{sub_account_name}定投计划时异常: {e}")
-        else:
-            logger.info(f"{customer_name}的基金{fund_name}{fund_code}的收益{constant_profit_rate}加上估值增长率{fund_info.estimated_change}结果{result},计算止盈点:{volatility},实际止盈点:{stop_profit_rate}. 未满足止盈条件: result > stop_profit_rate ({result > stop_profit_rate}), result > 1.0 ({result > 1.0}). Skip...........")
- 
+                continue
     return True
         
     

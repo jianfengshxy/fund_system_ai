@@ -288,10 +288,10 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
                                 # 执行买入
                                 buy_amount = int(suggested_monthly_amount)
                                 trade_result = commit_order(user, sub_account_no, fund_code, buy_amount)
-                                if trade_result and hasattr(trade_result, 'Success') and trade_result.Success:
+                                if trade_result and hasattr(trade_result, 'busin_serial_no') and trade_result.busin_serial_no:
                                     print(f"  ✅ 成功买入 {fund_name}({fund_code}) - 金额: {buy_amount} 元 - 订单号: {trade_result.busin_serial_no}")
                                 else:
-                                    error_msg = trade_result.FirstError if hasattr(trade_result, 'FirstError') else '未知错误'
+                                    error_msg = getattr(trade_result, 'FirstError', '未知错误') if trade_result else '未知错误'
                                     print(f"  ❌ 买入失败: {error_msg}")
                             except Exception as buy_e:
                                 print(f"  ❌ 买入时发生异常: {str(buy_e)}")                      

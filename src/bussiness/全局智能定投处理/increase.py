@@ -63,7 +63,15 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     except Exception as e:
         logger.error(f"获取基金信息失败: {e}")
         return False
-
+        
+    sub_account_no = plan_detail.rationPlan.subAccountNo
+    sub_account_name = plan_detail.rationPlan.subAccountName
+    shares = get_bank_shares(user, sub_account_no, fund_code)
+    period_type = plan_detail.rationPlan.periodType
+    period_value = plan_detail.rationPlan.periodValue
+    fund_amount = plan_detail.rationPlan.amount 
+    plan_type = plan_detail.rationPlan.planType
+    
     #获取当前日期
     current_date = datetime.now()
     # 提取当天的日期（即本月的第几天）
@@ -82,14 +90,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     except Exception as e:
         logger.error(f"查询可回撤交易失败: {e}")
         return False      
-        
-    sub_account_no = plan_detail.rationPlan.subAccountNo
-    sub_account_name = plan_detail.rationPlan.subAccountName
-    shares = get_bank_shares(user, sub_account_no, fund_code)
-    period_type = plan_detail.rationPlan.periodType
-    period_value = plan_detail.rationPlan.periodValue
-    fund_amount = plan_detail.rationPlan.amount 
-    plan_type = plan_detail.rationPlan.planType
+
     
     logger.info(f"计划详情 - 组合账号: {sub_account_no}, 组合名称: {sub_account_name}")
     logger.info(f"计划详情 - 周期类型: {period_type}, 周期值: {period_value}, 定投金额: {fund_amount}, 计划类型: {plan_type}")

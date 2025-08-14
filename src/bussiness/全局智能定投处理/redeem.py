@@ -209,3 +209,8 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             return True
     logger.info("所有止盈条件都不满足，返回True")
     return True
+
+
+if __name__ == "__main__":
+    # 直接运行测试
+    redeem_all_fund_plans(DEFAULT_USER)

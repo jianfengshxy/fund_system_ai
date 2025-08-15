@@ -25,7 +25,9 @@ from src.service.定投管理.组合定投.组合定投管理 import create_peri
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.API.交易管理.buyMrg import commit_order
-
+from src.API.组合管理.SubAccountMrg import getSubAssetMultList
+from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
+            
 # 用户配置列表
 # 第一列：手机号 account
 # 第二列：密码 password
@@ -57,8 +59,7 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
         print("步骤1: 查询组合定投计划...")
         
         try:
-            portfolio_details = get_portfolio_plan_details(user)
-            
+            portfolio_details = get_portfolio_plan_details(user)        
             # 过滤指定组合名称的定投计划
             target_plans = []
             for detail in portfolio_details:
@@ -71,11 +72,6 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
                 print(f"未找到组合 '{sub_account_name}' 的现有定投计划")
             else:
                 print(f"找到 {len(target_plans)} 个相关定投计划")
-                
-                # 新增判断：如果定投计划数量大于20个，则跳出，不创建新计划
-                if len(target_plans) > 20:
-                    print(f"组合 '{sub_account_name}' 的定投计划数量已超过20个 ({len(target_plans)} 个)，跳过新增定投计划")
-                    return
         except Exception as e:
             print(f"查询定投计划时出错: {e}")
             return  # 或根据需要处理
@@ -87,9 +83,6 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
         asset_details = []
         
         try:
-            from src.API.组合管理.SubAccountMrg import getSubAssetMultList
-            from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
-            
             # 获取子账户资产列表
             sub_asset_response = getSubAssetMultList(user)
             if sub_asset_response.Success:
@@ -134,6 +127,11 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
                             print(f"  基金{i+1}: {asset.fund_name} ({asset.fund_code}) - 持有金额: {asset.asset_value} 元")
                     if len(asset_details) > 5:
                         print(f"  ... 还有 {len(asset_details) - 5} 只基金")
+                
+                # 新增判断：如果持有的基金个数大于20，则跳过新增定投计划和买入
+                if len(asset_details) > 20:
+                    print(f"组合 '{sub_account_name}' 持有的基金数量已超过20个 ({len(asset_details)} 个)，跳过新增定投计划和买入操作")
+                    return
             else:
                 print(f"获取子账户资产列表失败: {sub_asset_response.Message}")
                 

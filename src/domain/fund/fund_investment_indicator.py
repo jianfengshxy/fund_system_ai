@@ -28,15 +28,15 @@ class FundInvestmentIndicator:
                 return default
         
         return cls(
-            fund_code=data.get('fund_code', ''),
-            fund_name=data.get('fund_name', ''),
-            fund_type=data.get('fund_type', ''),
-            fund_sub_type=data.get('fund_sub_type', ''),
-            one_year_return=safe_float(data.get('one_year_return')),
-            since_launch_return=safe_float(data.get('since_launch_return')),
-            product_rank=safe_float(data.get('product_rank')),
-            update_date=data.get('update_date', ''),
-            update_time=data.get('update_time', ''),
+            fund_code=data.get('FCODE', ''),  # 修改为API键
+            fund_name=data.get('SHORTNAME', ''),  # 修改为API键
+            fund_type=data.get('RSFUNDTYPE', ''),  # 修改为API键
+            fund_sub_type=data.get('RSBTYPE', ''),  # 修改为API键
+            one_year_return=safe_float(data.get('SYL_1N')),
+            since_launch_return=safe_float(data.get('SYL_LN')),
+            product_rank=safe_float(data.get('PRODUCT_RANK')),
+            update_date=data.get('EUTIME', '').split(' ')[0],  # 从EUTIME提取日期
+            update_time=data.get('EUTIME', ''),  # 使用EUTIME作为更新时间
             tracking_index=data.get('tracking_index', None)
         )
     

@@ -49,13 +49,16 @@ def process_fund_investment_indicators(user, page_size=20) -> List[FundInvestmen
         if not fund_list:
             logger.warning("未找到加仓风向标基金数据")
             return []
-        
+        # print(f"{fund_list}")
         indicators = []
         for fund_data in fund_list:
             indicator = FundInvestmentIndicator.from_dict(fund_data)
             indicators.append(indicator)
         
         logger.info(f"=== 开始过滤处理，初始基金数量: {len(indicators)} ===")
+        # 添加打印初始基金名称
+        for ind in indicators:
+            logger.info(f"初始基金: {ind.fund_name} ({ind.fund_code})")
         
         # === 步骤1: 仅保留基金名称中包含"C"的基金 ===
         indicators = [ind for ind in indicators if "C" in ind.fund_name]

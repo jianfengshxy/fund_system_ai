@@ -11,7 +11,8 @@ class FundInvestmentIndicator:
     one_year_return: float = 0.0         # 一年收益率 SYL_1N
     since_launch_return: float = 0.0     # 成立以来收益率 SYL_LN
     product_rank: float = 0.0            # 产品排名 PRODUCT_RANK
-    update_time: str = ''                # 更新时间 EUTIME
+    update_date: str = ''                # 更新日期 update_date
+    update_time: str = ''                # 更新时间 update_time
     tracking_index: Optional[str] = None # 追踪指数（可选）
 
     @classmethod
@@ -26,26 +27,17 @@ class FundInvestmentIndicator:
             except (ValueError, TypeError):
                 return default
         
-        # 处理基金名称，去除字母
-        def process_fund_name(name: str) -> str:
-            if not name:
-                return ''
-            # 去除所有英文字母（大小写）
-            import re
-            result = re.sub(r'[A-Za-z]', '', name)
-            print(f'PROCESS_FUND_NAME: {name} -> {result}')
-            return result
-                
         return cls(
-            fund_code=data.get('FCODE', ''),
-            fund_name=data.get('SHORTNAME', ''),
-            fund_type=data.get('RSFUNDTYPE', ''),
-            fund_sub_type=data.get('RSBTYPE', ''),
-            one_year_return=safe_float(data.get('SYL_1N')),
-            since_launch_return=safe_float(data.get('SYL_LN')),
-            product_rank=safe_float(data.get('PRODUCT_RANK')),
-            update_time=data.get('EUTIME', ''),
-            tracking_index=data.get('TRACKING_INDEX', None)  # 假设数据中可能有此字段
+            fund_code=data.get('fund_code', ''),
+            fund_name=data.get('fund_name', ''),
+            fund_type=data.get('fund_type', ''),
+            fund_sub_type=data.get('fund_sub_type', ''),
+            one_year_return=safe_float(data.get('one_year_return')),
+            since_launch_return=safe_float(data.get('since_launch_return')),
+            product_rank=safe_float(data.get('product_rank')),
+            update_date=data.get('update_date', ''),
+            update_time=data.get('update_time', ''),
+            tracking_index=data.get('tracking_index', None)
         )
     
     def __str__(self) -> str:

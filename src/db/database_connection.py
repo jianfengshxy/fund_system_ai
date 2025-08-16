@@ -1,102 +1,116 @@
 import os
-import yaml  # 新增导入，用于解析 s.yaml
-import pymysql
-from pymysql.err import OperationalError
+import yaml
+import mysql.connector
+from mysql.connector import pooling
+from mysql.connector import Error
 
 class DatabaseConnection:
-    def __init__(self):
-        if 'FC_FUNCTION_NAME' in os.environ:  # 检测是否在阿里云 Function Compute 环境
-            # 在阿里云环境，从环境变量读取
-            self.host = os.environ.get('internal_host', 'default_host')
-            self.port = int(os.environ.get('DB_PORT', 3306))
-            self.user = os.environ.get('DB_USER', 'default_user')
-            self.password = os.environ.get('DB_PASSWORD', 'default_password')
-            self.database = os.environ.get('DB_NAME', 'default_db')
+    def __init__(self, pool_size=10):
+        if 'FC_FUNCTION_NAME' in os.environ:
+            self.dbconfig = {
+                'host': os.environ.get('internal_host', 'default_host'),
+                'port': int(os.environ.get('DB_PORT', 3306)),
+                'user': os.environ.get('DB_USER', 'default_user'),
+                'password': os.environ.get('DB_PASSWORD', 'default_password'),
+                'database': os.environ.get('DB_NAME', 'default_db'),
+                'charset': 'utf8mb4'
+            }
         else:
-            # 在本地环境，从 s.yaml 读取
             config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 's.yaml')
             with open(config_path, 'r') as file:
                 config = yaml.safe_load(file)
             db_config = config['vars']['common']['database']
-            self.host = db_config.get('external_host', 'default_host')  # 假设本地使用 external_host
-            self.port = db_config.get('port', 3306)
-            self.user = db_config.get('DB_USER', 'default_user')
-            self.password = db_config.get('DB_PASSWORD', 'default_password')
-            self.database = db_config.get('DB_NAME', 'default_db')
-        self.connection = None
+            self.dbconfig = {
+                'host': db_config.get('external_host', 'default_host'),
+                'port': db_config.get('port', 3306),
+                'user': db_config.get('DB_USER', 'default_user'),
+                'password': db_config.get('DB_PASSWORD', 'default_password'),
+                'database': db_config.get('DB_NAME', 'default_db'),
+                'charset': 'utf8mb4'
+            }
+        self.connection_pool = None
+        self.pool_size = pool_size
 
-    def connect(self):
-        if self.connection is None or not self.connection.open:
+    def create_pool(self):
+        if self.connection_pool is None:
             try:
-                self.connection = pymysql.connect(
-                    host=self.host,
-                    port=self.port,
-                    user=self.user,
-                    password=self.password,
-                    database=self.database,
-                    charset='utf8mb4',
-                    cursorclass=pymysql.cursors.DictCursor
+                self.connection_pool = pooling.MySQLConnectionPool(
+                    pool_name="mypool",
+                    pool_size=self.pool_size,
+                    pool_reset_session=True,
+                    **self.dbconfig
                 )
-                print("数据库连接成功")
-            except OperationalError as e:
-                raise ConnectionError(f"连接数据库失败: {e}")
-        return self.connection
+                print("数据库连接池创建成功")
+            except Error as e:
+                raise ConnectionError(f"创建连接池失败: {e}")
+        return self.connection_pool
 
-    def disconnect(self):
-        if self.connection and self.connection.open:
-            self.connection.close()
-            self.connection = None
-            print("数据库连接已断开")
+    def get_connection(self):
+        pool = self.create_pool()
+        return pool.get_connection()
+
+    def disconnect(self, conn):
+        if conn and conn.is_connected():
+            conn.close()
 
     def test_connection(self):
         try:
-            conn = self.connect()
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT 1")
-            self.disconnect()
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()  # 读取结果以避免Unread result found错误
+            cursor.close()
+            self.disconnect(conn)
+            print("数据库连接池测试成功")
             return True
-        except Exception as e:
+        except Error as e:
             print(f"测试连接失败: {e}")
             return False
 
     def execute_query(self, sql, params=None):
-        conn = self.connect()
+        conn = self.get_connection()
         try:
-            with conn.cursor() as cursor:
-                cursor.execute(sql, params or ())
-                return cursor.fetchall()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(sql, params or ())
+            result = cursor.fetchall()
+            conn.commit()
+            return result
         finally:
-            conn.commit()  # 假设查询后需提交，视情况调整
+            cursor.close()
+            self.disconnect(conn)
 
     def insert(self, sql, params=None):
-        conn = self.connect()
+        conn = self.get_connection()
         try:
-            with conn.cursor() as cursor:
-                cursor.execute(sql, params or ())
-                conn.commit()
-                return cursor.lastrowid
+            cursor = conn.cursor()
+            cursor.execute(sql, params or ())
+            conn.commit()
+            return cursor.lastrowid
         finally:
-            pass  # 可添加错误处理
+            cursor.close()
+            self.disconnect(conn)
 
     def insert_many(self, sql, params_list=None):
-        conn = self.connect()
+        conn = self.get_connection()
         try:
-            with conn.cursor() as cursor:
-                cursor.executemany(sql, params_list or [])
-                conn.commit()
-                return cursor.rowcount
+            cursor = conn.cursor()
+            cursor.executemany(sql, params_list or [])
+            conn.commit()
+            return cursor.rowcount
         finally:
-            pass  # 可添加错误处理
+            cursor.close()
+            self.disconnect(conn)
 
     def update(self, sql, params=None):
-        conn = self.connect()
+        conn = self.get_connection()
         try:
-            with conn.cursor() as cursor:
-                cursor.execute(sql, params or ())
-                conn.commit()
-                return cursor.rowcount
+            cursor = conn.cursor()
+            cursor.execute(sql, params or ())
+            conn.commit()
+            return cursor.rowcount
         finally:
-            pass
+            cursor.close()
+            self.disconnect(conn)
 
     def delete(self, sql, params=None):
-        return self.update(sql, params)  # 复用update逻辑
+        return self.update(sql, params)

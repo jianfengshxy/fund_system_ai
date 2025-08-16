@@ -29,7 +29,7 @@ def test_save_fund_investment_indicators_success():
     update_time = indicators[0].update_time
     update_date = datetime.strptime(update_time, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d')
     # 清理指定日期的数据
-    db.execute_query("DELETE FROM fund_investment_indicators WHERE update_date = %s", (update_date,))
+    # db.execute_query("DELETE FROM fund_investment_indicators WHERE update_date = %s", (update_date,))
     # 调用函数
     save_fund_investment_indicators(DEFAULT_USER)
     # 验证
@@ -37,12 +37,8 @@ def test_save_fund_investment_indicators_success():
     count = results[0]['COUNT(*)'] if results else 0
     assert count == len(indicators), f"预期插入 {len(indicators)} 条，但实际 {count} 条"
     logger.info(f"成功插入 {count} 条数据")
-    db.disconnect()
+    # db.disconnect()
 
-def test_save_fund_investment_indicators_no_data():
-    """测试无数据情况（如果适用，根据实际函数行为调整）"""
-    # 此测试可能需要修改函数或环境以模拟无数据
-    pass  # 如果函数总是返回数据，则跳过或调整
 
 if __name__ == "__main__":
     test_save_fund_investment_indicators_success()

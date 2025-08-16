@@ -34,7 +34,7 @@ import math
 from src.domain.fund_plan.fund_plan import FundPlan
 from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
 from src.API.基金信息.FundRank import get_fund_growth_rate
-from src.service.大数据.加仓风向标服务 import process_fund_investment_indicators
+from src.service.大数据.加仓风向标服务 import get_fund_investment_indicators  # 更新导入
 from src.domain.fund.fund_investment_indicator import FundInvestmentIndicator
 # 修改第39行的导入语句
 from src.service.定投管理.智能定投.智能定投管理 import create_period_smart_investment
@@ -55,7 +55,7 @@ def add_plan(user: User, amount: int = 2000):
         # 步骤1: 获取加仓风向标基金信息
         logger.info("步骤1: 获取加仓风向标数据...")
         try:
-            indicators_list = process_fund_investment_indicators(user)
+            indicators_list = get_fund_investment_indicators()
             if not indicators_list:
                 logger.warning("获取加仓风向标数据失败或为空")
                 return

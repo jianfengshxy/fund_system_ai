@@ -11,6 +11,9 @@ from domain.fund_plan import ApiResponse
 from domain.fund.fund_investment_indicator import FundInvestmentIndicator
 from service.基金信息.基金信息 import get_all_fund_info
 from API.大数据.加仓风向标 import getFundInvestmentIndicators as getBasicFundInvestmentIndicators
+from src.db.fund_repository_impl import FundRepositoryImpl
+from src.db.fund_investment_indicator_repository_impl import FundInvestmentIndicatorRepositoryImpl
+from datetime import datetime
 
 
 def process_fund_investment_indicators(user, page_size=20) -> List[FundInvestmentIndicator]:
@@ -91,9 +94,11 @@ def process_fund_investment_indicators(user, page_size=20) -> List[FundInvestmen
             fund_info = get_all_fund_info(user, indicator.fund_code)
             if fund_info:
                 indicator.index_code = getattr(fund_info, 'index_code', None)
-                logger.info(f"基金 {indicator.fund_name}({indicator.fund_code}) 获得index_code: {indicator.index_code}")
+                indicator.tracking_index = indicator.index_code  # 根据index_code赋值tracking_index
+                logger.info(f"基金 {indicator.fund_name}({indicator.fund_code}) 获得index_code: {indicator.index_code}, tracking_index: {indicator.tracking_index}")
             else:
                 indicator.index_code = ''
+                indicator.tracking_index = None  # 或 ''
                 logger.warning(f"基金 {indicator.fund_name}({indicator.fund_code}) 未找到详细信息")
         
         # 根据index_code进行去重
@@ -125,6 +130,17 @@ def process_fund_investment_indicators(user, page_size=20) -> List[FundInvestmen
         import traceback
         logger.error(f"异常堆栈: {traceback.format_exc()}")
         return []
+
+
+def save_fund_investment_indicators(user):
+    indicators = process_fund_investment_indicators(user)  
+    if not indicators:
+        return
+    # 从第一个指标的 update_time 提取 update_date
+    update_time = indicators[0].update_time
+    update_date = datetime.strptime(update_time, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d')
+    repo = FundInvestmentIndicatorRepositoryImpl()
+    repo.save_investment_indicators(indicators, update_date)
 
 
 if __name__ == "__main__":

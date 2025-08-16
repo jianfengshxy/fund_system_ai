@@ -78,6 +78,16 @@ class DatabaseConnection:
         finally:
             pass  # 可添加错误处理
 
+    def insert_many(self, sql, params_list=None):
+        conn = self.connect()
+        try:
+            with conn.cursor() as cursor:
+                cursor.executemany(sql, params_list or [])
+                conn.commit()
+                return cursor.rowcount
+        finally:
+            pass  # 可添加错误处理
+
     def update(self, sql, params=None):
         conn = self.connect()
         try:

@@ -1,23 +1,11 @@
-from typing import List  # 新增导入
+from typing import List
 from src.db.database_connection import DatabaseConnection
-from src.domain.fund.fund_repository import FundRepository
-from src.domain.fund.fund_info import FundInfo
-from src.domain.fund.fund_investment_indicator import FundInvestmentIndicator  # 新增导入
+from src.domain.fund.fund_investment_indicator_repository import FundInvestmentIndicatorRepository
+from src.domain.fund.fund_investment_indicator import FundInvestmentIndicator
 
-class FundRepositoryImpl(FundRepository):
+class FundInvestmentIndicatorRepositoryImpl(FundInvestmentIndicatorRepository):
     def __init__(self):
         self.db = DatabaseConnection()
-
-    def get_by_id(self, fund_id: str) -> FundInfo:
-        sql = "SELECT * FROM funds WHERE id = %s"  # 假设表名
-        result = self.db.execute_query(sql, (fund_id,))
-        if result:
-            return FundInfo(**result[0])  # 映射到实体
-        return None
-
-    def save(self, fund: FundInfo):
-        sql = "INSERT INTO funds (id, name) VALUES (%s, %s)"  # 示例
-        self.db.insert(sql, (fund.id, fund.name))
 
     def save_investment_indicators(self, indicators: List[FundInvestmentIndicator], update_date: str):
         sql = """

@@ -12,7 +12,8 @@ class FundInvestmentIndicator:
     since_launch_return: float = 0.0     # 成立以来收益率 SYL_LN
     product_rank: float = 0.0            # 产品排名 PRODUCT_RANK
     update_time: str = ''                # 更新时间 EUTIME
-    
+    tracking_index: Optional[str] = None # 追踪指数（可选）
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'FundInvestmentIndicator':
         """从字典创建对象"""
@@ -43,7 +44,8 @@ class FundInvestmentIndicator:
             one_year_return=safe_float(data.get('SYL_1N')),
             since_launch_return=safe_float(data.get('SYL_LN')),
             product_rank=safe_float(data.get('PRODUCT_RANK')),
-            update_time=data.get('EUTIME', '')
+            update_time=data.get('EUTIME', ''),
+            tracking_index=data.get('TRACKING_INDEX', None)  # 假设数据中可能有此字段
         )
     
     def __str__(self) -> str:

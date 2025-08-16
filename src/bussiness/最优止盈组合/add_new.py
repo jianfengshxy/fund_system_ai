@@ -84,7 +84,7 @@ def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budg
     logger.info(f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{total_budget}元")
     
     # 使用increase.py的公式计算每个基金的购买金额
-    fund_num = 10
+    fund_num = 5  #每天购买的基金个数
     day_amount = round(total_budget * 8 / 250, 2)
     budget_per_fund = round(day_amount / fund_num, 2)
     logger.info(f"计算得出单个基金购买金额：{budget_per_fund}元")

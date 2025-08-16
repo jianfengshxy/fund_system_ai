@@ -158,6 +158,19 @@ def get_fund_investment_indicators(days=10, threshold=3) -> List[FundInvestmentI
     repo = FundInvestmentIndicatorRepositoryImpl()
     indicators = repo.get_frequent_indicators(days, threshold)
     
+    # 根据tracking_index去重（如果有）
+    if indicators:
+        seen_indexes = set()
+        unique_indicators = []
+        for ind in indicators:
+            if ind.tracking_index and ind.tracking_index not in seen_indexes:
+                seen_indexes.add(ind.tracking_index)
+                unique_indicators.append(ind)
+            elif not ind.tracking_index:
+                unique_indicators.append(ind)  # 保留无tracking_index的
+        indicators = unique_indicators
+        logging.info(f"去重后基金数量: {len(indicators)}")
+    
     _fund_indicators_cache[cache_key] = indicators
     logging.info(f"已缓存基金投资指标: days={days}, threshold={threshold}")
     return indicators

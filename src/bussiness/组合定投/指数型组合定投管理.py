@@ -157,30 +157,25 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
         
         print(f"获取到 {len(indicators_data)} 个加仓风向标基金")
         
-        # 获取所有现有定投计划中指数基金的跟踪指数（用于避免重复）
-        all_existing_index_codes = set()
-        
-        # 从所有定投计划中提取指数基金的跟踪指数
+        # 从组合定投计划中提取指数基金的跟踪指数（用于避免重复）
         try:
-            from src.service.定投管理.定投查询.定投查询 import get_all_fund_plan_details
-            all_fund_plan_details = get_all_fund_plan_details(user)
-            
-            for plan in all_fund_plan_details:
-                if (hasattr(plan, 'rationPlan') and 
-                    hasattr(plan.rationPlan, 'fundCode') and 
-                    plan.rationPlan.fundCode):
+            all_existing_index_codes = set()
+            for detail in portfolio_details:
+                if (hasattr(detail, 'rationPlan') and 
+                    hasattr(detail.rationPlan, 'fundCode') and 
+                    detail.rationPlan.fundCode):
                     try:
-                        fund_info = get_all_fund_info(user, plan.rationPlan.fundCode)
+                        fund_info = get_all_fund_info(user, detail.rationPlan.fundCode)
                         if fund_info and hasattr(fund_info, 'fund_type') and fund_info.fund_type == "000":
                             if hasattr(fund_info, 'index_code') and fund_info.index_code:
                                 all_existing_index_codes.add(fund_info.index_code)
-                                print(f"  现有指数基金定投: {plan.rationPlan.fundName}({plan.rationPlan.fundCode}) 跟踪指数: {fund_info.index_code}")
+                                print(f"  现有指数基金定投: {detail.rationPlan.fundName}({detail.rationPlan.fundCode}) 跟踪指数: {fund_info.index_code}")
                     except Exception as e:
-                        print(f"获取基金 {plan.rationPlan.fundCode} 详细信息失败: {e}")
+                        print(f"获取基金 {detail.rationPlan.fundCode} 详细信息失败: {e}")
             
-            print(f"现有定投计划中跟踪的指数: {sorted(list(all_existing_index_codes))}")
+            print(f"现有组合定投计划中跟踪的指数: {sorted(list(all_existing_index_codes))}")
         except Exception as e:
-            print(f"获取所有定投计划失败: {e}")
+            print(f"获取组合定投计划失败: {e}")
         
         # 过滤出指数基金且fund_sub_type为'000001'的基金
         index_funds = []
@@ -213,23 +208,17 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
             
             # 获取基金详细信息，检查跟踪指数
             try:
-                # 移除不相关的日志输出
-                # logger.info(f"找到定投计划: 计划ID={plan_id}, 基金={fund_name}({fund_code})")
-                
-                # 修改后的日志输出
                 fund_info = get_all_fund_info(user, fund_code)
                 index_code = fund_info.index_code if fund_info and hasattr(fund_info, 'index_code') else "未知"
-                # 移除使用 plan_id 的日志
-                # logger.info(f"找到定投计划: 计划ID={plan_id}, 基金={fund_name}({fund_code}), 追踪指数={index_code}")
                 
                 if index_code in all_existing_index_codes:
-                    # 找出所有跟踪该指数的基金
+                    # 找出所有跟踪该指数的基金（现在基于 portfolio_details）
                     exist_funds = []
-                    for plan in all_fund_plan_details:
+                    for detail in portfolio_details:
                         try:
-                            plan_fund_info = get_all_fund_info(user, plan.rationPlan.fundCode)
+                            plan_fund_info = get_all_fund_info(user, detail.rationPlan.fundCode)
                             if plan_fund_info and hasattr(plan_fund_info, 'index_code') and plan_fund_info.index_code == index_code:
-                                exist_funds.append((plan.rationPlan.fundName, plan.rationPlan.fundCode))
+                                exist_funds.append((detail.rationPlan.fundName, detail.rationPlan.fundCode))
                         except Exception:
                             pass
                     if exist_funds:

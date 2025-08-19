@@ -2,13 +2,13 @@ import sys
 import os
 import logging
 import urllib.parse
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) )
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) ))
 
 import requests
 from typing import Optional
-from domain.fund_plan import ApiResponse
+from src.domain.user.api_response import ApiResponse  # 修改为 src.domain.fund_plan
 
-from common.constant import (
+from src.common.constant import (
     SERVER_VERSION, PHONE_TYPE, MOBILE_KEY,
     USER_ID, U_TOKEN, C_TOKEN, PASSPORT_ID, DEFAULT_USER
 )
@@ -76,3 +76,9 @@ def GetMyAssetMainPartAsync(user) -> ApiResponse:
     except requests.exceptions.RequestException as e:
         logger.error(f'请求失败: {str(e)}')
         raise Exception(f'请求失败: {str(e)}')
+
+
+if __name__ == "__main__":
+    from src.common.constant import DEFAULT_USER
+    response = GetMyAssetMainPartAsync(DEFAULT_USER)
+    print(response)

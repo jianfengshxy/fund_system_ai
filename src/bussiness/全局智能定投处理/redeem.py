@@ -37,6 +37,7 @@ from src.service.交易管理.赎回基金 import sell_0_fee_shares
 from src.service.交易管理.赎回基金 import sell_low_fee_shares
 from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
 from service.大数据.加仓风向标服务 import process_fund_investment_indicators
+from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
@@ -190,9 +191,18 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             
         # 获取活期宝银行卡列表
         logger.info("开始检查银行卡余额相关条件...")
-        bank_card_info = user.max_hqb_bank    
-        CurrentRealBalance = bank_card_info.CurrentRealBalance
-        logger.info(f"银行卡余额：{CurrentRealBalance}")
+        try:
+            asset_response = GetMyAssetMainPartAsync(user)
+            if asset_response.Success and asset_response.Data:
+                CurrentRealBalance = asset_response.Data.get('HqbValue', 0.0)
+                logger.info(f"从资产API获取HqbValue: {CurrentRealBalance}")
+            else:
+                raise Exception("资产API调用失败")
+        except Exception as e:
+            logger.warning(f"获取HqbValue失败，回退到原银行卡信息: {str(e)}")
+            bank_card_info = user.max_hqb_bank    
+            CurrentRealBalance = bank_card_info.CurrentRealBalance
+            logger.info(f"银行卡余额：{CurrentRealBalance}")
         
         #检查银行卡余额,小于30万，且收益大于1.0，立即卖出费率为0的份额
         if estimated_profit_rate > 1.0 and CurrentRealBalance < 1000000 and fund_type == '000' and fund_info.estimated_change != 0.0:

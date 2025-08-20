@@ -30,7 +30,7 @@ class FundInvestmentIndicatorRepositoryImpl(FundInvestmentIndicatorRepository):
         ]
         self.db.insert_many(sql, params_list)
 
-    def get_frequent_indicators(self, days: int = 20, threshold: int = 3) -> List[FundInvestmentIndicator]:
+    def get_frequent_indicators(self, days: int = 5, threshold: int = 3) -> List[FundInvestmentIndicator]:
         recent_dates_sql = """
             SELECT DISTINCT update_date 
             FROM fund_investment_indicators 
@@ -38,14 +38,17 @@ class FundInvestmentIndicatorRepositoryImpl(FundInvestmentIndicatorRepository):
             LIMIT %s
         """
         recent_dates = self.db.execute_query(recent_dates_sql, (days,))
-        if not recent_dates or len(recent_dates) < days:
-            print(f"No sufficient recent dates, returning empty list")  # 添加调试打印
+        print(f"DEBUG: Retrieved {len(recent_dates)} recent dates")  # 新增日志
+        if recent_dates:
+            print(f"DEBUG: Recent dates: {[row['update_date'] for row in recent_dates]}")  # 新增日志
+        if not recent_dates:
+            print("No recent dates available, returning empty list")  # 处理无数据情况
             return []
-    
+        
         date_list = [row['update_date'] for row in recent_dates]
         min_date = min(date_list)
         max_date = max(date_list)
-        print(f"Min date: {min_date}, Max date: {max_date}")  # 添加调试打印
+        print(f"Min date: {min_date}, Max date: {max_date}")  # 现有日志
     
         # 查询在最近days个日期内出现至少threshold次且在最新日期出现的基金
         sql = """
@@ -60,6 +63,8 @@ class FundInvestmentIndicatorRepositoryImpl(FundInvestmentIndicatorRepository):
             ) AND update_date = %s
         """
         results = self.db.execute_query(sql, (min_date, max_date, threshold, max_date))
-        print(f"Query results count: {len(results)}")  # 添加调试打印
-    
+        print(f"Query results count: {len(results)}")  # 现有日志
+        if results:
+            print(f"DEBUG: Found funds: {[row['fund_code'] for row in results]}")  # 新增日志
+        
         return [FundInvestmentIndicator.from_dict(row) for row in results]

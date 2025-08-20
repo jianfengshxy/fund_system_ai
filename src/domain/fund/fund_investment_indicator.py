@@ -27,17 +27,29 @@ class FundInvestmentIndicator:
             except (ValueError, TypeError):
                 return default
         
+        # 支持小写和API大写键
+        fund_code = data.get('fund_code') or data.get('FCODE', '')
+        fund_name = data.get('fund_name') or data.get('SHORTNAME', '')
+        fund_type = data.get('fund_type') or data.get('RSFUNDTYPE', '')
+        fund_sub_type = data.get('fund_sub_type') or data.get('RSBTYPE', '')
+        one_year_return = safe_float(data.get('one_year_return') or data.get('SYL_1N'))
+        since_launch_return = safe_float(data.get('since_launch_return') or data.get('SYL_LN'))
+        product_rank = safe_float(data.get('product_rank') or data.get('PRODUCT_RANK'))
+        update_date = (data.get('update_date') or data.get('EUTIME', '').split(' ')[0])
+        update_time = data.get('update_time') or data.get('EUTIME', '')
+        tracking_index = data.get('tracking_index') or data.get('tracking_index', None)  # 假设API无此键，使用数据库的
+        
         return cls(
-            fund_code=data.get('FCODE', ''),  # 修改为API键
-            fund_name=data.get('SHORTNAME', ''),  # 修改为API键
-            fund_type=data.get('RSFUNDTYPE', ''),  # 修改为API键
-            fund_sub_type=data.get('RSBTYPE', ''),  # 修改为API键
-            one_year_return=safe_float(data.get('SYL_1N')),
-            since_launch_return=safe_float(data.get('SYL_LN')),
-            product_rank=safe_float(data.get('PRODUCT_RANK')),
-            update_date=data.get('EUTIME', '').split(' ')[0],  # 从EUTIME提取日期
-            update_time=data.get('EUTIME', ''),  # 使用EUTIME作为更新时间
-            tracking_index=data.get('tracking_index', None)
+            fund_code=fund_code,
+            fund_name=fund_name,
+            fund_type=fund_type,
+            fund_sub_type=fund_sub_type,
+            one_year_return=one_year_return,
+            since_launch_return=since_launch_return,
+            product_rank=product_rank,
+            update_date=update_date,
+            update_time=update_time,
+            tracking_index=tracking_index
         )
     
     def __str__(self) -> str:

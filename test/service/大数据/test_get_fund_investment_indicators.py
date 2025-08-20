@@ -21,7 +21,7 @@ def test_get_fund_investment_indicators_default():
     print(f"Retrieved {len(indicators)} frequent indicators with default params")
 
 def test_get_fund_investment_indicators_custom():
-    indicators = get_fund_investment_indicators(days=5, threshold=3)
+    indicators = get_fund_investment_indicators(days=10, threshold=3)
     assert isinstance(indicators, List)
     assert all(isinstance(ind, FundInvestmentIndicator) for ind in indicators)
     # 添加更多断言，根据预期

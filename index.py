@@ -28,6 +28,7 @@ from src.common.constant import DEFAULT_USER, DEFAULT_FUND_PLAN_DETAIL
 
 # 在现有导入语句后添加
 from src.bussiness.组合定投.主动型组合定投管理 import create_plan_by_group, dissolve_plan_by_group
+from src.service.大数据.加仓风向标服务 import save_fund_investment_indicators
 
 # 初始化日志记录器
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -65,9 +66,13 @@ def dissolve_period_index_investment(event, context):
     dissolve_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 1000000.0)
     pass
 
+def sync_fund_investment_indicators(event, context):
+    save_fund_investment_indicators(DEFAULT_USER)
+    logger.info("同步加仓数据完成")
+
 if __name__ == "__main__":
     # 根据需要调用 redeem 或 increase 函数
-    increase(None, None)
+    sync_fund_investment_indicators(None, None)
     # redeem(None, None)
     # create_period_smart_investment(None, None)
     # dissolve_period_smart_investment(None, None)

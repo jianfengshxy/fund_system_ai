@@ -36,8 +36,9 @@ from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.service.交易管理.赎回基金 import sell_0_fee_shares
 from src.service.交易管理.赎回基金 import sell_low_fee_shares
 from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
-from service.大数据.加仓风向标服务 import process_fund_investment_indicators
+from service.大数据.加仓风向标服务 import get_fund_investment_indicators
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
+
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
@@ -87,7 +88,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
     # 检查当前基金是否属于加仓基金列表，如果是则不执行止盈
     try:      
         # 获取加仓基金列表
-        addition_funds = process_fund_investment_indicators(user, page_size=20)
+        addition_funds = get_fund_investment_indicators()
         addition_fund_codes = {fund.fund_code for fund in addition_funds}
         
         if fund_code in addition_fund_codes:

@@ -1,4 +1,3 @@
----
 edition: "3.0.0"
 name: "fund_system_ai"
 access: "default"
@@ -62,6 +61,7 @@ resources:
       runtime: ${vars.common.props.runtime}
       region: ${vars.common.props.region}
       timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
       triggers:
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
@@ -86,6 +86,7 @@ resources:
       runtime: ${vars.common.props.runtime}
       region: ${vars.common.props.region}
       timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
       triggers:
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
@@ -110,6 +111,7 @@ resources:
       runtime: ${vars.common.props.runtime}
       region: ${vars.common.props.region}
       timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
       triggers:
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
@@ -134,6 +136,7 @@ resources:
       runtime: ${vars.common.props.runtime}
       region: ${vars.common.props.region}
       timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
       triggers:
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
@@ -158,6 +161,7 @@ resources:
       runtime: ${vars.common.props.runtime}
       region: ${vars.common.props.region}
       timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
       triggers:
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
@@ -182,6 +186,7 @@ resources:
       runtime: ${vars.common.props.runtime}
       region: ${vars.common.props.region}
       timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
       triggers:
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
@@ -206,6 +211,7 @@ resources:
       runtime: ${vars.common.props.runtime}
       region: ${vars.common.props.region}
       timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
       triggers:
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
@@ -214,5 +220,262 @@ resources:
           payload: ${vars.common.props.triggerConfig.payload}
           cronExpression: "CRON_TZ=Asia/Shanghai 0 55 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
+edition: "3.0.0"
+name: "fund_system_ai"
+access: "default"
 
+vars:
+  # 公共配置模板
+  common:
+    database:
+        vpc_id: vpc-uf6ewma5cv187wp8m1yej
+        cidr: 172.16.0.0/12
+        internal_host: rm-uf614tc8841ee6nwi.rwlb.rds.aliyuncs.com
+        external_host: rm-uf614tc8841ee6nwiwo.rwlb.rds.aliyuncs.com
+        port: 3306
+        DB_USER: jianfengshxy
+        DB_PASSWORD: jianfeng1984Aa+
+        DB_PORT: 3306
+        DB_NAME: kuafudb
+    component: "fc3"
+    actions:
+      complete-deploy:
+      - plugin: "flow_api_registry"
+        args: {}
+      complete-remove:
+      - plugin: "flow_api_registry"
+        args: {}
+    props:
+      logConfig:
+        enableRequestMetrics: true
+        enableInstanceMetrics: true
+        logBeginRule: DefaultRegex
+        project: aliyun-fc-cn-shanghai-22657033-3188-5e2f-9edb-77c4e4b6c05e
+        logstore: function-log
+      diskSize: 10240
+      code: "./"
+      memorySize: 2048
+      layers:
+      - "acs:fc:cn-shanghai:1238993556817547:layers/fund_system_layer/versions/1"
+      cpu: 1
+      runtime: "python3.10"
+      region: "cn-shanghai"
+      timeout: 600
+      triggerConfig:
+        qualifier: "LATEST"
+        triggerType: "timer"
+        enable: true
+        payload: "{\"account\": \"13918199137\",\"password\": \"sWX15706\"}"
+      environmentVariables:
+        DB_HOST: rm-uf614tc8841ee6nwiwo.rwlb.rds.aliyuncs.com
+        DB_PORT: "3306"
+        DB_USER: jianfengshxy
+        DB_PASSWORD: jianfeng1984Aa+
+        DB_NAME: kuafudb
 
+resources:
+  increase:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.increase"
+      functionName: "increase"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "increase"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 4 20 11 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+  redeem:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.redeem"
+      functionName: "redeem"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "redeem"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+  dissolve_period_smart_investment:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.dissolve_period_smart_investment"
+      functionName: "dissolve_period_smart_investment"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "dissolve_period_smart_investment"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 0 21 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+  create_period_smart_investment:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.create_period_smart_investment"
+      functionName: "create_period_smart_investment"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "create_period_smart_investment"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 48 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+  add_new_all_users:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.add_new"
+      functionName: "add_new_all_users"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_all_users"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+  dissolve_period_index_investment:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.dissolve_period_index_investment"
+      functionName: "dissolve_period_index_investment"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "dissolve_period_index_investment"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 5 23 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+  create_period_index_investment:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.create_period_index_investment"
+      functionName: "create_period_index_investment"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "create_period_index_investment"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 55 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+  sync_investment_indicators:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.sync_fund_investment_indicators"
+      functionName: "sync_investment_indicators"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "sync_investment_indicators_1430"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 30 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "sync_investment_indicators_2130"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 30 21 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}

@@ -105,11 +105,20 @@ if __name__ == "__main__":
         result = getFundInvestmentIndicators(DEFAULT_USER, page_size=20)
         
         if result.Success:
-            print("\nAPI调用成功:")
-            print(f"返回数据: {result.Data}")
+            print("\n=== API调用成功 ===")
+            print(f"成功状态: {result.Success}")
+            print(f"错误代码: {result.ErrorCode if result.ErrorCode else '无'}")
+            print("返回数据:")
+            import json
+            print(json.dumps(result.Data, indent=4, ensure_ascii=False))
         else:
-            print(f"API调用失败: {result.FirstError}")
+            print("\n=== API调用失败 ===")
+            print(f"错误代码: {result.ErrorCode}")
+            print(f"错误信息: {result.FirstError}")
+            if result.DebugError:
+                print(f"调试错误: {result.DebugError}")
     except Exception as e:
-        print(f"执行过程中发生异常: {str(e)}")
+        print("\n=== 执行过程中发生异常 ===")
+        print(f"异常信息: {str(e)}")
 
 

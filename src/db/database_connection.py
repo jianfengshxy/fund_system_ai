@@ -1,5 +1,4 @@
 import os
-import yaml
 import mysql.connector
 from mysql.connector import pooling
 from mysql.connector import Error
@@ -8,24 +7,25 @@ class DatabaseConnection:
     def __init__(self, pool_size=10):
         if 'FC_FUNCTION_NAME' in os.environ:
             self.dbconfig = {
-                'host': os.environ.get('internal_host', 'default_host'),
+                'host': os.environ.get('INTERNAL_HOST', 'rm-uf614tc8841ee6nwi.rwlb.rds.aliyuncs.com'),
                 'port': int(os.environ.get('DB_PORT', 3306)),
-                'user': os.environ.get('DB_USER', 'default_user'),
-                'password': os.environ.get('DB_PASSWORD', 'default_password'),
-                'database': os.environ.get('DB_NAME', 'default_db'),
+                'user': os.environ.get('DB_USER', 'jianfengshxy'),
+                'password': os.environ.get('DB_PASSWORD', 'jianfeng1984Aa+'),
+                'database': os.environ.get('DB_NAME', 'kuafudb'),
                 'charset': 'utf8mb4'
             }
         else:
+            import yaml
             config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 's.yaml')
             with open(config_path, 'r') as file:
                 config = yaml.safe_load(file)
             db_config = config['vars']['common']['database']
             self.dbconfig = {
-                'host': db_config.get('external_host', 'default_host'),
+                'host': db_config.get('EXTERNAL_HOST', 'rm-uf614tc8841ee6nwiwo.rwlb.rds.aliyuncs.com'),
                 'port': db_config.get('port', 3306),
-                'user': db_config.get('DB_USER', 'default_user'),
-                'password': db_config.get('DB_PASSWORD', 'default_password'),
-                'database': db_config.get('DB_NAME', 'default_db'),
+                'user': db_config.get('DB_USER', 'jianfengshxy'),
+                'password': db_config.get('DB_PASSWORD', 'jianfeng1984Aa+'),
+                'database': db_config.get('DB_NAME', 'kuafudb'),
                 'charset': 'utf8mb4'
             }
         self.connection_pool = None

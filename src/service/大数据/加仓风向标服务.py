@@ -149,7 +149,7 @@ def save_fund_investment_indicators(user):
 # 添加缓存字典
 _fund_indicators_cache = {}
 
-def get_fund_investment_indicators(days=5, threshold=3) -> List[FundInvestmentIndicator]:
+def get_fund_investment_indicators(days=10, threshold=3) -> List[FundInvestmentIndicator]:
     cache_key = f"{days}_{threshold}"
     if cache_key in _fund_indicators_cache:
         logging.info(f"从缓存中获取基金投资指标: days={days}, threshold={threshold}")

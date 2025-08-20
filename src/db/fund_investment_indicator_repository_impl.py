@@ -65,6 +65,8 @@ class FundInvestmentIndicatorRepositoryImpl(FundInvestmentIndicatorRepository):
         results = self.db.execute_query(sql, (min_date, max_date, threshold, max_date))
         print(f"Query results count: {len(results)}")  # 现有日志
         if results:
-            print(f"DEBUG: Found funds: {[row['fund_code'] for row in results]}")  # 新增日志
+            print("DEBUG: Found funds details:")
+            for row in results:
+                print(f"  - Code: {row['fund_code']}, Name: {row.get('fund_name', 'N/A')}, Tracking Index: {row.get('tracking_index', 'N/A')}")
         
         return [FundInvestmentIndicator.from_dict(row) for row in results]

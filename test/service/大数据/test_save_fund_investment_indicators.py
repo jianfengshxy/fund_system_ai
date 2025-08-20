@@ -24,15 +24,16 @@ logger = logging.getLogger(__name__)
 def test_save_fund_investment_indicators_success():
     """测试 save_fund_investment_indicators 函数 - 成功案例，直接调用并验证数据库插入"""
     db = DatabaseConnection()
-    # 先获取数据以提取 update_date
-    indicators = get_fund_investment_indicators(DEFAULT_USER)
+    # 先调用 process 获取预期数据
+    from src.service.大数据.加仓风向标服务 import process_fund_investment_indicators
+    indicators = process_fund_investment_indicators(DEFAULT_USER)
     if not indicators:
         assert False, "无数据返回"
     update_time = indicators[0].update_time
     update_date = datetime.strptime(update_time, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d')
-    # 清理指定日期的数据
+    # 清理指定日期的数据（可选，如果需要重置测试）
     # db.execute_query("DELETE FROM fund_investment_indicators WHERE update_date = %s", (update_date,))
-    # 调用函数
+    # 调用保存函数
     save_fund_investment_indicators(DEFAULT_USER)
     # 验证
     results = db.execute_query("SELECT COUNT(*) FROM fund_investment_indicators WHERE update_date = %s", (update_date,))

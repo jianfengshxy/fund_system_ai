@@ -3,6 +3,7 @@ import os
 import sys
 import logging
 
+
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -10,10 +11,11 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-from src.service.大数据.加仓风向标服务 import save_fund_investment_indicators, process_fund_investment_indicators
+from src.service.大数据.加仓风向标服务 import save_fund_investment_indicators
 from src.common.constant import DEFAULT_USER
 from src.db.database_connection import DatabaseConnection
 from datetime import datetime
+from src.service.大数据.加仓风向标服务 import get_fund_investment_indicators
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)d)')
@@ -23,7 +25,7 @@ def test_save_fund_investment_indicators_success():
     """测试 save_fund_investment_indicators 函数 - 成功案例，直接调用并验证数据库插入"""
     db = DatabaseConnection()
     # 先获取数据以提取 update_date
-    indicators = process_fund_investment_indicators(DEFAULT_USER)
+    indicators = get_fund_investment_indicators(DEFAULT_USER)
     if not indicators:
         assert False, "无数据返回"
     update_time = indicators[0].update_time

@@ -160,7 +160,7 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
         # 从组合定投计划中提取指数基金的跟踪指数（用于避免重复）
         try:
             all_existing_index_codes = set()
-            for detail in portfolio_details:
+            for detail in target_plans:  # 修改：使用target_plans代替portfolio_details，只限于本组合
                 if (hasattr(detail, 'rationPlan') and 
                     hasattr(detail.rationPlan, 'fundCode') and 
                     detail.rationPlan.fundCode):
@@ -611,7 +611,7 @@ def main():
 
 if __name__ == '__main__':
     # 测试创建指数基金定投计划
-    create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合",1000000.0,5000.0)
+    create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合",1000000.0,10000.0)
     
     # 测试解散指数基金定投计划
     # dissolve_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 1000000.0)

@@ -25,7 +25,7 @@ from src.domain.fund.fund_info import FundInfo
 from src.domain.asset.asset_details import AssetDetails
 from src.service.定投管理.组合定投.组合定投管理 import create_period_investment_by_group
 from src.service.用户管理.用户信息 import get_user_all_info
-from src.service.大数据.加仓风向标服务 import process_fund_investment_indicators
+from service.大数据.加仓风向标服务 import get_fund_investment_indicators
 
 # 配置日志
 logging.basicConfig(
@@ -135,7 +135,7 @@ def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budg
         
         # 步骤3: 获取加仓风向标数据
         logger.info("=== 步骤3: 获取加仓风向标数据 ===")
-        wind_vane_funds = process_fund_investment_indicators(user, page_size=20)
+        wind_vane_funds = get_fund_investment_indicators()
         if not wind_vane_funds:
             logger.error("获取加仓风向标数据失败")
             return False

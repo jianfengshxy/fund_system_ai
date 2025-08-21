@@ -48,7 +48,7 @@ def create_period_smart_investment(event, context):
     pass
 
 def dissolve_period_smart_investment(event, context):          
-    dissolve_daily_plan(DEFAULT_USER)
+    # dissolve_daily_plan(DEFAULT_USER)
     dissolve_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0)
     pass
 

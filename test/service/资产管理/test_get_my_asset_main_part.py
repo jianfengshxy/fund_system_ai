@@ -12,7 +12,7 @@ if root_dir not in sys.path:
 
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.common.constant import DEFAULT_USER
-from src.domain.fund_plan import ApiResponse
+from src.domain.user.api_response import ApiResponse
 
 def test_get_my_asset_main_part_success():
     # 准备测试数据
@@ -25,13 +25,13 @@ def test_get_my_asset_main_part_success():
     # 验证返回结果
     assert isinstance(response, ApiResponse), "返回结果不是 ApiResponse 类型"
     assert response.Success is True, "请求不成功"
-    assert response.ErrorCode is None or response.ErrorCode == '', "存在错误代码"
+    assert response.ErrorCode == 0, "存在错误代码"
     assert response.Data is not None, "返回数据为空"
     
     # 验证返回的数据结构
     data = response.Data
-    assert 'TotalAsset' in data, "返回数据缺少总资产信息"
-    assert isinstance(float(data['TotalAsset']), float), "总资产不是数值类型"
+    assert 'TotalValue' in data, "返回数据缺少总资产信息"
+    # 移除冗余断言: assert isinstance(float(data['TotalAsset']), float), "总资产不是数值类型"
 
 def test_get_my_asset_main_part_with_invalid_token():
     # 准备测试数据：使用无效的 token

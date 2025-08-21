@@ -18,14 +18,16 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
 from src.common.constant import DEFAULT_USER
 from src.domain.user.User import User
 from src.service.定投管理.定投查询.定投查询 import get_portfolio_plan_details
-from src.service.大数据.加仓风向标服务 import process_fund_investment_indicators
+from src.service.大数据.加仓风向标服务 import get_fund_investment_indicators
 from src.API.定投计划管理.SmartPlan import createPlanV3, getFundPlanList
 from src.service.定投管理.智能定投.智能定投管理 import dissolve_period_smart_investment
 from src.service.定投管理.组合定投.组合定投管理 import create_period_investment_by_group
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.API.交易管理.buyMrg import commit_order
-
+from src.API.组合管理.SubAccountMrg import getSubAssetMultList
+from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
+            
 # 用户配置列表
 # 第一列：手机号 account
 # 第二列：密码 password
@@ -57,8 +59,7 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
         print("步骤1: 查询组合定投计划...")
         
         try:
-            portfolio_details = get_portfolio_plan_details(user)
-            
+            portfolio_details = get_portfolio_plan_details(user)        
             # 过滤指定组合名称的定投计划
             target_plans = []
             for detail in portfolio_details:
@@ -71,11 +72,6 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
                 print(f"未找到组合 '{sub_account_name}' 的现有定投计划")
             else:
                 print(f"找到 {len(target_plans)} 个相关定投计划")
-                
-                # 新增判断：如果定投计划数量大于20个，则跳出，不创建新计划
-                if len(target_plans) > 20:
-                    print(f"组合 '{sub_account_name}' 的定投计划数量已超过20个 ({len(target_plans)} 个)，跳过新增定投计划")
-                    return
         except Exception as e:
             print(f"查询定投计划时出错: {e}")
             return  # 或根据需要处理
@@ -87,9 +83,6 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
         asset_details = []
         
         try:
-            from src.API.组合管理.SubAccountMrg import getSubAssetMultList
-            from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
-            
             # 获取子账户资产列表
             sub_asset_response = getSubAssetMultList(user)
             if sub_asset_response.Success:
@@ -134,6 +127,11 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
                             print(f"  基金{i+1}: {asset.fund_name} ({asset.fund_code}) - 持有金额: {asset.asset_value} 元")
                     if len(asset_details) > 5:
                         print(f"  ... 还有 {len(asset_details) - 5} 只基金")
+                
+                # 新增判断：如果持有的基金个数大于20，则跳过新增定投计划和买入
+                if len(asset_details) > 20:
+                    print(f"组合 '{sub_account_name}' 持有的基金数量已超过20个 ({len(asset_details)} 个)，跳过新增定投计划和买入操作")
+                    return
             else:
                 print(f"获取子账户资产列表失败: {sub_asset_response.Message}")
                 
@@ -145,7 +143,7 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
         
         # 调用加仓风向标函数，获取推荐基金
         print("获取加仓风向标数据...")
-        indicators_response = process_fund_investment_indicators(user, page_size=20)
+        indicators_response = get_fund_investment_indicators()
         if not indicators_response:
             print("❌ 获取加仓风向标数据失败")
             return
@@ -159,30 +157,25 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
         
         print(f"获取到 {len(indicators_data)} 个加仓风向标基金")
         
-        # 获取所有现有定投计划中指数基金的跟踪指数（用于避免重复）
-        all_existing_index_codes = set()
-        
-        # 从所有定投计划中提取指数基金的跟踪指数
+        # 从组合定投计划中提取指数基金的跟踪指数（用于避免重复）
         try:
-            from src.service.定投管理.定投查询.定投查询 import get_all_fund_plan_details
-            all_fund_plan_details = get_all_fund_plan_details(user)
-            
-            for plan in all_fund_plan_details:
-                if (hasattr(plan, 'rationPlan') and 
-                    hasattr(plan.rationPlan, 'fundCode') and 
-                    plan.rationPlan.fundCode):
+            all_existing_index_codes = set()
+            for detail in target_plans:  # 修改：使用target_plans代替portfolio_details，只限于本组合
+                if (hasattr(detail, 'rationPlan') and 
+                    hasattr(detail.rationPlan, 'fundCode') and 
+                    detail.rationPlan.fundCode):
                     try:
-                        fund_info = get_all_fund_info(user, plan.rationPlan.fundCode)
+                        fund_info = get_all_fund_info(user, detail.rationPlan.fundCode)
                         if fund_info and hasattr(fund_info, 'fund_type') and fund_info.fund_type == "000":
                             if hasattr(fund_info, 'index_code') and fund_info.index_code:
                                 all_existing_index_codes.add(fund_info.index_code)
-                                print(f"  现有指数基金定投: {plan.rationPlan.fundName}({plan.rationPlan.fundCode}) 跟踪指数: {fund_info.index_code}")
+                                print(f"  现有指数基金定投: {detail.rationPlan.fundName}({detail.rationPlan.fundCode}) 跟踪指数: {fund_info.index_code}")
                     except Exception as e:
-                        print(f"获取基金 {plan.rationPlan.fundCode} 详细信息失败: {e}")
+                        print(f"获取基金 {detail.rationPlan.fundCode} 详细信息失败: {e}")
             
-            print(f"现有定投计划中跟踪的指数: {sorted(list(all_existing_index_codes))}")
+            print(f"现有组合定投计划中跟踪的指数: {sorted(list(all_existing_index_codes))}")
         except Exception as e:
-            print(f"获取所有定投计划失败: {e}")
+            print(f"获取组合定投计划失败: {e}")
         
         # 过滤出指数基金且fund_sub_type为'000001'的基金
         index_funds = []
@@ -215,23 +208,17 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
             
             # 获取基金详细信息，检查跟踪指数
             try:
-                # 移除不相关的日志输出
-                # logger.info(f"找到定投计划: 计划ID={plan_id}, 基金={fund_name}({fund_code})")
-                
-                # 修改后的日志输出
                 fund_info = get_all_fund_info(user, fund_code)
                 index_code = fund_info.index_code if fund_info and hasattr(fund_info, 'index_code') else "未知"
-                # 移除使用 plan_id 的日志
-                # logger.info(f"找到定投计划: 计划ID={plan_id}, 基金={fund_name}({fund_code}), 追踪指数={index_code}")
                 
                 if index_code in all_existing_index_codes:
-                    # 找出所有跟踪该指数的基金
+                    # 找出所有跟踪该指数的基金（现在基于 portfolio_details）
                     exist_funds = []
-                    for plan in all_fund_plan_details:
+                    for detail in portfolio_details:
                         try:
-                            plan_fund_info = get_all_fund_info(user, plan.rationPlan.fundCode)
+                            plan_fund_info = get_all_fund_info(user, detail.rationPlan.fundCode)
                             if plan_fund_info and hasattr(plan_fund_info, 'index_code') and plan_fund_info.index_code == index_code:
-                                exist_funds.append((plan.rationPlan.fundName, plan.rationPlan.fundCode))
+                                exist_funds.append((detail.rationPlan.fundName, detail.rationPlan.fundCode))
                         except Exception:
                             pass
                     if exist_funds:
@@ -423,7 +410,7 @@ def dissolve_plan_by_group_for_index_funds(user: User, sub_account_name: str, bu
         
         recommended_index_codes = set()
         try:
-            indicators_response = process_fund_investment_indicators(user, page_size=20)
+            indicators_response = get_fund_investment_indicators()
             if indicators_response:
                 # 检查返回的数据类型
                 if hasattr(indicators_response, 'Data'):
@@ -624,7 +611,7 @@ def main():
 
 if __name__ == '__main__':
     # 测试创建指数基金定投计划
-    create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合",1000000.0,5000.0)
+    create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合",1000000.0,10000.0)
     
     # 测试解散指数基金定投计划
     # dissolve_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 1000000.0)

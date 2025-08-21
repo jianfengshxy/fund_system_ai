@@ -11,8 +11,10 @@ class FundInvestmentIndicator:
     one_year_return: float = 0.0         # 一年收益率 SYL_1N
     since_launch_return: float = 0.0     # 成立以来收益率 SYL_LN
     product_rank: float = 0.0            # 产品排名 PRODUCT_RANK
-    update_time: str = ''                # 更新时间 EUTIME
-    
+    update_date: str = ''                # 更新日期 update_date
+    update_time: str = ''                # 更新时间 update_time
+    tracking_index: Optional[str] = None # 追踪指数（可选）
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'FundInvestmentIndicator':
         """从字典创建对象"""
@@ -25,25 +27,29 @@ class FundInvestmentIndicator:
             except (ValueError, TypeError):
                 return default
         
-        # 处理基金名称，去除字母
-        def process_fund_name(name: str) -> str:
-            if not name:
-                return ''
-            # 去除所有英文字母（大小写）
-            import re
-            result = re.sub(r'[A-Za-z]', '', name)
-            print(f'PROCESS_FUND_NAME: {name} -> {result}')
-            return result
-                
+        # 支持小写和API大写键
+        fund_code = data.get('fund_code') or data.get('FCODE', '')
+        fund_name = data.get('fund_name') or data.get('SHORTNAME', '')
+        fund_type = data.get('fund_type') or data.get('RSFUNDTYPE', '')
+        fund_sub_type = data.get('fund_sub_type') or data.get('RSBTYPE', '')
+        one_year_return = safe_float(data.get('one_year_return') or data.get('SYL_1N'))
+        since_launch_return = safe_float(data.get('since_launch_return') or data.get('SYL_LN'))
+        product_rank = safe_float(data.get('product_rank') or data.get('PRODUCT_RANK'))
+        update_date = (data.get('update_date') or data.get('EUTIME', '').split(' ')[0])
+        update_time = data.get('update_time') or data.get('EUTIME', '')
+        tracking_index = data.get('tracking_index') or data.get('tracking_index', None)  # 假设API无此键，使用数据库的
+        
         return cls(
-            fund_code=data.get('FCODE', ''),
-            fund_name=data.get('SHORTNAME', ''),
-            fund_type=data.get('RSFUNDTYPE', ''),
-            fund_sub_type=data.get('RSBTYPE', ''),
-            one_year_return=safe_float(data.get('SYL_1N')),
-            since_launch_return=safe_float(data.get('SYL_LN')),
-            product_rank=safe_float(data.get('PRODUCT_RANK')),
-            update_time=data.get('EUTIME', '')
+            fund_code=fund_code,
+            fund_name=fund_name,
+            fund_type=fund_type,
+            fund_sub_type=fund_sub_type,
+            one_year_return=one_year_return,
+            since_launch_return=since_launch_return,
+            product_rank=product_rank,
+            update_date=update_date,
+            update_time=update_time,
+            tracking_index=tracking_index
         )
     
     def __str__(self) -> str:

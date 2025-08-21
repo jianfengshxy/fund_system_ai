@@ -36,7 +36,9 @@ from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.service.交易管理.赎回基金 import sell_0_fee_shares
 from src.service.交易管理.赎回基金 import sell_low_fee_shares
 from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
-from service.大数据.加仓风向标服务 import process_fund_investment_indicators
+from service.大数据.加仓风向标服务 import get_fund_investment_indicators
+from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
+
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
@@ -86,7 +88,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
     # 检查当前基金是否属于加仓基金列表，如果是则不执行止盈
     try:      
         # 获取加仓基金列表
-        addition_funds = process_fund_investment_indicators(user, page_size=20)
+        addition_funds = get_fund_investment_indicators()
         addition_fund_codes = {fund.fund_code for fund in addition_funds}
         
         if fund_code in addition_fund_codes:
@@ -117,7 +119,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             plan_assets = asset_detail.asset_value
             fund_type = fund_info.fund_type
             constant_profit_rate = asset_detail.constant_profit_rate  # 移除 * 100
-            logger.info(f"{fund_name}资产详情获取成功 - 资产价值: {plan_assets}, 收益率: {constant_profit_rate}%, 基金类型: {asset_detail.fund_type}")
+            logger.info(f"{fund_name}资产详情获取成功 - 资产价值: {asset_detail.asset_value}, 收益率: {constant_profit_rate}%, 估值增长率: {fund_info.estimated_change}%, 在途交易数: {asset_detail.on_way_transaction_count}")
         else:
             logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}资产为空。Skip ..........")
             return True
@@ -190,9 +192,18 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             
         # 获取活期宝银行卡列表
         logger.info("开始检查银行卡余额相关条件...")
-        bank_card_info = user.max_hqb_bank    
-        CurrentRealBalance = bank_card_info.CurrentRealBalance
-        logger.info(f"银行卡余额：{CurrentRealBalance}")
+        try:
+            asset_response = GetMyAssetMainPartAsync(user)
+            if asset_response.Success and asset_response.Data:
+                CurrentRealBalance = asset_response.Data.get('HqbValue', 0.0)
+                logger.info(f"从资产API获取HqbValue: {CurrentRealBalance}")
+            else:
+                raise Exception("资产API调用失败")
+        except Exception as e:
+            logger.warning(f"获取HqbValue失败，回退到原银行卡信息: {str(e)}")
+            bank_card_info = user.max_hqb_bank    
+            CurrentRealBalance = bank_card_info.CurrentRealBalance
+            logger.info(f"银行卡余额：{CurrentRealBalance}")
         
         #检查银行卡余额,小于30万，且收益大于1.0，立即卖出费率为0的份额
         if estimated_profit_rate > 1.0 and CurrentRealBalance < 1000000 and fund_type == '000' and fund_info.estimated_change != 0.0:

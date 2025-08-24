@@ -52,4 +52,32 @@ def get_low_fee_shares(user: User, fund_code: str) -> Optional[float]:
         if item["Rate"] != 1.5:
             total += item["AvailableVol"]
     return total
+
+def get_usable_non_zero_fee_shares(user: User, fund_code: str) -> Optional[float]:
+    """
+    查询基金的可用非零费率份额
+    :param user: 用户对象
+    :param fund_code: 基金代码
+    :return: 可用非零费率份额
+    """
+    result = getFee(user, fund_code)
+    if result is None or "RedeemShareAndRateList" not in result:
+        return 0.0
+
+    redeem_share_and_rate_list = result["RedeemShareAndRateList"]
+
+    # 计算总份额
+    total_shares = sum(item["AvailableVol"] for item in redeem_share_and_rate_list)
+
+    # 获取0费率份额
+    zero_fee_shares = get_0_fee_shares(user, fund_code)
+
+    # 计算非零费率份额
+    non_zero_fee_shares = total_shares - zero_fee_shares
+
+    # 获取低费率份额
+    low_fee_shares = get_low_fee_shares(user, fund_code)
+
+    # 返回最小值
+    return min(non_zero_fee_shares, low_fee_shares)
   

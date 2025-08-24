@@ -35,6 +35,7 @@ from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.service.交易管理.赎回基金 import sell_0_fee_shares
 from src.service.交易管理.赎回基金 import sell_low_fee_shares
+from src.service.交易管理.赎回基金 import sell_usable_non_zero_fee_shares
 from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
 from service.大数据.加仓风向标服务 import get_fund_investment_indicators
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
@@ -179,7 +180,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         #     return True       
         if asset_detail.fund_type == 'a' and estimated_profit_rate > 3.0:
             logger.info(f"{customer_name}的止盈操作开始：QDII基金{fund_name}{fund_code}预估收益{estimated_profit_rate},赎回0费率份额,实际止盈点:3.0")
-            sell_0_fee_shares(user,sub_account_no,fund_code,shares)
+            sell_usable_non_zero_fee_shares(user,sub_account_no,fund_code,shares)
         else:
             logger.info(f"QDII基金条件检查：资产基金类型{asset_detail.fund_type}，预估收益{estimated_profit_rate}")
 
@@ -208,7 +209,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         #检查银行卡余额,小于30万，且收益大于1.0，立即卖出费率为0的份额
         if estimated_profit_rate > 1.0 and CurrentRealBalance < 1000000 and fund_type == '000' and fund_info.estimated_change != 0.0:
             logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:1.0.")
-            sell_0_fee_shares(user,sub_account_no,fund_code,shares)
+            sell_usable_non_zero_fee_shares(user,sub_account_no,fund_code,shares)
             return True
         else:
             logger.info(f"指数基金余额条件检查：预估收益{estimated_profit_rate}，余额{CurrentRealBalance}，基金类型{fund_type}，估值变化{fund_info.estimated_change}")
@@ -216,7 +217,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         #检查银行卡余额,小于50万，且收益大于3.0，立即卖出费率为0的份额
         if estimated_profit_rate > 3.0 and CurrentRealBalance < 500000 and fund_type in ['001','002']:
             logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0.")
-            sell_0_fee_shares(user,sub_account_no,fund_code,shares)
+            sell_usable_non_zero_fee_shares(user,sub_account_no,fund_code,shares)
             return True
     logger.info("所有止盈条件都不满足，返回True")
     return True

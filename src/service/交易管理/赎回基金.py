@@ -29,7 +29,7 @@ from src.API.交易管理.sellMrg import super_transfer
 from src.API.交易管理.sellMrg import hqbMakeRedemption,SFT1Transfer
 from src.domain.trade.share import Share
 from decimal import Decimal, ROUND_HALF_UP
-from src.service.交易管理.费率查询 import get_0_fee_shares
+from src.service.交易管理.费率查询 import get_usable_non_zero_fee_shares
 import logging
 logger = logging.getLogger(__name__)
 
@@ -105,6 +105,43 @@ def sell_low_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:Lis
             else:
                 logger.error(f"{user.customer_name}普通赎回基金{fund_code}的银行卡份额失败")
                 result3 =  hqbMakeRedemption(user, sub_account_no, fund_code,amount,share.shareId)  
+                if result3 is not None and result3.status == 1:
+                    logger.info(f"{user.customer_name}普通赎回银行{fund_code}的银行卡份额成功")
+                    return result3
+                else:
+                    logger.error(f"{user.customer_name}普通赎回银行{fund_code}的银行卡份额失败")
+                    return result3
+
+def sell_usable_non_zero_fee_shares(user: User, sub_account_no: str, fund_code: str, shares: List[Share]):
+    """
+    赎回可用非零费率份额
+    :param user: 用户对象
+    :param sub_account_no: 子账户号
+    :param fund_code: 基金代码
+    :param shares: 份额列表
+    """
+    for share in shares:
+        usable_shares = get_usable_non_zero_fee_shares(user, fund_code)
+        amount = min(share.availableVol, usable_shares)
+
+        # 检查份额是否为0
+        if amount == 0.0:
+            logger.info(f"{user.customer_name}基金{fund_code}的份额为0，跳过赎回操作")
+            return
+
+        result1 = super_transfer(user, sub_account_no, fund_code, amount, share.shareId)
+        if result1 is not None and result1.status == 1:
+            logger.info(f"{user.customer_name}超级转换基金{fund_code}的银行卡份额{amount}成功")
+            return result1
+        else:
+            logger.error(f"{user.customer_name}超级转换基金{fund_code}的银行卡份额{amount}失败切换成普通赎回")
+            result2 = SFT1Transfer(user, sub_account_no, fund_code, amount, share.shareId)
+            if result2 is not None and result2.status == 1:
+                logger.info(f"{user.customer_name}普通赎回基金{fund_code}的银行卡份额成功")
+                return result2
+            else:
+                logger.error(f"{user.customer_name}普通赎回基金{fund_code}的银行卡份额失败")
+                result3 = hqbMakeRedemption(user, sub_account_no, fund_code, amount, share.shareId)
                 if result3 is not None and result3.status == 1:
                     logger.info(f"{user.customer_name}普通赎回银行{fund_code}的银行卡份额成功")
                     return result3

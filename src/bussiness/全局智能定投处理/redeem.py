@@ -226,3 +226,4 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
 if __name__ == "__main__":
     # 直接运行测试
     redeem_all_fund_plans(DEFAULT_USER)
+    

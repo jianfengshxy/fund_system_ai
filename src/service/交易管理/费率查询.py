@@ -79,5 +79,5 @@ def get_usable_non_zero_fee_shares(user: User, fund_code: str) -> Optional[float
     low_fee_shares = get_low_fee_shares(user, fund_code)
 
     # 返回最小值
-    return min(non_zero_fee_shares, low_fee_shares)
+    return min(non_zero_fee_shares, zero_fee_shares)
   

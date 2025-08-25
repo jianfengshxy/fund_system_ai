@@ -16,6 +16,8 @@ from src.common.constant import DEFAULT_USER
 from src.db.database_connection import DatabaseConnection
 from datetime import datetime
 from src.service.大数据.加仓风向标服务 import get_fund_investment_indicators
+from src.service.大数据.加仓风向标服务 import process_fund_investment_indicators  # 确保导入
+from src.db.fund_investment_indicator_repository_impl import FundInvestmentIndicatorRepositoryImpl  # 新增导入
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)d)')
@@ -25,16 +27,18 @@ def test_save_fund_investment_indicators_success():
     """测试 save_fund_investment_indicators 函数 - 成功案例，直接调用并验证数据库插入"""
     db = DatabaseConnection()
     # 先调用 process 获取预期数据
-    from src.service.大数据.加仓风向标服务 import process_fund_investment_indicators
     indicators = process_fund_investment_indicators(DEFAULT_USER)
     if not indicators:
         assert False, "无数据返回"
     update_time = indicators[0].update_time
     update_date = datetime.strptime(update_time, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d')
     # 清理指定日期的数据（可选，如果需要重置测试）
-    # db.execute_query("DELETE FROM fund_investment_indicators WHERE update_date = %s", (update_date,))
+    db.execute_query("DELETE FROM fund_investment_indicators WHERE update_date = %s", (update_date,))
     # 调用保存函数
-    save_fund_investment_indicators(DEFAULT_USER)
+    # save_fund_investment_indicators(DEFAULT_USER)  # 注释掉原调用，避免第二次 process
+    # 直接使用仓库保存，以确保使用相同的 indicators
+    repo = FundInvestmentIndicatorRepositoryImpl()
+    repo.save_investment_indicators(indicators, update_date)
     # 验证
     results = db.execute_query("SELECT COUNT(*) FROM fund_investment_indicators WHERE update_date = %s", (update_date,))
     count = results[0]['COUNT(*)'] if results else 0

@@ -117,6 +117,8 @@ def redeem_all_users():
             continue
 
 # 止盈算法实现
+from service.大数据.加仓风向标服务 import get_fund_investment_indicators
+
 def redeem(user: User, sub_account_name:str = "最优止盈") -> bool:
     """最优止盈算法实现：
     1. 获取用户的指定组合sub_account_name的基金资产
@@ -153,6 +155,21 @@ def redeem(user: User, sub_account_name:str = "最优止盈") -> bool:
         available_vol = asset_detail.available_vol  
         fund_info = get_all_fund_info(user,fund_code)
         volatility = fund_info.volatility
+
+        # 新增：检查当前基金是否属于加仓基金列表，如果是则跳过止盈
+        try:      
+            # 获取加仓基金列表
+            addition_funds = get_fund_investment_indicators()
+            addition_fund_codes = {fund.fund_code for fund in addition_funds}
+            
+            if fund_code in addition_fund_codes:
+                logger.info(f"基金{fund_name}({fund_code})属于加仓风向标基金，跳过止盈操作")
+                continue
+            else:
+                logger.info(f"基金{fund_name}({fund_code})不属于加仓风向标基金，继续执行止盈判断")
+                
+        except Exception as e:
+            logger.warning(f"获取加仓基金列表失败，继续执行止盈判断: {str(e)}")
 
         stop_profit_rate = min(volatility * 100, 5.0) if fund_info.estimated_change != 0.0 else 5.0
         # 处理固定收益率

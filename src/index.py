@@ -4,9 +4,9 @@ from zoneinfo import ZoneInfo
 import sys
 import logging
 import urllib3  # 添加对 urllib3 的导入
-from src.bussiness.最优止盈组合.redeem import redeem_all_users
-from src.bussiness.最优止盈组合.increase import increase_all_users
-from src.bussiness.最优止盈组合.add_new import add_new_all_users
+from bussiness.最优止盈组合.redeem import redeem_all_users
+from bussiness.最优止盈组合.increase import increase_all_users
+from bussiness.最优止盈组合.add_new import add_new_all_users
 # 禁用 urllib3 的警告信息
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -14,21 +14,21 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 sys.path.append('src')
 
 # 导入需要的变量和函数
-from src.common.constant import SERVER_VERSION, PASSPORT_CTOKEN
-from src.common.constant import DEFAULT_USER
-from src.bussiness.全局智能定投处理.increase import increase_all_fund_plans
-from src.bussiness.全局智能定投处理.redeem import redeem_all_fund_plans
-from src.bussiness.全局智能定投处理.dissolve_plan import dissolve_daily_plan
+from common.constant import SERVER_VERSION, PASSPORT_CTOKEN
+from common.constant import DEFAULT_USER
+from bussiness.全局智能定投处理.increase import increase_all_fund_plans
+from bussiness.全局智能定投处理.redeem import redeem_all_fund_plans
+from bussiness.全局智能定投处理.dissolve_plan import dissolve_daily_plan
 # 添加 add_plan 函数的导入
-from src.bussiness.全局智能定投处理.add_plan import add_plan
+from bussiness.全局智能定投处理.add_plan import add_plan
 # 添加组合定投管理函数的导入
-from src.bussiness.组合定投.指数型组合定投管理 import create_plan_by_group_for_index_funds,dissolve_plan_by_group_for_index_funds
-from src.domain.user.User import User
-from src.common.constant import DEFAULT_USER, DEFAULT_FUND_PLAN_DETAIL
+from bussiness.组合定投.指数型组合定投管理 import create_plan_by_group_for_index_funds,dissolve_plan_by_group_for_index_funds
+from domain.user.User import User
+from common.constant import DEFAULT_USER, DEFAULT_FUND_PLAN_DETAIL
 
 # 在现有导入语句后添加
-from src.bussiness.组合定投.主动型组合定投管理 import create_plan_by_group, dissolve_plan_by_group
-from src.service.大数据.加仓风向标服务 import save_fund_investment_indicators
+from bussiness.组合定投.主动型组合定投管理 import create_plan_by_group, dissolve_plan_by_group
+from service.大数据.加仓风向标服务 import save_fund_investment_indicators
 
 # 初始化日志记录器
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

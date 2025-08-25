@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def test_increase():
     logger.info("开始测试 increase 函数")
     
-    plan_id = '06d2d10bf2cd4b9d91b8880155294bfd'
+    plan_id = '9e734772aa664c52b1564647bed84b5b'
     
     # 调用函数进行加仓测试
     detail_response = getPlanDetailPro(plan_id, DEFAULT_USER)

@@ -120,13 +120,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     estimated_profit_rate = current_profit_rate + estimated_change
     
     logger.info(f"收益率计算 - 当前收益率: {current_profit_rate}%, 估值增长率: {estimated_change}%, 预估收益率: {estimated_profit_rate}%")
-            
-    logger.info(f"当前计划:{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}的周期类型{period_type},period_type:{period_value},当前月的值:{day_of_month},当前资产:{plan_assets},计划类型:{plan_type}")
-    if times <= 1.0 and times > 0.0:
-            logger.info(f"首次定投判定：资产价值为{plan_assets}，定投金额为{fund_amount}，满足首次定投条件，跳过本次操作。")
-            logger.info(f"组合{sub_account_no}，基金{fund_name}({fund_code})资产{plan_assets}，首次定投已处理，跳过。")
-            return True    
-    #判断是否是月定投延期交易
+      #判断是否是月定投延期交易
     if period_type == 3 and  period_value != day_of_month: 
         logger.info(f"月定投延期检查 - 计划执行日期: {period_value}, 当前日期: {day_of_month}, 不匹配，执行回撤")
         #回撤所有交易   
@@ -139,7 +133,13 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                 logger.error(f"交易回撤失败: {e}")
         logger.info(f"{customer_name}的组合{sub_account_name}{fund_name}的月延期交易{day_of_month},撤回所有交易。")
         return  True
-        
+                  
+    logger.info(f"当前计划:{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}的周期类型{period_type},period_type:{period_value},当前月的值:{day_of_month},当前资产:{plan_assets},计划类型:{plan_type}")
+    if times <= 1.0 and times > 0.0:
+            logger.info(f"首次定投判定：资产价值为{plan_assets}，定投金额为{fund_amount}，满足首次定投条件，跳过本次操作。")
+            logger.info(f"组合{sub_account_no}，基金{fund_name}({fund_code})资产{plan_assets}，首次定投已处理，跳过。")
+            return True    
+
     #判断是否是周定投延期交易
     if period_type == 1 and  period_value != day_of_week_number + 1:
         logger.info(f"周定投延期检查 - 计划执行星期: {period_value}, 当前星期: {day_of_week_number + 1}, 不匹配，执行回撤")

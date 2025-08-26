@@ -129,7 +129,7 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
                         print(f"  ... 还有 {len(asset_details) - 5} 只基金")
                 
                 # 新增判断：如果持有的基金个数大于20，则跳过新增定投计划和买入
-                if len(asset_details) > 20:
+                if len(asset_details) > 50:
                     print(f"组合 '{sub_account_name}' 持有的基金数量已超过20个 ({len(asset_details)} 个)，跳过新增定投计划和买入操作")
                     return
             else:

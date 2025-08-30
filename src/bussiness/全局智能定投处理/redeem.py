@@ -180,7 +180,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         #     return True       
         if asset_detail.fund_type == 'a' and estimated_profit_rate > 3.0:
             logger.info(f"{customer_name}的止盈操作开始：QDII基金{fund_name}{fund_code}预估收益{estimated_profit_rate},赎回0费率份额,实际止盈点:3.0")
-            sell_usable_non_zero_fee_shares(user,sub_account_no,fund_code,shares)
+            sell_0_fee_shares(user,sub_account_no,fund_code,shares)
         else:
             logger.info(f"QDII基金条件检查：资产基金类型{asset_detail.fund_type}，预估收益{estimated_profit_rate}")
 

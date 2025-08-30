@@ -16,7 +16,7 @@ from src.db.fund_investment_indicator_repository_impl import FundInvestmentIndic
 from datetime import datetime
 
 
-def process_fund_investment_indicators(user, page_size=20) -> List[FundInvestmentIndicator]:
+def process_fund_investment_indicators(user, page_size=50) -> List[FundInvestmentIndicator]:
     """
     处理基金投资指标数据，按规则过滤并返回结果
     

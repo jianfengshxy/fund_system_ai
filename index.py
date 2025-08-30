@@ -28,6 +28,7 @@ from src.common.constant import DEFAULT_USER, DEFAULT_FUND_PLAN_DETAIL
 
 # 在现有导入语句后添加
 from src.bussiness.组合定投.主动型组合定投管理 import create_plan_by_group, dissolve_plan_by_group
+from src.bussiness.组合定投.increase import increase as portfolio_increase  # 新增导入
 from src.service.大数据.加仓风向标服务 import save_fund_investment_indicators
 
 # 初始化日志记录器
@@ -41,6 +42,7 @@ def redeem(event, context):
 def increase(event, context):
     increase_all_fund_plans(DEFAULT_USER)
     increase_all_users()
+    portfolio_increase(DEFAULT_USER, "低风险组合",50000.0)  # 新增调用
 
 def create_period_smart_investment(event, context):   
     # add_plan(DEFAULT_USER, 3000)
@@ -72,7 +74,8 @@ def sync_fund_investment_indicators(event, context):
 
 if __name__ == "__main__":
     # 根据需要调用 redeem 或 increase 函数
-    sync_fund_investment_indicators(None, None)
+    # sync_fund_investment_indicators(None, None)
+    increase(None, None)
     # redeem(None, None)
     # create_period_smart_investment(None, None)
     # dissolve_period_smart_investment(None, None)

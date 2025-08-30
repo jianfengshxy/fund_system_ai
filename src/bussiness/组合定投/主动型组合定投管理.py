@@ -489,7 +489,7 @@ def dissolve_plan_by_group(user: User, sub_account_name: str, budget: float):
         
         # 3. 检查资产配置条件(组合的总资产大于70%)
         print("步骤3: 检查资产配置条件...")
-        budget_threshold = budget * 1.0  # 70%预算阈值
+        budget_threshold = budget * 0.1  # 70%预算阈值
         print(f"预算阈值 (100%): {budget_threshold:,.2f} 元")
         
         if current_asset_value <= budget_threshold:

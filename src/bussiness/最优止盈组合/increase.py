@@ -133,7 +133,7 @@ def increase_all_users():
             logger.error(f"处理用户 {name} 失败，错误信息：{str(e)}")
             continue
 
-# 止盈算法实现
+# 加仓算法实现
 def increase(user: User, sub_account_name:str = "最优止盈") -> bool:
     """最优止盈算法实现：
     1. 获取用户的指定组合sub_account_name的基金资产

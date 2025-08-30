@@ -2,6 +2,7 @@ import logging
 import sys
 import os
 import logging
+from types import NoneType
 from typing import List, Optional, Set
 from concurrent.futures import ThreadPoolExecutor
 
@@ -25,8 +26,9 @@ from src.domain.fund.fund_info import FundInfo
 from src.domain.asset.asset_details import AssetDetails
 from src.service.定投管理.组合定投.组合定投管理 import create_period_investment_by_group
 from src.service.用户管理.用户信息 import get_user_all_info
-from service.大数据.加仓风向标服务 import get_fund_investment_indicators
-
+from src.service.大数据.加仓风向标服务 import get_fund_investment_indicators
+from src.service.加仓风向标组合算法.加仓风向标新增 import add_new_funds as service_add_new_funds
+from src.common.constant import DEFAULT_USER  # 添加导入，如果需要
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -64,254 +66,29 @@ user_list = [
     ("13817533699", "demone40","demone40","东岳亮","最优止盈",150000.0)
 ]
 
-def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budget: float = 10000.0) -> bool:
+def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budget: float = 10000.0, amount: Optional[float] = None, fund_type: str = 'all') -> bool:
     """
-    新增基金算法实现：
-    1. 获取用户组合中的所有基金
-    2. 判断用户所有的基金数量是否大于等于50，如果是，直接退出
-    3. 获取加仓风向标数据
-    4. 筛选出用户未持有的基金或指数基金
-    5. 执行买入操作
-    
-    Args:
-        user: 用户对象
-        sub_account_name: 组合名称，默认为"最优止盈"
-        total_budget: 总预算金额，默认10000元
-    
-    Returns:
-        bool: 操作是否成功
+    新增基金算法：调用服务层实现
     """
     logger.info(f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{total_budget}元")
-    
-    # 使用increase.py的公式计算每个基金的购买金额
-    fund_num = 5  #每天购买的基金个数
-    day_amount = round(total_budget * 8 / 250, 2)
-    budget_per_fund = round(day_amount / fund_num, 2)
-    logger.info(f"计算得出单个基金购买金额：{budget_per_fund}元")
-    
-    customer_name = user.customer_name
-    logger.info(f"========== 开始执行新增基金算法 ===========")
-    logger.info(f"用户: {customer_name}")
-    logger.info(f"组合名称: {sub_account_name}")
-    logger.info(f"每个基金预算: {budget_per_fund}元")
-    
-    try:
-        # 步骤1: 获取用户对应组合里面所有的基金
-        logger.info("=== 步骤1: 获取用户组合中的所有基金 ===")
-        user_assets = get_sub_account_asset_by_name(user, sub_account_name)
-        if user_assets is None:
-            logger.error(f"获取用户组合 {sub_account_name} 资产失败")
-            return False
-        
-        # 提取用户持有的基金代码和跟踪指数
-        user_fund_codes = set()
-        user_index_codes = set()
-        
-        logger.info(f"用户组合中共有 {len(user_assets)} 个基金")
-        for i, asset in enumerate(user_assets, 1):
-            user_fund_codes.add(asset.fund_code)
-            logger.info(f"  持有基金{i}: {asset.fund_name}({asset.fund_code}) - 份额:{asset.available_vol}")
-            
-            # 如果是指数基金，获取跟踪指数
-            try:
-                fund_info = get_all_fund_info(user, asset.fund_code)
-                if fund_info and hasattr(fund_info, 'fund_type') and fund_info.fund_type == "000":
-                    if hasattr(fund_info, 'index_code') and fund_info.index_code:
-                        user_index_codes.add(fund_info.index_code)
-                        logger.info(f"    指数基金跟踪指数: {fund_info.index_code}")
-            except Exception as e:
-                logger.warning(f"获取基金 {asset.fund_code} 详细信息失败: {e}")
-        
-        logger.info(f"用户持有基金代码: {user_fund_codes}")
-        logger.info(f"用户持有指数基金跟踪的指数: {user_index_codes}")
-        
-        # 步骤2: 判断用户所有的基金数量是否大于等于50
-        logger.info("=== 步骤2: 检查用户基金数量限制 ===")
-        if len(user_assets) >= 50:
-            logger.info(f"用户 {customer_name} 的基金数量已达到50个，无需新增基金，退出操作")
-            return True
-        
-        logger.info(f"用户当前基金数量: {len(user_assets)}，可以继续新增基金")
-        
-        # 步骤3: 获取加仓风向标数据
-        logger.info("=== 步骤3: 获取加仓风向标数据 ===")
-        wind_vane_funds = get_fund_investment_indicators()
-        if not wind_vane_funds:
-            logger.error("获取加仓风向标数据失败")
-            return False
-        
-        logger.info(f"获取到 {len(wind_vane_funds)} 个加仓风向标基金")
-        for i, fund in enumerate(wind_vane_funds, 1):
-            logger.info(f"  风向标基金{i}: {fund.fund_name}({fund.fund_code}) - 类型:{fund.fund_type} - 排名:{fund.product_rank}")
-        
-        # 步骤4: 检查用户预算
-        logger.info("=== 步骤4: 检查用户可用资金 ===")
-        bank_card = user.max_hqb_bank
-        available_balance = bank_card.CurrentRealBalance
-        logger.info(f"用户可用余额: {available_balance}元")
-        
-        if available_balance < budget_per_fund:
-            logger.warning(f"用户可用余额 {available_balance}元 小于单个基金预算 {budget_per_fund}元")
-            budget_per_fund = min(available_balance * 0.8, budget_per_fund)  # 使用80%的可用余额
-            logger.info(f"调整单个基金预算为: {budget_per_fund}元")
-        
-        # 获取组合账号
-        sub_account_no = getSubAccountNoByName(user, sub_account_name)
-        if not sub_account_no:
-            logger.error(f"未找到组合名称 {sub_account_name} 对应的组合账号")
-            return False
-        
-        logger.info(f"组合账号: {sub_account_no}")
-        
-        # 步骤5: 筛选需要买入的基金
-        logger.info("=== 步骤5: 筛选需要买入的基金 ===")
-        funds_to_buy = []
-        
-        for fund in wind_vane_funds:
-            should_buy = False
-            reason = ""
-            
-            # 检查基金是否已在用户组合中
-            if fund.fund_code in user_fund_codes:
-                logger.info(f"跳过基金 {fund.fund_name}({fund.fund_code}): 用户已持有")
-                continue
-            
-            # 如果是指数基金（类型000），检查跟踪指数是否重复
-            if fund.fund_type == "000":
-                try:
-                    fund_info = get_all_fund_info(user, fund.fund_code)
-                    if fund_info and hasattr(fund_info, 'index_code') and fund_info.index_code:
-                        if fund_info.index_code in user_index_codes:
-                            logger.info(f"跳过指数基金 {fund.fund_name}({fund.fund_code}): 用户已持有跟踪相同指数({fund_info.index_code})的基金")
-                            continue
-                        else:
-                            should_buy = True
-                            reason = f"指数基金，跟踪指数 {fund_info.index_code} 用户未持有"
-                    else:
-                        should_buy = True
-                        reason = "指数基金，无法获取跟踪指数信息，但用户未持有该基金"
-                except Exception as e:
-                    logger.warning(f"获取指数基金 {fund.fund_code} 详细信息失败: {e}")
-                    should_buy = True
-                    reason = "指数基金，获取详细信息失败，但用户未持有该基金"
-            else:
-                # 非指数基金，直接买入
-                should_buy = True
-                reason = f"非指数基金（类型:{fund.fund_type}），用户未持有"
-            
-            if should_buy:
-                funds_to_buy.append(fund)
-                logger.info(f"选择买入基金: {fund.fund_name}({fund.fund_code}) - 原因: {reason}")
-        
-        if not funds_to_buy:
-            logger.info("没有需要买入的新基金")
-            return True
-        
-        logger.info(f"共选择 {len(funds_to_buy)} 个基金进行买入")
-        
-        # 执行买入操作
-        logger.info("=== 开始执行买入操作 ===")
-        success_count = 0
-        
-        for i, fund in enumerate(funds_to_buy, 1):
-            logger.info(f"正在买入第 {i}/{len(funds_to_buy)} 个基金: {fund.fund_name}({fund.fund_code})")
-            
-            try:
-                # 检查基金是否可申购
-                fund_info = get_all_fund_info(user, fund.fund_code)
-                if fund_info and hasattr(fund_info, 'can_purchase') and not fund_info.can_purchase:
-                    logger.warning(f"基金 {fund.fund_name}({fund.fund_code}) 当前不可申购，跳过")
-                    continue
-                
-                # 执行买入
-                trade_result = commit_order(user, sub_account_no, fund.fund_code, budget_per_fund)
-                
-                if trade_result:
-                    logger.info(f"买入成功: {fund.fund_name}({fund.fund_code}) - 金额: {budget_per_fund}元 - 订单号: {trade_result.busin_serial_no}")
-                    # 买入成功后为该基金创建定投计划，参考主动型组合定投管理实现
-                    try:
-                        period_type = 4  # 日定投
-                        period_value = 1
-                        plan_result = create_period_investment_by_group(
-                            user=user,
-                            fund_code=fund.fund_code,
-                            amount=int(budget_per_fund),
-                            period_type=period_type,
-                            period_value=period_value,
-                            sub_account_name=sub_account_name
-                        )
-                        logger.info(f"plan_result: {plan_result}")
-                        if plan_result:
-                            logger.info(f"定投创建成功: {fund.fund_name}({fund.fund_code}) - 金额: {budget_per_fund}元")
-                        else:
-                            logger.warning(f"定投创建失败或已存在: {fund.fund_name}({fund.fund_code})")
-                        
-                    except Exception as e:
-                        logger.error(f"为基金 {fund.fund_name}({fund.fund_code}) 创建定投时异常: {e}")
-                    success_count += 1
-                else:
-                    logger.error(f"买入失败: {fund.fund_name}({fund.fund_code})")
-                    
-            except Exception as e:
-                logger.error(f"买入基金 {fund.fund_name}({fund.fund_code}) 时发生异常: {e}")
-        
-        logger.info(f"=== 新增基金操作完成 ===")
-        logger.info(f"成功买入 {success_count}/{len(funds_to_buy)} 个基金")
-        
-        return success_count > 0
-        
-    except Exception as e:
-        logger.error(f"新增基金算法执行失败: {e}")
-        import traceback
-        logger.error(f"异常堆栈: {traceback.format_exc()}")
-        return False
 
-def add_new_all_users():
-    """为所有用户执行新增基金操作"""
-    for user_info in user_list:
-        account = user_info[0]
-        password = user_info[1]
-        pay_password = user_info[2]
-        customer_name = user_info[3]
-        sub_account_name = user_info[4]
-        total_budget = user_info[5]
-        
-        try:
-            # 获取用户完整信息
-            user = get_user_all_info(account, password)
-            if not user:
-                logging.error(f"获取用户 {customer_name} 信息失败")
-                continue
-            user.pay_password = pay_password
-            user.budget = total_budget
-            logging.info(f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{total_budget}元")
-            
-            # 执行新增基金操作
-            add_new_funds(user, sub_account_name, total_budget)
-            
-            logging.info(f"用户 {user.customer_name} 新增基金操作完成")
-            
-        except Exception as e:
-            logging.error(f"处理用户 {customer_name} 失败，错误信息：{str(e)}")
-            continue
+    # 调用服务层函数
+    success = service_add_new_funds(user, sub_account_name, total_budget, amount, fund_type)  # 修改为调用服务层函数
+    
+    if success:
+        logger.info(f"用户 {user.customer_name} 新增基金操作成功")
+    else:
+        logger.error(f"用户 {user.customer_name} 新增基金操作失败")
+    
+    return success
 
 if __name__ == "__main__":
-    # 测试单个用户的新增基金流程
+    # 测试 amount 不传的情况
     try:
-        # 获取用户完整信息
-        user = get_user_all_info("13500819290", "guojing1985")
-        if not user:
-            logging.error("获取测试用户信息失败")
+        success = add_new_funds(DEFAULT_USER, "低风险组合", 1000000.0,fund_type='index')  # amount 不传，使用 None
+        if success:
+            logging.info("测试成功（amount 未传）")
         else:
-            user.pay_password = "guojing1985"
-            user.budget = 200000
-            logging.info(f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{user.budget}元")
-                
-            # 执行新增基金操作
-            add_new_funds(user, "最优止盈", user.budget)
-                
-            logging.info(f"用户 {user.customer_name} 新增基金操作完成")
-
+            logging.info("测试失败（amount 未传）")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")
-        

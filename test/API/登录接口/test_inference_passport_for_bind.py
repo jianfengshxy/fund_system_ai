@@ -1,7 +1,7 @@
 import pytest
 import requests
 from unittest.mock import patch, MagicMock
-from API.登录接口.login import inference_passport_for_bind, login
+from src.API.登录接口.login import inference_passport_for_bind, login
 from domain.user.User import User  # 修改这行，直接从User.py导入User类
 from common.constant import DEFAULT_USER
 

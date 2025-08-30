@@ -37,7 +37,7 @@ from src.service.交易管理.赎回基金 import sell_0_fee_shares
 from src.service.交易管理.赎回基金 import sell_low_fee_shares
 from src.service.交易管理.赎回基金 import sell_usable_non_zero_fee_shares
 from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
-from service.大数据.加仓风向标服务 import get_fund_investment_indicators
+from src.service.大数据.加仓风向标服务 import get_fund_investment_indicators
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 
 logging.basicConfig(

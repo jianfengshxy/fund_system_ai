@@ -7,10 +7,10 @@ from typing import List, Dict, Any, Optional
 # 添加项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from domain.fund_plan import ApiResponse
-from domain.fund.fund_investment_indicator import FundInvestmentIndicator
-from service.基金信息.基金信息 import get_all_fund_info
-from API.大数据.加仓风向标 import getFundInvestmentIndicators as getBasicFundInvestmentIndicators
+from src.domain.fund_plan import ApiResponse
+from src.domain.fund.fund_investment_indicator import FundInvestmentIndicator
+from src.service.基金信息.基金信息 import get_all_fund_info
+from src.API.大数据.加仓风向标 import getFundInvestmentIndicators as getBasicFundInvestmentIndicators
 from src.db.fund_repository_impl import FundRepositoryImpl
 from src.db.fund_investment_indicator_repository_impl import FundInvestmentIndicatorRepositoryImpl
 from datetime import datetime

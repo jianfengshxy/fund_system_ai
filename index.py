@@ -4,9 +4,7 @@ from zoneinfo import ZoneInfo
 import sys
 import logging
 import urllib3  # 添加对 urllib3 的导入
-from src.bussiness.最优止盈组合.redeem import redeem_all_users
-from src.bussiness.最优止盈组合.increase import increase_all_users
-from src.bussiness.最优止盈组合.add_new import add_new_all_users
+from src.common.fc_event import parse_fc_event  # 局部导入，避免额外修改导入区
 # 禁用 urllib3 的警告信息
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -30,19 +28,90 @@ from src.common.constant import DEFAULT_USER, DEFAULT_FUND_PLAN_DETAIL
 from src.bussiness.组合定投.主动型组合定投管理 import create_plan_by_group, dissolve_plan_by_group
 from src.bussiness.组合定投.increase import increase as portfolio_increase  # 新增导入
 from src.service.大数据.加仓风向标服务 import save_fund_investment_indicators
+import json
+
+# 新增导入 get_user_all_info
+from src.service.用户管理.用户信息 import get_user_all_info
+
+# 新增导入 add_new_funds
+from src.bussiness.最优止盈组合.add_new import add_new_funds as add_new_biz
+# 新增：导入 bussiness 层的加仓薄封装（避免命名冲突，使用别名）
+from src.bussiness.最优止盈组合.increase import increase as increase_biz
+# 新增：导入 bussiness 层的止盈薄封装
+from src.bussiness.最优止盈组合.redeem import redeem as redeem_biz
 
 # 初始化日志记录器
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 def redeem(event, context):
-    redeem_all_fund_plans(DEFAULT_USER)
-    result = redeem_all_users()
+    try:
+        evt, payload = parse_fc_event(event)
+
+        # 提取参数（与 add_new/increase 的风格保持一致）
+        account = payload.get('account')
+        password = payload.get('password')
+        sub_account_name = payload.get('sub_account_name')
+        total_budget = payload.get('total_budget')
+
+        # 校验
+        if not all([account, password, sub_account_name]):
+            logger.error("Payload缺少必填参数: account, password, sub_account_name")
+            return
+
+        # 获取用户对象
+        user = get_user_all_info(account, password)
+        if not user:
+            logger.error(f"获取用户 {account} 信息失败")
+            return
+
+        logger.info(f"开始为用户 {user.customer_name} 执行止盈操作，组合：{sub_account_name}，预算：{total_budget}")
+
+        # 委托业务层薄封装
+        success = redeem_biz(user, sub_account_name, total_budget)
+
+        if success:
+            logger.info(f"用户 {user.customer_name} 止盈操作成功")
+        else:
+            logger.error(f"用户 {user.customer_name} 止盈操作失败")
+
+    except Exception as e:
+        logger.error(f"执行止盈时发生异常: {e}")
 
 def increase(event, context):
-    increase_all_fund_plans(DEFAULT_USER)
-    increase_all_users()
-    portfolio_increase(DEFAULT_USER, "低风险组合",50000.0)  # 新增调用
+    try:
+        evt, payload = parse_fc_event(event)
+
+        # 提取参数（与 add_new 一致的方式）
+        account = payload.get('account')
+        password = payload.get('password')
+        sub_account_name = payload.get('sub_account_name')
+        total_budget = payload.get('total_budget')  
+        amount = payload.get('amount')              # Optional
+        fund_type = payload.get('fund_type', 'all')
+
+        # 校验
+        if not all([account, password, sub_account_name,total_budget]):
+            logger.error("Payload缺少必填参数: account, password, sub_account_name 或 total_budget")
+            return
+
+        # 获取用户对象
+        user = get_user_all_info(account, password)
+        if not user:
+            logger.error(f"获取用户 {account} 信息失败")
+
+        logger.info(f"开始为用户 {user.customer_name} 执行加仓操作，组合：{sub_account_name}，预算：{total_budget}，amount：{amount}，fund_type：{fund_type}")
+
+        # 业务调用（与 add_new 的调用风格一致）
+        success = increase_biz(user, sub_account_name, total_budget, amount, fund_type)
+
+        if success:
+            logger.info(f"用户 {user.customer_name} 加仓操作成功")
+        else:
+            logger.error(f"用户 {user.customer_name} 加仓操作失败")
+
+    except Exception as e:
+        logger.error(f"执行加仓时发生异常: {e}")
 
 def create_period_smart_investment(event, context):   
     # add_plan(DEFAULT_USER, 3000)
@@ -54,9 +123,39 @@ def dissolve_period_smart_investment(event, context):
     dissolve_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0)
     pass
 
-def add_new(event, context):          
-    add_new_all_users()
-    pass
+#加仓风向标的新增基金调用
+def add_new(event, context):
+    try:
+
+        evt, payload = parse_fc_event(event)
+
+        # 提取参数
+        account = payload.get('account')
+        password = payload.get('password')
+        sub_account_name = payload.get('sub_account_name')
+        total_budget = payload.get('total_budget')
+        amount = payload.get('amount')  # Optional
+        fund_type = payload.get('fund_type', 'all')
+
+        # 校验
+        if not all([account, password, sub_account_name, total_budget]):
+            logger.error("Payload缺少必填参数: account, password, sub_account_name 或 total_budget")
+            return
+
+        # 获取用户对象
+        user = get_user_all_info(account, password)
+        if not user:
+            logger.error(f"获取用户 {account} 信息失败")
+            return
+
+        logger.info(f"开始为用户 {user.customer_name} 执行新增基金操作")
+
+        # 业务调用（改为与 add_new 一致的参数风格）
+        success = add_new_biz(user, sub_account_name, total_budget, amount, fund_type)
+
+    except Exception as e:
+        logger.error(f"add_new 函数执行错误: {str(e)}")
+        return
 
 def create_period_index_investment(event, context):
     """创建指数型基金定投计划"""
@@ -75,8 +174,9 @@ def sync_fund_investment_indicators(event, context):
 if __name__ == "__main__":
     # 根据需要调用 redeem 或 increase 函数
     # sync_fund_investment_indicators(None, None)
-    increase(None, None)
+    # increase(None, None)
     # redeem(None, None)
     # create_period_smart_investment(None, None)
     # dissolve_period_smart_investment(None, None)
     # create_period_smart_investment(None, None)
+    pass

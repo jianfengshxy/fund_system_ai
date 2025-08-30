@@ -12,8 +12,8 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-from common.constant import DEFAULT_USER
-from API.资产管理.AssetManager import GetMyAssetMainPartAsync
+from src.common.constant import DEFAULT_USER
+from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 
 @pytest.fixture
 def mock_response():

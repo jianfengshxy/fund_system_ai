@@ -1,5 +1,12 @@
+# 模块顶层
 import os
 import sys
+
+# 将项目根目录加入到 sys.path，确保可以 import src.**
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 import logging
 import re
 from typing import List, Dict, Any, Optional

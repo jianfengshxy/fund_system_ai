@@ -14,8 +14,9 @@ sys.path.append('src')
 # 导入需要的变量和函数
 from src.common.constant import SERVER_VERSION, PASSPORT_CTOKEN
 from src.common.constant import DEFAULT_USER
-from src.bussiness.全局智能定投处理.increase import increase_all_fund_plans
-from src.bussiness.全局智能定投处理.redeem import redeem_all_fund_plans
+# 将业务层导入改为带别名，避免与下方同名包装函数冲突
+from src.bussiness.全局智能定投处理.increase import increase_all_fund_plans as increase_all_fund_plans_biz
+from src.bussiness.全局智能定投处理.redeem import redeem_all_fund_plans as redeem_all_fund_plans_biz
 from src.bussiness.全局智能定投处理.dissolve_plan import dissolve_daily_plan
 # 添加 add_plan 函数的导入
 from src.bussiness.全局智能定投处理.add_plan import add_plan
@@ -113,16 +114,6 @@ def increase(event, context):
     except Exception as e:
         logger.error(f"执行加仓时发生异常: {e}")
 
-def create_period_smart_investment(event, context):   
-    # add_plan(DEFAULT_USER, 3000)
-    create_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0,50000.0)
-    pass
-
-def dissolve_period_smart_investment(event, context):          
-    # dissolve_daily_plan(DEFAULT_USER)
-    dissolve_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0)
-    pass
-
 #加仓风向标的新增基金调用
 def add_new(event, context):
     try:
@@ -157,6 +148,20 @@ def add_new(event, context):
         logger.error(f"add_new 函数执行错误: {str(e)}")
         return
 
+def increase_all_fund_plans(event, context):
+    """为所有基金定投计划执行加仓"""
+    increase_all_fund_plans_biz(DEFAULT_USER)
+    pass
+
+def redeem_all_fund_plans(event, context):
+    """为所有基金定投计划执行止盈"""
+    redeem_all_fund_plans_biz(DEFAULT_USER)
+    pass
+
+def sync_fund_investment_indicators(event, context):
+    save_fund_investment_indicators(DEFAULT_USER)
+    logger.info("同步加仓数据完成")
+
 def create_period_index_investment(event, context):
     """创建指数型基金定投计划"""
     create_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 200000.0, 10000.0)
@@ -167,13 +172,21 @@ def dissolve_period_index_investment(event, context):
     dissolve_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 1000000.0)
     pass
 
-def sync_fund_investment_indicators(event, context):
-    save_fund_investment_indicators(DEFAULT_USER)
-    logger.info("同步加仓数据完成")
+def create_period_smart_investment(event, context):   
+    # add_plan(DEFAULT_USER, 3000)
+    create_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0,50000.0)
+    pass
+
+def dissolve_period_smart_investment(event, context):          
+    # dissolve_daily_plan(DEFAULT_USER)
+    dissolve_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0)
+    pass
 
 if __name__ == "__main__":
     # 根据需要调用 redeem 或 increase 函数
     # sync_fund_investment_indicators(None, None)
+    increase_all_fund_plans(None, None)
+    redeem_all_fund_plans(None, None)
     # increase(None, None)
     # redeem(None, None)
     # create_period_smart_investment(None, None)

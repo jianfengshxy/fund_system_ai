@@ -527,3 +527,85 @@ resources:
           payload: '{"account": "13817533699","password": "demone40","sub_account_name": "最优止盈","total_budget": 150000.0}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
+
+sync_investment_indicators:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.sync_fund_investment_indicators"
+      functionName: "sync_investment_indicators"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "sync_investment_indicators_1430"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 30 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "sync_investment_indicators_2130"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 30 21 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+increase_all_fund_plans:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.increase_all_fund_plans"
+      functionName: "increase_all_fund_plans"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "increase_all_fund_plans"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 4 25 11 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+redeem_all_fund_plans:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.redeem_all_fund_plans"
+      functionName: "redeem_all_fund_plans"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "redeem_all_fund_plans"
+        triggerConfig:
+          payload: ${vars.common.props.triggerConfig.payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}

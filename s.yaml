@@ -143,28 +143,28 @@ resources:
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "add_new_15373193078_optimal_take_profit"
         triggerConfig:
-          payload: '{"account": "15373193078","password": "sy811123","sub_account_name": "最优止盈","total_budget": 50000.0,"fund_type": "all"}'
+          payload: '{"account": "15373193078","password": "sy811123","sub_account_name": "最优止盈","total_budget": 40000.0,"fund_type": "all"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "add_new_15936530625_optimal_take_profit"
         triggerConfig:
-          payload: '{"account": "15936530625","password": "wch601249697","sub_account_name": "最优止盈","total_budget": 50000.0,"fund_type": "all"}'
+          payload: '{"account": "15936530625","password": "wch601249697","sub_account_name": "最优止盈","total_budget": 40000.0,"fund_type": "all"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "add_new_18648900788_optimal_take_profit"
         triggerConfig:
-          payload: '{"account": "18648900788","password": "ldw88888","sub_account_name": "最优止盈","total_budget": 50000.0,"fund_type": "all"}'
+          payload: '{"account": "18648900788","password": "ldw88888","sub_account_name": "最优止盈","total_budget": 40000.0,"fund_type": "all"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "add_new_13426206037_optimal_take_profit"
         triggerConfig:
-          payload: '{"account": "13426206037","password": "fuyj223147","sub_account_name": "最优止盈","total_budget": 50000.0,"fund_type": "all"}'
+          payload: '{"account": "13426206037","password": "fuyj223147","sub_account_name": "最优止盈","total_budget": 40000.0,"fund_type": "all"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
       - qualifier: ${vars.common.props.triggerConfig.qualifier}

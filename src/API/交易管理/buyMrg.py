@@ -19,6 +19,7 @@ from src.domain.trade.TradeResult import TradeResult
 from src.domain.user.User import User
 from typing import List, Optional, Dict, Any
 from src.common.constant import MOBILE_KEY
+from src.API.工具.utils import get_fund_system_time_trade
 
 def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float) -> Optional[TradeResult]:
     """
@@ -32,7 +33,13 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
         Optional[TradeResult]: 交易结果，如果失败则返回None
     """
     logger = logging.getLogger("BuyMrg")
-    
+
+    # 新增：判断是否处于交易时间（不是交易时间则直接跳出）
+    resp = get_fund_system_time_trade(user)
+    if not (resp.Success and isinstance(resp.Data, dict) and bool(resp.Data.get("IsTrade"))):
+        logger.info(f"{user.customer_name} 当前非交易时间，跳过提交订单")
+        return None
+
     # 获取交易ID
     trace_id = get_trace_id(user)
     if not trace_id:

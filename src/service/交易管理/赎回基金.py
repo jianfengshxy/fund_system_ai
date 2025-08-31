@@ -33,6 +33,9 @@ from src.service.交易管理.费率查询 import get_usable_non_zero_fee_shares
 import logging
 logger = logging.getLogger(__name__)
 
+# 新增：交易时间判断函数导入
+from src.service.公共服务.trade_time_service import is_trading_time
+
 def sell_0_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:List[Share]):
     """
     赎回0费率份额
@@ -42,6 +45,10 @@ def sell_0_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:List[
     :param fund_type: 基金类型
     :param fund_name: 基金名称
     """
+    # 新增：非交易时间直接跳出
+    if not is_trading_time(user):
+        logger.info(f"{user.customer_name} 当前非交易时间，跳过赎回0费率份额操作")
+        return
    #遍历shares
     for share in shares:
         fund_info = get_all_fund_info(user,fund_code)
@@ -77,6 +84,10 @@ def sell_low_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:Lis
     :param fund_type: 基金类型
     :param fund_name: 基金名称
     """
+    # 新增：非交易时间直接跳出
+    if not is_trading_time(user):
+        logger.info(f"{user.customer_name} 当前非交易时间，跳过赎回低费率份额操作")
+        return
    #遍历shares
     for share in shares:        
         low_fee_shares = round(float(get_low_fee_shares(user,fund_code)), 2)
@@ -122,6 +133,10 @@ def sell_usable_non_zero_fee_shares(user: User, sub_account_no: str, fund_code: 
     :param fund_code: 基金代码
     :param shares: 份额列表
     """
+    # 新增：非交易时间直接跳出
+    if not is_trading_time(user):
+        logger.info(f"{user.customer_name} 当前非交易时间，跳过赎回可用非零费率份额操作")
+        return
     for share in shares:
         fund_info = get_all_fund_info(user,fund_code)
         fund_name = fund_info.fund_name

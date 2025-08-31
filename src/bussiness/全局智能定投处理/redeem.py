@@ -207,7 +207,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             logger.info(f"银行卡余额：{CurrentRealBalance}")
         
         #检查银行卡余额,小于30万，且收益大于1.0，立即卖出费率为0的份额
-        if estimated_profit_rate > 1.0 and CurrentRealBalance < 1000000 and fund_type == '000' and fund_info.estimated_change != 0.0:
+        if estimated_profit_rate > 1.0 and CurrentRealBalance < 500000 and fund_type == '000' and fund_info.estimated_change != 0.0:
             logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:1.0.")
             sell_usable_non_zero_fee_shares(user,sub_account_no,fund_code,shares)
             return True
@@ -215,7 +215,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             logger.info(f"指数基金余额条件检查：预估收益{estimated_profit_rate}，余额{CurrentRealBalance}，基金类型{fund_type}，估值变化{fund_info.estimated_change}")
             
         #检查银行卡余额,小于50万，且收益大于3.0，立即卖出费率为0的份额
-        if estimated_profit_rate > 3.0 and CurrentRealBalance < 500000 and fund_type in ['001','002']:
+        if estimated_profit_rate > 3.0 and CurrentRealBalance < 1000000 and fund_type in ['001','002']:
             logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0.")
             sell_usable_non_zero_fee_shares(user,sub_account_no,fund_code,shares)
             return True

@@ -547,6 +547,13 @@ resources:
         triggers:
         - qualifier: ${vars.common.props.triggerConfig.qualifier}
           triggerType: ${vars.common.props.triggerConfig.triggerType}
+          triggerName: "sync_investment_indicators_1120"
+          triggerConfig:
+            payload: ${vars.common.props.triggerConfig.payload}
+            cronExpression: "CRON_TZ=Asia/Shanghai 0 20 11 * * 1-5"
+            enable: ${vars.common.props.triggerConfig.enable}  
+        - qualifier: ${vars.common.props.triggerConfig.qualifier}
+          triggerType: ${vars.common.props.triggerConfig.triggerType}
           triggerName: "sync_investment_indicators_1430"
           triggerConfig:
             payload: ${vars.common.props.triggerConfig.payload}

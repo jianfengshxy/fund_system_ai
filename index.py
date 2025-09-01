@@ -184,9 +184,9 @@ def dissolve_period_smart_investment(event, context):
 
 if __name__ == "__main__":
     # 根据需要调用 redeem 或 increase 函数
-    # sync_fund_investment_indicators(None, None)
-    increase_all_fund_plans(None, None)
-    redeem_all_fund_plans(None, None)
+    sync_fund_investment_indicators(None, None)
+    # increase_all_fund_plans(None, None)
+    # redeem_all_fund_plans(None, None)
     # increase(None, None)
     # redeem(None, None)
     # create_period_smart_investment(None, None)

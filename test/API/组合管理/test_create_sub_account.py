@@ -1,10 +1,10 @@
 import pytest
 import requests
 from unittest.mock import patch, MagicMock
-from API.组合管理.SubAccountMrg import createSubAccount
-from domain.user import ApiResponse
-from domain.sub_account.sub_account_response import SubAccountResponse
-from common.constant import DEFAULT_USER
+from src.API.组合管理.SubAccountMrg import createSubAccount
+from src.domain.user import ApiResponse
+from src.domain.sub_account.sub_account_response import SubAccountResponse
+from src.common.constant import DEFAULT_USER
 
 @pytest.fixture
 def mock_response():

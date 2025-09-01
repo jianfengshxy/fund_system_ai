@@ -11,10 +11,10 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-from API.组合管理.SubAccountMrg import disbandSubAccount, getSubAccountNoByName, getSubAssetMultList
-from domain.user import ApiResponse
-from domain.sub_account.sub_account_response import SubAccountResponse
-from common.constant import DEFAULT_USER
+from src.API.组合管理.SubAccountMrg import disbandSubAccount, getSubAccountNoByName, getSubAssetMultList
+from src.domain.user import ApiResponse
+from src.domain.sub_account.sub_account_response import SubAccountResponse
+from src.common.constant import DEFAULT_USER
 
 @pytest.fixture
 def mock_response():

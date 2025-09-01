@@ -1,9 +1,9 @@
 import pytest
 import requests
 from unittest.mock import patch, MagicMock
-from API.登录接口.login import login_passport,login
-from domain.user import User
-from common.constant import DEFAULT_USER
+from src.API.登录接口.login import login_passport,login
+from src.domain.user import User
+from src.common.constant import DEFAULT_USERs
 
 @pytest.fixture
 def mock_response():

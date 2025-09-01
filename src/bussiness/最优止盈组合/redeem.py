@@ -66,9 +66,9 @@ logger = logging.getLogger(__name__)
 # 第三列：支付密码
 # 第四列：姓名
 # 第五列：sub_account_name组合名称
-# 第六列：budget 预算
+# 第六列：预算
 user_list = [
-    ("13918797997","Zj951103","Zj951103","仇晓钰","最优止盈",1000000.0),
+    ("13918797997","Zj951103","Zj951103","仇晓钰","最优止盈",300000.0),
     # ("13918199137", "sWX15706","sWX15706","最优止盈","低风险组合",1000000.0),
     ("13820198186", "tang8186","tang8186","唐祖华","最优止盈",450000.0),
     ("17782571152", "s00127479","s00127479","邵科","最优止盈",150000.0),
@@ -92,128 +92,28 @@ user_list = [
 ]
 
 
-
-def redeem_all_users():
-    # 遍历用户列表  
-    for user_info in user_list:
-        account = user_info[0]
-        password = user_info[1]
-        pay_password = user_info[2]
-        name = user_info[3]
-        sub_account_name = user_info[4]
-        budget = user_info[5]
-        
-        try:
-            user = get_user_all_info(account, password)
-            if not user:
-                logger.error(f"获取用户 {name} 信息失败")
-                continue
-            logger.info(f"开始赎回用户：{user.customer_name}")
-            # 执行止盈操作
-            redeem(user, sub_account_name)
-            logger.info(f"用户：{user.customer_name} 赎回完成")
-        except Exception as e:
-            logger.error(f"处理用户 {name} 失败，错误信息：{str(e)}")
-            continue
-
-# 止盈算法实现
-from service.大数据.加仓风向标服务 import get_fund_investment_indicators
-
-def redeem(user: User, sub_account_name:str = "最优止盈") -> bool:
-    """最优止盈算法实现：
-    1. 获取用户的指定组合sub_account_name的基金资产
-    2. 遍历每个基金资产
-    3. 获取基金资产的基金代码   
-    4. 获取基金资产的份额
-    5. 获取基金资产的基金名称
-    6. 获取基金资产的当前净值
-    7. 获取基金资产的预期收益率
-    8. 获取基金资产的当前收益率
-    9. 如果当前收益率大于预期收益率，则进行止盈操作
-    10. 如果当前收益率小于预期收益率，则成功退出
-    Args:
-        user: 用户对象
-        sub_account_name: 组合名称
-    Returns:
-        bool: 是否成功
+def redeem(user: User, sub_account_name: str, total_budget: Optional[float] = None) -> bool:
     """
-    customer_name = user.customer_name
-    #根据组合名称获取组合账号
-    sub_account_no = getSubAccountNoByName(user, sub_account_name)  
-    # 从用户的子账户列表中查找指定名称的子账户编号
-    asset_details_list = get_sub_account_asset_by_name(user, sub_account_name)
-    if asset_details_list is None:
-        logger.info(f"{customer_name}没有基金资产.")
+    业务薄封装：止盈
+    - 统一参数处理（含 total_budget 的缺省处理）
+    - 委托 service 层算法实现
+    """
+    logger.info(f"业务层止盈调用：用户={getattr(user, 'customer_name', 'unknown')}, 组合={sub_account_name}")
+    try:
+        # 引入服务层实现并使用别名，避免命名冲突
+        from src.service.加仓风向标组合算法.加仓风向标止盈 import redeem_funds as service_redeem_funds
+        return service_redeem_funds(user, sub_account_name, total_budget)
+    except Exception as e:
+        logger.error(f"业务层止盈委托失败: {e}")
         return False
 
-    for asset_detail in asset_details_list:
-        if asset_detail.fund_code is None:
-            continue        
-        fund_code = asset_detail.fund_code
-        fund_name = asset_detail.fund_name
-        fund_type = asset_detail.fund_type
-        available_vol = asset_detail.available_vol  
-        fund_info = get_all_fund_info(user,fund_code)
-        volatility = fund_info.volatility
-
-        # 新增：检查当前基金是否属于加仓基金列表，如果是则跳过止盈
-        try:      
-            # 获取加仓基金列表
-            addition_funds = get_fund_investment_indicators()
-            addition_fund_codes = {fund.fund_code for fund in addition_funds}
-            
-            if fund_code in addition_fund_codes:
-                logger.info(f"基金{fund_name}({fund_code})属于加仓风向标基金，跳过止盈操作")
-                continue
-            else:
-                logger.info(f"基金{fund_name}({fund_code})不属于加仓风向标基金，继续执行止盈判断")
-                
-        except Exception as e:
-            logger.warning(f"获取加仓基金列表失败，继续执行止盈判断: {str(e)}")
-
-        stop_profit_rate = min(volatility * 100, 5.0) if fund_info.estimated_change != 0.0 else 5.0
-        # 处理固定收益率
-        constant_profit_rate = asset_detail.constant_profit_rate
-
-        # 计算总收益率
-        result = constant_profit_rate + fund_info.estimated_change
-        logger.info(f"{customer_name}的基金{fund_name}{fund_code}的收益{constant_profit_rate}加上估值增长率{fund_info.estimated_change}结果{result},计算止盈点:{volatility},实际止盈点:{stop_profit_rate}")
-        
-        if available_vol == 0.0:
-            logger.info(f"{customer_name}的基金{fund_name}{fund_code}可用份额为0, 跳过赎回.")
-            continue
-        # 执行止盈操作
-        if result > stop_profit_rate and result > 1.0:
-            bank_shares = get_bank_shares(user, sub_account_no, fund_code)
-            logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{result},计算止盈点:{volatility},实际止盈点:{stop_profit_rate}. 满足止盈条件: result({result}) > stop_profit_rate({stop_profit_rate}) and result({result}) > 1.0")
-            sell_result = sell_low_fee_shares(user, sub_account_no, fund_code, bank_shares)
-            if sell_result and sell_result.busin_serial_no:  # 新增：检查卖出止盈是否成功
-                logger.info(f"{customer_name}的基金{fund_name}({fund_code})卖出止盈成功")
-                # 检查资产是否为空
-                updated_assets = get_sub_account_asset_by_name(user, sub_account_name)
-                asset_empty = False
-                for asset in updated_assets:
-                    if asset.fund_code == fund_code and asset.available_vol == 0.0:
-                        asset_empty = True
-                        break
-                if asset_empty:
-                    try:
-                        dissolve_result = dissolve_period_investment_by_group(user, sub_account_name, fund_code)
-                        if dissolve_result:
-                            logger.info(f"基金{fund_name}({fund_code})在组合{sub_account_name}的定投计划已成功解散")
-                        else:
-                            logger.warning(f"基金{fund_name}({fund_code})在组合{sub_account_name}无可解散定投计划或解散失败")
-                    except Exception as e:
-                        logger.error(f"解散基金{fund_name}({fund_code})在组合{sub_account_name}定投计划时异常: {e}")
-                else:
-                    logger.warning(f"基金{fund_name}({fund_code})仍有剩余资产，无法解散定投")
-            else:
-                logger.warning(f"{customer_name}的基金{fund_name}({fund_code})止盈失败")
-                continue
-    return True
-        
-    
-
 if __name__ == "__main__":
-    # 直接运行测试
-    redeem_all_users()
+    # 测试 amount 不传的情况
+    try:
+        success = redeem(DEFAULT_USER, "低风险组合")  
+        if success:
+            logging.info("测试成功（amount 未传）")
+        else:
+            logging.info("测试失败（amount 未传）")
+    except Exception as e:
+        logging.error(f"测试用户处理失败：{str(e)}")

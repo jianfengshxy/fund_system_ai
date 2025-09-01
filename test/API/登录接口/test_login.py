@@ -1,6 +1,6 @@
 import pytest
-from API.登录接口.login import login
-from domain.user import User
+from src.API.登录接口.login import login
+from src.domain.user import User
 
 @pytest.mark.skip(reason="手工指定调用")
 def test_login_success():

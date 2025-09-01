@@ -1,83 +1,120 @@
-# curl --request POST \
-#   --url https://fundcomapi.tiantianfunds.com/mm/FundFavor/FundFavorInfo \
-#   --header 'Accept: */*' \
-#   --header 'Accept-Encoding: gzip, deflate, br' \
-#   --header 'Connection: keep-alive' \
-#   --header 'Host: fundcomapi.tiantianfunds.com' \
-#   --header 'Referer: https://mpservice.com/770ddc37537896dae8ecd8160cb25336/release/pages/fundList/all-list/index?groupId=all&groupName=全部' \
-#   --header 'User-Agent: okhttp/3.12.13' \
-#   --header 'clientInfo: ttjj-ZTE 7534N-Android-11' \
-#   --header 'forceLog: 1' \
-#   --header 'gtoken: ceaf-4a997831b1b3b90849f585f98ca6f30e' \
-#   --header 'mp_instance_id: 32' \
-#   --header 'traceparent: 00-0000000046aa4cae00000196718a8166-0000000000000000-01' \
-#   --header 'tracestate: pid=0x6f96620,taskid=0xabc5123' \
-#   --header 'validmark: Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZdVcHJ8J2NdZhXTNMQR9BMpxG3EMlqXyJoFeiMLZWZZtJ1DXqiIOSu/kLYsAt37vKDFhzWESfp9O5+28eHlMZFdAOKtOr630iFFehhF8ZZ2O0=' \
-#   --data 'FIELDS=MAXSG,FCODE,SHORTNAME,PDATE,NAV,ACCNAV,NAVCHGRT,NAVCHGRT100,GSZ,GSZZL,GZTIME,NEWPRICE,CHANGERATIO,ZJL,HQDATE,ISREDBAGS,SYL_Z,SYL_Y,SYL_3Y,SYL_6Y,SYL_JN,SYL_1N,SYL_2N,SYL_3N,SYL_5N,SYL_LN,RSBTYPE,RSFUNDTYPE,INDEXCODE,NEWINDEXTEXCH,TRKERROR1,ISBUY' \
-#   --data product=EFund \
-#   --data 'APPID=FAVOR,FAVOR_ED,FAVOR_GS' \
-#   --data pageSize=176 \
-#   --data passportctoken=CR0PL-qa8w6SmCGBL4KzSXeTioFwoR7HN_JmcR_yMVCGSVFCGYTR4KBYc8gQI5rUPIp-fs6Hg5yN6jIPAYli_sE4Fnm-S2TN298wRuSBAxzWaDoRd82XYXt7FuPkh57WzKu7ejHQrhMXwp-uR5zuPnQi2L1joI7KuE0jnW4Yl2E \
-#   --data SortColumn= \
-#   --data passportutoken=QjaJ8B6U43EzrU9QuBKxUcLl7plJD3DQnGBVESjw_tEyqhKYNefuSoxE23M_B7Jf3J0QXt9K8L11-c8kM0US8Dh8-cOaAbUY9-Grz_lOD6YHTQVF-VrpwJ3rltTFJyrpYlAiTIjmOCCKRTAZHnZpLu0sRlqnHr8eQboojFxiYI6iO6kzsJMrP02LvOzw4P_nGXUk8trx06j9Y2RFXx950V04nn1NMRjyTSRUNbPKmwTYeaI1PGmptAYRY16wQzraxG8vMqmV8HoG5zVi9ovBuh0H3rBpfAMvAPsQpNSkMYs83gdJjuXZi4pY133FWRGdIG-1Hula3rHsjdvZm56ZkLT4UjljRP3aoFZ7N_zbM-g \
-#   --data 'deviceid=15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me' \
-#   --data userid=cd0b7906b53b43ffa508a99744b4055b \
-#   --data version=6.7.1 \
-#   --data ctoken=xR1h5WuKZqVp9l_uzA4vmt1TbZvcuH97mfnMo8i25njxNggTR1F5Vy0FcmNOr7lcAhJSPqY1erg_deGhXFZ55j_xbVJbd19AHy1jCksXg7PjZtPuCTAF9keQTT-5TbG4qhOM6YtifyX15WE7Dn-F40DXYm8s_vSUBewq1S4OlzwT4k3mTLaIC4fUIttpmCxjUWgWeHBzBKLOkrYF1bvmidcxfd9G6pCYskXwInJcWiUqGVfJjWkRd1FXly1YR8og.5 \
-#   --data uid=cd0b7906b53b43ffa508a99744b4055b \
-#   --data CODES=020256 \
-#   --data pageIndex=1 \
-#   --data utoken=CTZAr6Vx9U6SCvZEIZ5zmTvaG8t53DNGjfLyDr-paGMyqI-sh4QTKVawSW82SgLIU1eNn25zIksAj3J82S29TNDksOhD93p2HYuiCWB4IL_9H2J4kelucqM__eoWiXjeCCvzTvVdQGjG6c4UCVseea4jLsXm2ANQf30bIdlb1P8.5 \
-#   --data Sort= \
-#   --data plat=Android \
-#   --data passportid=8461315737102942
+import os
+import sys
+import logging
+from typing import Any, Dict, Optional
 
-#   {
-# 	"data": [
-# 		{
-# 			"NAV": 1.3188,
-# 			"NAVCHGRT": 2.89,
-# 			"CHANGERATIO": null,
-# 			"MAXSG": 100000000000,
-# 			"GZTIME": "2025-04-30 15:00",
-# 			"NEWPRICE": null,
-# 			"HQDATE": null,
-# 			"FCODE": "020256",
-# 			"SYL_JN": 10.38,
-# 			"SYL_3Y": 5.02,
-# 			"SYL_LN": 31.88,
-# 			"ISBUY": "1",
-# 			"SYL_3N": null,
-# 			"SYL_1N": 20.3,
-# 			"ZJL": null,
-# 			"SYL_5N": null,
-# 			"NEWINDEXTEXCH": "2",
-# 			"INDEXCODE": "H30590",
-# 			"NAVCHGRT100": 2.89,
-# 			"SHORTNAME": "中欧中证机器人指数发起C",
-# 			"TRKERROR1": 3.0957,
-# 			"LABELINFO": null,
-# 			"ISREDBAGS": null,
-# 			"GSZ": 1.319,
-# 			"GSZZL": 2.91,
-# 			"SYL_6Y": 19.42,
-# 			"RSBTYPE": "000001",
-# 			"ACCNAV": 1.3188,
-# 			"PDATE": "2025-04-30",
-# 			"SYL_2N": null,
-# 			"RSFUNDTYPE": "000",
-# 			"SYL_Z": 2.37,
-# 			"SYL_Y": -4.66
-# 		}
-# 	],
-# 	"errorCode": 0,
-# 	"firstError": null,
-# 	"success": true,
-# 	"hasWrongToken": null,
-# 	"totalCount": 1,
-# 	"expansion": {
-# 		"GZTIME": "2025-04-30",
-# 		"FSRQ": "2025-04-30"
-# 	},
-# 	"jf": "ali"
-# }
+import requests
+
+# 添加“src”目录到 sys.path（从 src/API/工具/ 回退 3 层 => src），保持与 FundInfo.py 一致
+SRC_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if SRC_DIR not in sys.path:
+    sys.path.append(SRC_DIR)
+
+from common.constant import SERVER_VERSION, PHONE_TYPE, MOBILE_KEY, DEFAULT_USER
+from domain.fund_plan import ApiResponse
+# 注意：删除了对自身模块的导入，避免循环导入
+# from src.API.工具.utils import get_fund_system_time_trade
+
+
+def get_fund_system_time_trade(user) -> ApiResponse[Dict[str, Any]]:
+    """
+    调用东财 FundSystemTimeTrade 接口，获取系统时间与是否处于可交易时段等信息。
+    """
+    url = "https://fundmobapi.eastmoney.com/FundMNewApi/FundSystemTimeTrade"
+
+    # 参考项目内其它 API 的风格组织 headers（字段取自抓包样例，按需精简）
+    headers = {
+        "Connection": "keep-alive",
+        "Accept": "*/*",
+        "GTOKEN": "4474AFD3E15F441E937647556C01C174",
+        "Clientinfo": "ttjj-iPhone 11 Pro-iOS-iOS16.2",
+        "Mp-Version": "1.5.6",
+        "Accept-Language": "zh-Hans-CN;q=1",
+        "Validmark": "Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZd9JYBOfWXLz4ujEjOUCkzX5OOMubE0Xuw+PGl6/XhtW58ZqXh/Xc3OOE5LZ58h/eoII25voWA/jdiRh3oRljk0Q==",
+        "User-Agent": "EMProjJijin/6.6.3 (iPhone; iOS 16.2; Scale/3.00)",
+        "Referer": "https://mpservice.com/770ddc37537896dae8ecd8160cb25336/release/pages/fundList/customListPage",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Host": "fundmobapi.eastmoney.com",
+    }
+
+    # data 参考抓包字段，并结合现有 user 对象/项目常量
+    # 根据已有登录与 passport 逻辑，Passportid 优先使用 user.passport_uid，不存在则回退 user.customer_no
+    passport_id = getattr(user, "passport_uid", None) or getattr(user, "passport_id", None) or user.customer_no
+    user_id = getattr(user, "passport_uid", None) or user.customer_no
+
+    data = {
+        "CToken": user.c_token,
+        "CustomerNo": user.customer_no,
+        "MobileKey": MOBILE_KEY,
+        "Passportid": passport_id,
+        "PhoneType": PHONE_TYPE,          # 示例：IOS16.2.0 或 Android 11，由常量统一维护
+        "ServerVersion": SERVER_VERSION,  # 示例：6.6.3，由常量统一维护
+        "UToken": user.u_token,
+        "UserId": user_id,
+        "appVersion": SERVER_VERSION,
+        "customerNo": user.customer_no,
+        "deviceid": MOBILE_KEY,
+        "plat": "Iphone",                 # 与抓包保持一致；如需统一，也可改为从常量派生
+        "product": "EFund",
+        "version": SERVER_VERSION,
+    }
+
+    logger = logging.getLogger("FundSystemTimeTrade")
+    try:
+        response = requests.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response.raise_for_status()
+        json_data: Dict[str, Any] = response.json()
+
+        # 统一兼容大小写差异
+        success = json_data.get("Success")
+        if success is None:
+            success = json_data.get("success", False)
+
+        error_code = json_data.get("ErrorCode")
+        if error_code is None:
+            error_code = json_data.get("ErrCode")
+
+        # 提取 Datas 作为有效业务数据返回
+        datas = json_data.get("Datas")
+
+        first_error = (
+            json_data.get("ErrMsg")
+            or json_data.get("ErrorMessage")
+            or json_data.get("Message")
+        )
+
+        return ApiResponse(
+            Success=bool(success),
+            ErrorCode=error_code,
+            Data=datas,
+            FirstError=first_error,
+            DebugError=None,
+        )
+    except requests.exceptions.RequestException as e:
+        logger.error(f"请求失败: {str(e)}")
+        return ApiResponse(
+            Success=False,
+            ErrorCode="REQUEST_ERROR",
+            Data=None,
+            FirstError=f"请求失败: {str(e)}",
+            DebugError=None,
+        )
+    except Exception as e:
+        logger.error(f"调用异常: {str(e)}")
+        return ApiResponse(
+            Success=False,
+            ErrorCode="UNKNOWN_ERROR",
+            Data=None,
+            FirstError=f"未知错误: {str(e)}",
+            DebugError=None,
+        )
+
+
+__all__ = ["get_fund_system_time_trade"]
+
+if __name__ == "__main__":
+    ret = get_fund_system_time_trade(DEFAULT_USER)
+    if ret.Success:
+        print(ret.Data)  # {'SystemTime': '...', 'IsTrade': True/False, 'LastTwoTradeDays': [...]}
+    else:
+        print(ret.FirstError)

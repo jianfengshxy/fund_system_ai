@@ -19,6 +19,7 @@ from src.domain.user.User import User
 from typing import List, Optional
 from src.common.constant import DEFAULT_USER, MOBILE_KEY
 from src.API.交易管理.trade import get_trades_list
+from src.service.基金信息.基金信息 import get_all_fund_info
 
 def get_fund_asset_detail(user: User, sub_account_no: str,fund_code: str) -> Optional[AssetDetails]:
     """
@@ -66,10 +67,14 @@ def get_sub_account_asset_by_name(user: User, sub_account_name: str) -> Optional
     if asset_details_list:
         logging.info(f"获取到组合 {sub_account_name} 的资产详情:")
         for asset in asset_details_list:
+            fund_info = get_all_fund_info(user, asset.fund_code)
+            estimated_change = fund_info.estimated_change if fund_info else 0.0
+            estimated_profit_rate = (asset.constant_profit_rate or asset.hold_profit_rate or 0.0) + estimated_change
             logging.info(f"  基金 {asset.fund_name}({asset.fund_code}): "
                        f"资产值={asset.asset_value}, "
                        f"可用份额={asset.available_vol}, "
-                       f"收益率={asset.constant_profit_rate or asset.hold_profit_rate}")
+                       f"收益率={asset.constant_profit_rate or asset.hold_profit_rate}, "
+                       f"预估收益率={estimated_profit_rate}")
     else:
         logging.warning(f"组合 {sub_account_name} 没有资产详情")
     

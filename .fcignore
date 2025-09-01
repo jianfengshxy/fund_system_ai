@@ -1,0 +1,28 @@
+# VCS / IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.coverage
+
+# Node / Build
+node_modules/
+dist/
+build/
+.s/
+
+# Tests / Logs / Data
+test/
+tests/
+logs/
+*.log
+*.tmp

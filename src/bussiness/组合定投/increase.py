@@ -61,8 +61,15 @@ def increase(user: User, sub_account_name: str = "低风险组合", amount: int 
             logger.info(f"{fund_name} 有在途交易，跳过")
             continue
 
-        # 如果不在加仓风向标跳过
-        if fund_code not in [ind.fund_code for ind in indicators]:
+        # 如果不在加仓风向标跳过（增强逻辑：对于指数基金，检查追踪指数）
+        in_indicators = fund_code in [ind.fund_code for ind in indicators]
+        if not in_indicators:
+            fund_info = get_all_fund_info(user, fund_code)
+            if fund_info and fund_info.fund_type == "000" and fund_info.index_code:
+                if any(ind.index_code == fund_info.index_code for ind in indicators if hasattr(ind, 'index_code')):
+                    in_indicators = True
+
+        if not in_indicators:
             logger.info(f"{fund_name} 不在加仓风向标中，跳过")
             continue
 

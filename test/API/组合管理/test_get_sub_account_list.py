@@ -1,13 +1,13 @@
 import pytest
 import requests
 from unittest.mock import patch, MagicMock
-from API.组合管理.SubAccountMrg import getSubAccountList
-from domain.user import ApiResponse
-from domain.sub_account.sub_account import SubAccount
-from common.constant import DEFAULT_USER
+from src.API.组合管理.SubAccountMrg import getSubAccountList
+from src.domain.user import ApiResponse
+from src.domain.sub_account.sub_account import SubAccount
+from src.common.constant import DEFAULT_USER
 import sys
 import os
-from domain.sub_account.sub_account import SubAccount
+from src.domain.sub_account.sub_account import SubAccount
 from typing import List
 # Add the project root to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))

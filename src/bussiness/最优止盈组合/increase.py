@@ -23,7 +23,6 @@ from src.API.交易管理.sellMrg import super_transfer
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.交易管理.trade import get_trades_list
 from src.API.交易管理.revokMrg import revoke_order
-from src.API.交易管理.buyMrg import commit_order
 from src.domain.trade.TradeResult import TradeResult
 from src.common.constant import DEFAULT_USER
 from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
@@ -38,7 +37,7 @@ from src.service.交易管理.赎回基金 import sell_low_fee_shares
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
 from src.common.constant import DEFAULT_USER
 from src.domain.asset.asset_details import AssetDetails
-from src.API.交易管理.buyMrg import commit_order
+from src.service.交易管理.购买基金 import commit_order
 from src.API.交易管理.sellMrg import super_transfer
 from src.API.交易管理.revokMrg import revoke_order
 from src.API.交易管理.trade import get_trades_list
@@ -69,7 +68,7 @@ logger = logging.getLogger(__name__)
 # 第三列：支付密码
 # 第四列：姓名
 # 第五列：sub_account_name组合名称
-# 第六列：budget 预算
+# 第六列：预算 预算
 user_list = [
     ("13918797997","Zj951103","Zj951103","仇晓钰","最优止盈",300000.0),
 #     ("13918199137", "sWX15706","sWX15706","施小雨","最优止盈",1000000.0),

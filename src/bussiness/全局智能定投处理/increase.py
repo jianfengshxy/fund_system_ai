@@ -23,7 +23,7 @@ from src.API.交易管理.sellMrg import super_transfer
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.交易管理.trade import get_trades_list
 from src.API.交易管理.revokMrg import revoke_order
-from src.API.交易管理.buyMrg import commit_order
+from src.service.交易管理.购买基金 import commit_order
 from src.domain.trade.TradeResult import TradeResult
 from src.common.constant import DEFAULT_USER
 from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub

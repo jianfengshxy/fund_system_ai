@@ -13,7 +13,7 @@ from src.domain.user.User import User
 from src.service.大数据.加仓风向标服务 import get_fund_investment_indicators
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
 from src.service.基金信息.基金信息 import get_all_fund_info
-from src.API.交易管理.buyMrg import commit_order
+from src.service.交易管理.购买基金 import commit_order
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.common.constant import DEFAULT_USER
 logging.basicConfig(

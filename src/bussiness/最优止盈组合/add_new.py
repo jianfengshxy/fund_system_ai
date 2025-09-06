@@ -19,7 +19,7 @@ from src.API.登录接口.login import inference_passport_for_bind, login
 from src.API.大数据.加仓风向标 import getFundInvestmentIndicators
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
 from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
-from src.API.交易管理.buyMrg import commit_order
+from src.service.交易管理.购买基金 import commit_order
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.domain.fund.fund_info import FundInfo

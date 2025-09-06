@@ -16,7 +16,7 @@ from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.交易管理.trade import get_trades_list, get_bank_shares
-from src.API.交易管理.buyMrg import commit_order
+from src.service.交易管理.购买基金 import commit_order
 from src.service.大数据.加仓风向标服务 import get_fund_investment_indicators
 from src.common.constant import DEFAULT_USER
 from src.API.基金信息.FundRank import get_fund_growth_rate

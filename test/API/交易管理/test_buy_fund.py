@@ -9,7 +9,7 @@ sys.path.insert(0, project_root)
 
 from src.common.constant import DEFAULT_USER
 from src.service.用户管理.用户信息 import get_user_all_info
-from src.API.交易管理.buyMrg import commit_order
+from src.service.交易管理.购买基金 import commit_order
 from src.API.交易管理.revokMrg import revoke_order
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 

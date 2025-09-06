@@ -23,7 +23,7 @@ from src.API.工具.utils import get_fund_system_time_trade
 
 def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float) -> Optional[TradeResult]:
     """
-    提交基金购买订单
+    提交基金购买订单（API层，仅负责原始HTTP请求）
     Args:
         user: User对象，包含用户认证信息
         sub_account_no: 子账户编号
@@ -34,46 +34,26 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
     """
     logger = logging.getLogger("BuyMrg")
 
-    # 新增：判断是否处于交易时间（不是交易时间则直接跳出）
-    resp = get_fund_system_time_trade(user)
-    if not (resp.Success and isinstance(resp.Data, dict) and bool(resp.Data.get("IsTrade"))):
-        logger.info(f"{user.customer_name} 当前非交易时间，跳过提交订单")
-        return None
-
-    # 获取交易ID
+    # 获取交易ID（API前置依赖）
     trace_id = get_trace_id(user)
     if not trace_id:
         logger.error("获取交易ID失败")
         return None
-    
-    # 获取活期宝银行卡列表
+
+    # 获取银行卡账号（请求必填字段）
     try:
         bank_card_info = user.max_hqb_bank
     except AttributeError:
         logger.error(f"提交订单失败: 银行卡信息未设置。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}")
         return None
-    
-    
-    # 处理购买金额
-    if float(amount) < 10:
-        amount = str(10 + round(random.uniform(0.01, 1), 2))
-    else:
-        amount = str(float(amount) - round(random.uniform(0.01, 1), 2))
-    
-    # 从AccountNo中提取实际的银行账号（第一个#之前的部分）
     bank_account_no = bank_card_info.AccountNo
-    logger.info(f"提交订单，用户：{user.account}，基金代码：{fund_code}，购买金额：{amount}，银行账号：{bank_account_no}")
-      
-    # 检查银行卡余额
-    if bank_card_info.CurrentRealBalance < 100:
-        logger.error(f"银行卡余额不足: {bank_card_info.CurrentRealBalance} < 100。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}")
-        return None
-    
+    logger.info(f"提交订单(API)，用户：{user.account}，基金代码：{fund_code}，购买金额：{amount}，银行账号：{bank_account_no}")
+
     # 构建请求URL
     url = f"https://tradeapilvs{user.index}.1234567.com.cn/Trade/FundTrade/CommitOrder"
     if not user.index:
         url = "https://tradeapilvs1.1234567.com.cn/Trade/FundTrade/CommitOrder"
-    
+
     # 构建请求头
     headers = {
         "Connection": "keep-alive",
@@ -86,23 +66,24 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
         "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.5",
         "Content-Type": "application/x-www-form-urlencoded"
     }
-    
-    # 构建请求数据
+
+    # 构建请求数据（此处仅做 str 转换，不再做业务层的金额保护/扰动）
     password_hash = hashlib.md5(user.password.encode()).hexdigest()
-    
+    amount_str = str(float(amount))
+
     data = (
         f"BankAccountNo={bank_account_no}&"
         f"CouponsId=&"
         f"CouponsType=&"
         f"FollowingSubAccountNo=&"
-        f"FundAppsJson=%5B%7B%22fundCode%22%3A%22{fund_code}%22%2C%22amount%22%3A%22{amount}%22%7D%5D&"
+        f"FundAppsJson=%5B%7B%22fundCode%22%3A%22{fund_code}%22%2C%22amount%22%3A%22{amount_str}%22%7D%5D&"
         f"IsPayPlus=false&"
         f"IsRemittance=&"
         f"MobileKey={MOBILE_KEY}&"
         f"Password={password_hash}&"
         f"RatioRefundType=&"
         f"SubAccountNo={sub_account_no}&"
-        f"TotalAmounts={amount}&"
+        f"TotalAmounts={amount_str}&"
         f"TraceID={trace_id}&"
         f"TradeType=AsyJCJY022&"
         f"appType=ttjj&"
@@ -113,29 +94,24 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
         f"userId={user.customer_no}&"
         f"version=10.6.9"
     )
-    
+
     try:
-        # 发送请求
         response = requests.post(url, headers=headers, data=data, verify=False)
         response.raise_for_status()
         result = response.json()
-        # logger.info(f"提交订单响应: {result}")
-        
-        # 处理响应结果
+
         if 'Success' in result and result['Success']:
             busin_serial_no = result['Data'].get('AppSerialNo')
             business_type = result['Data'].get('BusinType')
-            
             trade_result = TradeResult(
-                busin_serial_no, 
-                business_type, 
-                None,  # apply_workday
-                amount,  # amount
-                None,  # status
-                None,  # show_com_prop
-                fund_code  # fund_code
+                busin_serial_no,
+                business_type,
+                None,   # apply_workday
+                amount_str,  # amount
+                None,   # status
+                None,   # show_com_prop
+                fund_code
             )
-            
             logger.info(f"提交订单成功: {trade_result}")
             time.sleep(1)
             return trade_result

@@ -17,7 +17,7 @@ from src.service.基金信息.基金信息 import get_all_fund_info
 from src.domain.asset.asset_details import AssetDetails
 from src.service.定投管理.组合定投.组合定投管理 import create_period_investment_by_group
 from src.service.大数据.加仓风向标服务 import get_fund_investment_indicators
-from src.API.交易管理.buyMrg import commit_order
+from src.service.交易管理.购买基金 import commit_order
 from src.common.constant import DEFAULT_USER  # 添加导入，如果需要
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.API.基金信息.FundRank import get_fund_growth_rate

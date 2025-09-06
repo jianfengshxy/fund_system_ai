@@ -24,7 +24,7 @@ from src.service.定投管理.智能定投.智能定投管理 import dissolve_pe
 from src.service.定投管理.组合定投.组合定投管理 import create_period_investment_by_group
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
-from src.API.交易管理.buyMrg import commit_order
+from src.service.交易管理.购买基金 import commit_order
 from src.API.组合管理.SubAccountMrg import getSubAssetMultList
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
             

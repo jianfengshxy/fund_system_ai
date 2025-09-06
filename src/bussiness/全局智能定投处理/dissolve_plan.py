@@ -32,6 +32,7 @@ from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.API.定投计划管理.SmartPlan import getFundPlanList
 from src.service.定投管理.智能定投.智能定投管理 import dissolve_period_smart_investment
 from src.service.大数据.加仓风向标服务 import get_fund_investment_indicators
+from src.service.交易管理.购买基金 import commit_order
 logger = logging.getLogger(__name__)    
 
 def dissolve_daily_plan(user: User):

@@ -72,15 +72,7 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
         if response_data.get("Succeed", False):
             results = []
             for trade_info in response_data.get("responseObjects", []):
-                trade_result = TradeResult(
-                    trade_info.get("ID", ""),
-                    trade_info.get("BusinessCode", ""),
-                    "",
-                    trade_info.get("ApplyCount", ""),
-                    trade_info.get("StatuIcon", ""),
-                    "",
-                    trade_info.get("ProductCode", ""),
-                )
+                trade_result = TradeResult.from_api(trade_info)
                 results.append(trade_result)
             return results
         else:

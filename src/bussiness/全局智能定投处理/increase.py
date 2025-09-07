@@ -35,6 +35,7 @@ from src.domain.fund_plan.fund_plan import FundPlan
 from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.API.交易管理.trade import get_trades_list, get_bank_shares
+from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -169,7 +170,22 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                 logger.error(f"交易回撤失败: {e}")
         return True
         
-    logger.info(f"计划{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}当前收益率:{current_profit_rate},估值增长率:{estimated_change},预估收益率:{estimated_profit_rate},在途交易个数:{on_way_transaction_count}.")   
+    # 使用昨日净值日成功交易数替代“在途交易数”判断
+    prev_day_success_count = count_success_trades_on_prev_nav_day(user, fund_code, sub_account_no)
+    logger.info(f"在途/近日日成交检查 - 组合{sub_account_no}的{fund_name}{fund_code} 昨日成交成功 {prev_day_success_count} 笔（替代在途交易判断，原在途计数={on_way_transaction_count}）")
+    if prev_day_success_count > 0:
+        logger.info(f"近日日成交存在 - 组合{sub_account_no}的{fund_name}{fund_code} 昨日有成交成功，不进行加仓操作并回撤定投。Skip..........")
+        # 撤回交易
+        for i, trade in enumerate(trades):
+            logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+            try:
+                revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)
+                logger.info(f"交易回撤成功")
+            except Exception as e:
+                logger.error(f"交易回撤失败: {e}")
+        return True
+
+    logger.info(f"计划{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}当前收益率:{current_profit_rate},估值增长率:{estimated_change},预估收益率:{estimated_profit_rate},昨日成交笔数:{prev_day_success_count}.")
     
     if estimated_profit_rate > -1.0 :
         logger.info(f"预估收益率检查 - {customer_name}的组合{sub_account_name}{fund_name}的预估收益率{estimated_profit_rate} > -1.0,执行回撤")

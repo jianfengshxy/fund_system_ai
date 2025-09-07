@@ -31,7 +31,7 @@ def test_increase():
     # 调用函数进行加仓测试
     user = get_user_all_info("13500819290","guojing1985")
     user.budget = 200000.0
-    result = increase(user, "最优止盈")
+    result = increase(DEFAULT_USER, "低风险组合")
     
     # 验证返回结果是布尔值
     assert isinstance(result, bool), "返回结果应该是布尔值"

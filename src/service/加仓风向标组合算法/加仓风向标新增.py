@@ -213,6 +213,139 @@ def add_new_funds(user: User, sub_account_name: str, total_budget: float, amount
         logger.error(f"异常堆栈: {traceback.format_exc()}")
         return False
 
+def add_new_funds(user: User, sub_account_name: str, total_budget: float, amount: Optional[float] = None, fund_type: str = 'all', fund_num: int = 5, spread_days: int = 20) -> bool:
+    """
+    新增基金策略（最小集成落地）：
+    - fund_num: 本次最多买入的基金只数（默认5）
+    - spread_days: 预算摊薄天数（默认20）；仅当未传入amount时生效
+    """
+    import time, random  # 局部导入，减少全局影响
+    if not sub_account_name:
+        raise ValueError("sub_account_name 是必填参数，不能为空")
+    if total_budget is None:
+        raise ValueError("total_budget 是必填参数，不能为空")
+
+    logger.info(f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{total_budget}元，基金类型：{fund_type}，fund_num={fund_num}，spread_days={spread_days}")
+
+    # 计算预算分配
+    if amount is None:
+        base_per_fund = round(total_budget / max(fund_num, 1) / max(spread_days, 1), 2)
+    else:
+        base_per_fund = float(amount)
+    logger.info(f"单只基金基础买入金额: {base_per_fund}元")
+
+    customer_name = user.customer_name
+    logger.info("========== 开始执行新增基金算法（最小落地版） ===========")
+    logger.info(f"用户: {customer_name}，组合名称: {sub_account_name}")
+
+    try:
+        # 1) 获取组合资产与持仓
+        user_assets = get_sub_account_asset_by_name(user, sub_account_name)
+        if user_assets is None:
+            logger.error(f"获取用户组合 {sub_account_name} 资产失败")
+            return False
+
+        user_fund_codes: Set[str] = set()
+        user_index_codes: Set[str] = set()
+        for asset in user_assets:
+            user_fund_codes.add(asset.fund_code)
+            try:
+                fund_info = get_all_fund_info(user, asset.fund_code)
+                if fund_info and getattr(fund_info, 'fund_type', None) == "000" and getattr(fund_info, 'index_code', None):
+                    user_index_codes.add(fund_info.index_code)
+            except Exception as e:
+                logger.warning(f"获取基金 {asset.fund_code} 信息失败: {e}")
+
+        if len(user_assets) >= 50:
+            logger.info(f"用户 {customer_name} 的基金数量已达到50个，无需新增基金，退出操作")
+            return True
+
+        # 2) 获取风向标并按基金类型过滤
+        wind_vane_funds = get_fund_investment_indicators()
+        if not wind_vane_funds:
+            logger.error("获取加仓风向标数据失败")
+            return False
+
+        if fund_type == 'index':
+            wind_vane_funds = [f for f in wind_vane_funds if f.fund_type == '000']
+        elif fund_type == 'non_index':
+            wind_vane_funds = [f for f in wind_vane_funds if f.fund_type != '000']
+
+        # 3) 过滤：去重已持有 + 避免指数重复
+        candidates = []
+        for f in wind_vane_funds:
+            if f.fund_code in user_fund_codes:
+                continue
+            try:
+                fi = get_all_fund_info(user, f.fund_code)
+                if fi and getattr(fi, 'fund_type', None) == "000":
+                    idx = getattr(fi, 'index_code', None)
+                    if idx and idx in user_index_codes:
+                        continue
+            except Exception as e:
+                logger.warning(f"获取指数基金 {f.fund_code} 信息失败: {e}")
+            candidates.append(f)
+
+        if not candidates:
+            logger.info("没有需要买入的新基金")
+            return True
+
+        # 4) 选择前 N 只（按 product_rank 升序，如无则靠后）
+        selected = sorted(candidates, key=lambda x: getattr(x, 'product_rank', 1e9))[:max(fund_num, 1)]
+        logger.info(f"选择 {len(selected)} 只基金进行买入（最多 {fund_num} 只）")
+
+        # 5) 获取余额，若不足则动态下调 buy_amount
+        asset_response = GetMyAssetMainPartAsync(user)
+        if not (asset_response.Success and asset_response.Data):
+            logger.error("资产API调用失败")
+            return False
+        available_balance = float(asset_response.Data.get('HqbValue', 0.0))
+        logger.info(f"可用余额 HqbValue: {available_balance}元")
+
+        buy_amount = base_per_fund
+        total_need = round(buy_amount * len(selected), 2)
+        if available_balance < total_need:
+            # 预留10%冗余，动态下调
+            cap = max(10.0, round((available_balance * 0.9) / len(selected), 2))
+            if cap < buy_amount:
+                logger.warning(f"余额不足以覆盖计划买入（需要{total_need}元），将单只金额下调为 {cap} 元")
+                buy_amount = cap
+
+        # 6) 获取组合账号
+        sub_account_no = getSubAccountNoByName(user, sub_account_name)
+        if not sub_account_no:
+            logger.error(f"未找到组合名称 {sub_account_name} 对应的组合账号")
+            return False
+
+        # 7) 下单（服务层 commit_order 已含交易时间/限额/余额保护）
+        success_count = 0
+        for i, f in enumerate(selected, 1):
+            try:
+                fi = get_all_fund_info(user, f.fund_code)
+                if fi and hasattr(fi, 'can_purchase') and not fi.can_purchase:
+                    logger.info(f"跳过不可申购基金: {f.fund_name}({f.fund_code})")
+                    continue
+
+                res = commit_order(user, sub_account_no, f.fund_code, buy_amount)
+                if res:
+                    logger.info(f"买入成功: {f.fund_name}({f.fund_code}) - 金额: {buy_amount}元 - 订单号: {res.busin_serial_no}")
+                    success_count += 1
+                else:
+                    logger.error(f"买入失败: {f.fund_name}({f.fund_code})")
+
+                time.sleep(random.uniform(0.2, 0.8))  # 轻微限流
+            except Exception as e:
+                logger.error(f"买入基金 {f.fund_name}({f.fund_code}) 异常: {e}")
+
+        logger.info(f"新增基金完成，成功买入 {success_count}/{len(selected)} 只")
+        return success_count > 0
+
+    except Exception as e:
+        logger.error(f"新增基金算法执行失败: {e}")
+        import traceback
+        logger.error(f"异常堆栈: {traceback.format_exc()}")
+        return False
+
 if __name__ == "__main__":
     # 测试单个用户的新增基金流程
     try:

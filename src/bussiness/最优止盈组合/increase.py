@@ -133,7 +133,6 @@ def increase_all_users():
             logger.info(f"用户：{user.customer_name} 定投处理完成")
         except Exception as e:
             logger.error(f"处理用户 {name} 失败，错误信息：{str(e)}")
-            continue
 
 # 加仓算法实现
 
@@ -160,6 +159,28 @@ def increase(user: User, sub_account_name: str, total_budget: Optional[float] = 
 
     logger.info(f"开始为用户 {user.customer_name} 执行加仓（委托 Service），组合: {sub_account_name}，预算: {total_budget}，amount: {amount}，fund_type: {fund_type}")
     success = service_increase_funds(user, sub_account_name, total_budget, amount, fund_type)
+    if success:
+        logger.info(f"用户 {user.customer_name} 委托加仓成功")
+    else:
+        logger.error(f"用户 {user.customer_name} 委托加仓失败")
+    return success
+
+def increase(user: User, sub_account_name: str, total_budget: Optional[float] = None, amount: Optional[float] = None, fund_type: str = 'all', fund_num: int = 5, spread_days: int = 20) -> bool:
+    """
+    加仓（最小集成落地）：
+    - fund_num: 本次最多下单次数（默认5）
+    - spread_days: 预算摊薄天数（默认20）；仅未传入amount时生效
+    """
+    if total_budget is None:
+        try:
+            total_budget = float(getattr(user, 'budget', 0.0)) if getattr(user, 'budget', None) is not None else 0.0
+        except Exception:
+            total_budget = 0.0
+        if not total_budget or total_budget <= 0:
+            total_budget = 100000.0
+
+    logger.info(f"开始为用户 {user.customer_name} 执行加仓（最小落地），组合: {sub_account_name}，预算: {total_budget}，amount: {amount}，fund_type: {fund_type}，fund_num={fund_num}，spread_days={spread_days}")
+    success = service_increase_funds(user, sub_account_name, total_budget, amount, fund_type, fund_num, spread_days)
     if success:
         logger.info(f"用户 {user.customer_name} 委托加仓成功")
     else:

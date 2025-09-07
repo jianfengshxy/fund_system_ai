@@ -95,11 +95,11 @@ def redeem(user: User, sub_account_name: str, total_budget: Optional[float] = No
     """
     业务薄封装：止盈
     - 统一参数处理（含 total_budget 的缺省处理）
-    - 委托 service 层算法实现
+    - 委托 service 层算法实现（完整版：风向标跳过 + 多触发条件 + 余额兜底）
     """
     logger.info(f"业务层止盈调用：用户={getattr(user, 'customer_name', 'unknown')}, 组合={sub_account_name}")
+    logger.info("将使用服务层风向标止盈策略（完整版）")
     try:
-        # 引入服务层实现并使用别名，避免命名冲突
         from src.service.加仓风向标组合算法.加仓风向标止盈 import redeem_funds as service_redeem_funds
         return service_redeem_funds(user, sub_account_name, total_budget)
     except Exception as e:

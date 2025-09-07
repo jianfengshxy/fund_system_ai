@@ -21,6 +21,7 @@ from src.service.大数据.加仓风向标服务 import get_fund_investment_indi
 from src.common.constant import DEFAULT_USER
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
+from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
 
 import datetime
 
@@ -100,8 +101,10 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
         if estimated_profit_rate >= -1.0:
             logger.info(f"跳过 {fi.fund_name}({fund_code}): 回撤不达标 estimated_profit_rate={estimated_profit_rate:.2f}%，阈值<-1.00%（current={current_profit_rate:.2f}%, change={estimated_change:.2f}%）")
             continue
-        if asset.on_way_transaction_count > 0:
-            logger.info(f"跳过 {fi.fund_name}({fund_code}): 存在在途交易 {asset.on_way_transaction_count} 笔")
+        # 使用昨日净值日成功交易数作为“在途/已成交”的判断依据
+        prev_day_success_count = count_success_trades_on_prev_nav_day(user, fund_code, sub_account_no)
+        if prev_day_success_count > 0:
+            logger.info(f"跳过 {fi.fund_name}({fund_code}): 昨日成交成功 {prev_day_success_count} 笔（按昨日净值日统计，替代在途交易判断）")
             continue
 
         in_wind_vane = (fi.fund_type != '000' and fund_code in wind_vane_codes) or (fi.fund_type == '000' and fi.index_code in wind_vane_indices)

@@ -16,6 +16,7 @@ from src.service.基金信息.基金信息 import get_all_fund_info
 from src.service.交易管理.购买基金 import commit_order
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.common.constant import DEFAULT_USER
+from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
@@ -56,9 +57,10 @@ def increase(user: User, sub_account_name: str = "低风险组合", amount: int 
             logger.info(f"预估收益率 {estimated_profit_rate} > -1.0%，跳过 {fund_name}")
             continue
 
-        # 如果有在途交易跳过
-        if asset_detail.on_way_transaction_count > 0:
-            logger.info(f"{fund_name} 有在途交易，跳过")
+        # 如果有在途交易跳过 -> 改为按昨日净值日成功交易判断
+        prev_day_success_count = count_success_trades_on_prev_nav_day(user, fund_code, sub_account_no)
+        if prev_day_success_count > 0:
+            logger.info(f"{fund_name} 昨日成交成功 {prev_day_success_count} 笔（按昨日净值日统计，替代在途交易判断），跳过")
             continue
 
         # 如果不在加仓风向标跳过（增强逻辑：对于指数基金，检查追踪指数）

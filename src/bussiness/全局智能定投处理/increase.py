@@ -126,9 +126,9 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         logger.info(f"月定投延期检查 - 计划执行日期: {period_value}, 当前日期: {day_of_month}, 不匹配，执行回撤")
         #回撤所有交易   
         for i, trade in enumerate(trades):
-            logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+            logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}, 业务类型: {trade.business_type}, 业务代码: {trade.business_code}, 产品名称: {trade.product_name}, 状态: {trade.status}, 申请日期: {trade.apply_work_day}")
             try:
-                revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)
+                revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
                 logger.info(f"交易回撤成功")
             except Exception as e:
                 logger.error(f"交易回撤失败: {e}")
@@ -148,7 +148,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         for i, trade in enumerate(trades):
             logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
             try:
-                revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)
+                revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
                 logger.info(f"交易回撤成功")
             except Exception as e:
                 logger.error(f"交易回撤失败: {e}")
@@ -164,7 +164,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         for i, trade in enumerate(trades):
             logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
             try:
-                revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)
+                revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
                 logger.info(f"交易回撤成功")
             except Exception as e:
                 logger.error(f"交易回撤失败: {e}")
@@ -179,7 +179,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         for i, trade in enumerate(trades):
             logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
             try:
-                revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)
+                revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
                 logger.info(f"交易回撤成功")
             except Exception as e:
                 logger.error(f"交易回撤失败: {e}")
@@ -193,7 +193,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         for i, trade in enumerate(trades):
             logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
             try:
-                revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)
+                revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
                 logger.info(f"交易回撤成功")
             except Exception as e:
                 logger.error(f"交易回撤失败: {e}")
@@ -213,7 +213,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         for i, trade in enumerate(trades):
             logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
             try:
-                revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)
+                revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
                 logger.info(f"交易回撤成功")
             except Exception as e:
                 logger.error(f"交易回撤失败: {e}")
@@ -239,7 +239,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                 for i, trade in enumerate(trades):
                     logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
                     try:
-                        revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)
+                        revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
                         logger.info(f"交易回撤成功")
                     except Exception as e:
                         logger.error(f"交易回撤失败: {e}")
@@ -252,7 +252,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                 for i, trade in enumerate(trades):
                     logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
                     try:
-                        revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)
+                        revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
                         logger.info(f"交易回撤成功")
                     except Exception as e:
                         logger.error(f"交易回撤失败: {e}")
@@ -265,7 +265,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                 for i, trade in enumerate(trades):
                     logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
                     try:
-                        revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)
+                        revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
                         logger.info(f"交易回撤成功")
                     except Exception as e:
                         logger.error(f"交易回撤失败: {e}")
@@ -283,7 +283,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                 for i, trade in enumerate(trades):
                     logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
                     try:
-                        revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount)
+                        revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
                         logger.info(f"交易回撤成功")
                     except Exception as e:
                         logger.error(f"交易回撤失败: {e}")

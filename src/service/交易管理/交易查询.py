@@ -43,24 +43,28 @@ def get_withdrawable_trades(user, sub_account_no="", fund_code="", bus_type="", 
 
 def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account_no: str = "") -> int:
     """
-    统计某基金在上一个交易日（以基金的 nav_date 为准）的成功交易数量。
+    统计某基金在上一个交易日（以基金的 nav_date 为准）及当天的成功交易数量。
     判定规则：
     - 排除撤回：StatuIcon == 3 的交易不计入
-    - 交易时间：取 StrikeStartDate 的日期部分（YYYY-MM-DD），与 nav_date 完全匹配
+    - 交易时间：取 StrikeStartDate 的日期部分（YYYY-MM-DD），与 nav_date 完全匹配或为当天日期
     """
     logger = logging.getLogger("TradeQuery")
 
-    # 1) 获取该基金的 nav_date（作为“上一个交易日”）
+    # 1) 获取该基金的 nav_date（作为"上一个交易日"）
     fi = get_all_fund_info(user, fund_code)
     if not fi or not getattr(fi, "nav_date", None):
         logger.warning(f"获取基金 {fund_code} 的 nav_date 失败，返回 0")
         return 0
     nav_date_str = str(fi.nav_date)  # 形如 'YYYY-MM-DD'
-    logger.info(f"统计基金 {fund_code} 在上一个交易日({nav_date_str}) 的成功交易数量（排除撤回）")
+    
+    # 获取当天日期
+    today_date_str = datetime.now().strftime("%Y-%m-%d")
+    
+    logger.info(f"统计基金 {fund_code} 在上一个交易日({nav_date_str})及当天({today_date_str})的成功交易数量（排除撤回）")
 
     # 2) 拉取该基金的交易列表（不过滤状态，统一在本地筛选）
     trades = get_trades_list(user, sub_account_no, fund_code, "", "")
-    logger.info(f"获取到 {len(trades)} 条交易记录，开始筛选（排除 StatuIcon==3 且日期匹配 {nav_date_str}）")
+    logger.info(f"获取到 {len(trades)} 条交易记录，开始筛选（排除 StatuIcon==3 且日期匹配 {nav_date_str} 或 {today_date_str}）")
 
     def _get(obj, *keys):
         # 兼容对象属性和字典键
@@ -104,8 +108,10 @@ def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account
         )
 
         # 打印是否命中过滤条件（INFO）
+        date_match = strike_date == nav_date_str or strike_date == today_date_str
         logger.info(
-            f"    -> 过滤判断: 日期匹配={strike_date == nav_date_str}, 排除撤回(StatuIcon==3)={statu_icon == 3 or str(statu_icon) == '3'}"
+            f"    -> 过滤判断: 日期匹配上一交易日={strike_date == nav_date_str}, 日期匹配当天={strike_date == today_date_str}, "
+            f"总日期匹配={date_match}, 排除撤回(StatuIcon==3)={statu_icon == 3 or str(statu_icon) == '3'}"
         )
 
         # 可选：打印完整记录（DEBUG，默认 INFO 级别下不会刷屏）
@@ -119,11 +125,11 @@ def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account
         except Exception as e:
             logger.debug(f"    原始记录(完整)打印失败: {e}")
 
-        # 仅统计日期匹配 nav_date 且 非撤回 的交易
-        if strike_date == nav_date_str and statu_icon != 3 and str(statu_icon) != "3":
+        # 统计日期匹配 nav_date 或当天日期，且 非撤回 的交易
+        if (strike_date == nav_date_str or strike_date == today_date_str) and statu_icon != 3 and str(statu_icon) != "3":
             count += 1
 
-    logger.info(f"基金 {fund_code} 在上一个交易日({nav_date_str}) 成功交易数量（排除撤回）: {count}")
+    logger.info(f"基金 {fund_code} 在上一个交易日({nav_date_str})及当天({today_date_str})成功交易数量（排除撤回）: {count}")
     return count
 
 if __name__ == "__main__":

@@ -104,7 +104,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
         # 使用昨日净值日成功交易数作为“在途/已成交”的判断依据
         prev_day_success_count = count_success_trades_on_prev_nav_day(user, fund_code, sub_account_no)
         if prev_day_success_count > 0:
-            logger.info(f"跳过 {fi.fund_name}({fund_code}): 昨日成交成功 {prev_day_success_count} 笔（按昨日净值日统计，替代在途交易判断）")
+            logger.info(f"跳过 {fi.fund_name}({fund_code}): 昨日或今日成交成功 {prev_day_success_count} 笔（按昨日净值日统计，替代在途交易判断）")
             continue
 
         in_wind_vane = (fi.fund_type != '000' and fund_code in wind_vane_codes) or (fi.fund_type == '000' and fi.index_code in wind_vane_indices)

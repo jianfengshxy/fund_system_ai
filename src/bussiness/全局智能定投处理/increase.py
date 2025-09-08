@@ -172,9 +172,9 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         
     # 使用昨日净值日成功交易数替代“在途交易数”判断
     prev_day_success_count = count_success_trades_on_prev_nav_day(user, fund_code, sub_account_no)
-    logger.info(f"在途/近日日成交检查 - 组合{sub_account_no}的{fund_name}{fund_code} 昨日成交成功 {prev_day_success_count} 笔（替代在途交易判断，原在途计数={on_way_transaction_count}）")
+    logger.info(f"在途/近日日成交检查 - 组合{sub_account_no}的{fund_name}{fund_code} 昨日或今日成交成功 {prev_day_success_count} 笔（替代在途交易判断，原在途计数={on_way_transaction_count}）")
     if prev_day_success_count > 0:
-        logger.info(f"近日日成交存在 - 组合{sub_account_no}的{fund_name}{fund_code} 昨日有成交成功，不进行加仓操作并回撤定投。Skip..........")
+        logger.info(f"近日日成交存在 - 组合{sub_account_no}的{fund_name}{fund_code} 昨日或今日有成交成功，不进行加仓操作并回撤定投。Skip..........")
         # 撤回交易
         for i, trade in enumerate(trades):
             logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")

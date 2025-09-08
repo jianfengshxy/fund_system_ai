@@ -256,7 +256,7 @@ def add_new_funds(user: User, sub_account_name: str, total_budget: float, amount
             except Exception as e:
                 logger.warning(f"获取基金 {asset.fund_code} 信息失败: {e}")
 
-        if len(user_assets) >= 50:
+        if len(user_assets) >= 30:
             logger.info(f"用户 {customer_name} 的基金数量已达到50个，无需新增基金，退出操作")
             return True
 

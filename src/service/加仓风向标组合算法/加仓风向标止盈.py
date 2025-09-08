@@ -1,7 +1,7 @@
 import logging
 import os
 import sys
-from typing import Optional
+from typing import Optional, List, Tuple
 
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -31,9 +31,10 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     """
     加仓风向标止盈算法实现（不依赖定投）：
     1. 获取组合所有基金资产
-    2. 对于每个基金，如果在加仓风向标中，跳过
-    3. 计算预估收益率，检查止盈条件
-    4. 根据条件执行赎回操作
+    2. 对于每个基金，如果在加仓风向标中，且组合持有基金数量<=20或已有止盈，则跳过
+    3. 如果组合持有基金数量>20且当天没有止盈，从加仓风向标中选择预估涨幅>3%且持有基金预估收益率>5%的最高收益基金进行止盈
+    4. 对于非加仓风向标基金，计算预估收益率，检查止盈条件
+    5. 根据条件执行赎回操作
     
     Args:
         user: 用户对象
@@ -60,7 +61,9 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         logger.info(f"组合 {sub_account_name} 中没有基金资产")
         return True
     
-    logger.info(f"组合中共有 {len(user_assets)} 个基金资产")
+    # 检查组合持有基金数量
+    fund_count = len(user_assets)
+    logger.info(f"组合中共有 {fund_count} 个基金资产")
     
     # 获取加仓风向标数据
     wind_vane_funds = get_fund_investment_indicators()
@@ -68,11 +71,13 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         logger.error("获取加仓风向标数据失败")
         return False
     
-
     wind_vane_codes = {f.fund_code for f in wind_vane_funds}
     wind_vane_indices = {get_all_fund_info(user, f.fund_code).index_code for f in wind_vane_funds if f.fund_type == '000'}
     
     success_count = 0
+    wind_vane_candidates = []
+    
+    # 第一轮遍历：处理非加仓风向标基金，并收集加仓风向标基金作为候选
     for asset in user_assets:
         fund_code = asset.fund_code
         fund_info = get_all_fund_info(user, fund_code)
@@ -89,23 +94,29 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         elif fund_code in wind_vane_codes:
             in_wind_vane = True
         
-        if in_wind_vane:
-            logger.info(f"跳过 {fund_code} {fund_name}: 在加仓风向标中")
-            continue
-        
         # 计算预估收益率
         current_profit_rate = asset.constant_profit_rate or 0.0
         estimated_change = fund_info.estimated_change or 0.0
         estimated_profit_rate = current_profit_rate + estimated_change
-        
-        volatility = fund_info.volatility
-        stop_rate = min(volatility * 100, 5.0) if estimated_change != 0.0 else 5.0
         
         # 添加可用份额检查
         available_vol = asset.available_vol
         if available_vol == 0.0:
             logger.info(f"{user.customer_name}的基金{fund_name}({fund_code})可用份额为0, 跳过赎回.")
             continue
+        
+        if in_wind_vane:
+            # 收集加仓风向标基金作为候选
+            if estimated_change > 3.0 and estimated_profit_rate > 5.0:
+                wind_vane_candidates.append((asset, fund_info, estimated_profit_rate))
+                logger.info(f"加入候选: {fund_code} {fund_name}: 在加仓风向标中，预估涨幅{estimated_change}%，预估收益率{estimated_profit_rate}%")
+            else:
+                logger.info(f"跳过 {fund_code} {fund_name}: 在加仓风向标中，但不满足候选条件")
+            continue
+        
+        # 处理非加仓风向标基金
+        volatility = fund_info.volatility
+        stop_rate = min(volatility * 100, 5.0) if estimated_change != 0.0 else 5.0
         
         # 记录计算细节
         logger.info(f"{user.customer_name}的基金{fund_name}({fund_code})的收益{current_profit_rate}加上估值增长率{estimated_change}结果{estimated_profit_rate},计算止盈点:{volatility},实际止盈点:{stop_rate}")
@@ -122,7 +133,29 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                     logger.warning(f"{user.customer_name}的基金{fund_name}({fund_code})止盈失败")
             except Exception as e:
                 logger.error(f"止盈 {fund_code} {fund_name} 失败: {e}")
+    
+    # 如果组合持有基金数量>20且当天没有止盈，从加仓风向标候选中选择预估收益率最高的进行止盈
+    if fund_count > 20 and success_count == 0 and wind_vane_candidates:
+        # 按预估收益率排序，选择最高的
+        wind_vane_candidates.sort(key=lambda x: x[2], reverse=True)
+        best_candidate = wind_vane_candidates[0]
+        asset, fund_info, estimated_profit_rate = best_candidate
         
+        fund_code = asset.fund_code
+        fund_name = fund_info.fund_name
+        
+        try:
+            bank_shares = get_bank_shares(user, sub_account_no, fund_code)
+            logger.info(f"{user.customer_name}的特殊止盈操作开始：加仓风向标基金{fund_name}({fund_code})预估收益{estimated_profit_rate}%. 组合基金数量>{fund_count}且今日无止盈，选择收益最高的加仓风向标基金止盈")
+            sell_result = sell_low_fee_shares(user, sub_account_no, fund_code, bank_shares)
+            if sell_result and sell_result.busin_serial_no:
+                logger.info(f"{user.customer_name}的加仓风向标基金{fund_name}({fund_code})卖出止盈成功")
+                success_count += 1
+            else:
+                logger.warning(f"{user.customer_name}的加仓风向标基金{fund_name}({fund_code})止盈失败")
+        except Exception as e:
+            logger.error(f"止盈加仓风向标基金 {fund_code} {fund_name} 失败: {e}")
+    
     logger.info(f"止盈操作完成，成功处理 {success_count} 个基金")
     return success_count > 0
 

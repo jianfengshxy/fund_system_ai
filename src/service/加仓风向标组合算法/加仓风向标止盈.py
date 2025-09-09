@@ -135,7 +135,17 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                 logger.error(f"止盈 {fund_code} {fund_name} 失败: {e}")
     
     # 如果组合持有基金数量>20且当天没有止盈，从加仓风向标候选中选择预估收益率最高的进行止盈
-    if fund_count > 20 and success_count == 0 and wind_vane_candidates:
+    # 或者组合资产总和大于预算的80%，也执行止盈操作
+    
+    # 计算组合资产总和
+    total_asset_value = sum(asset.asset_value for asset in user_assets if asset.asset_value is not None)
+    asset_budget_ratio = 0
+    if total_budget:
+        asset_budget_ratio = total_asset_value / total_budget * 100
+        logger.info(f"组合资产总和: {total_asset_value}，占总预算比例: {asset_budget_ratio:.2f}%")
+    
+    if (fund_count > 20 and success_count == 0 and wind_vane_candidates) or \
+       (total_budget and total_asset_value > total_budget * 0.8 and wind_vane_candidates):
         # 按预估收益率排序，选择最高的
         wind_vane_candidates.sort(key=lambda x: x[2], reverse=True)
         best_candidate = wind_vane_candidates[0]
@@ -146,7 +156,8 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         
         try:
             bank_shares = get_bank_shares(user, sub_account_no, fund_code)
-            logger.info(f"{user.customer_name}的特殊止盈操作开始：加仓风向标基金{fund_name}({fund_code})预估收益{estimated_profit_rate}%. 组合基金数量>{fund_count}且今日无止盈，选择收益最高的加仓风向标基金止盈")
+            trigger_reason = "组合基金数量>20且今日无止盈" if fund_count > 20 and success_count == 0 else f"组合资产总和({total_asset_value:.2f})超过预算({total_budget})的80%"
+            logger.info(f"{user.customer_name}的特殊止盈操作开始：加仓风向标基金{fund_name}({fund_code})预估收益{estimated_profit_rate}%. {trigger_reason}，选择收益最高的加仓风向标基金止盈")
             sell_result = sell_low_fee_shares(user, sub_account_no, fund_code, bank_shares)
             if sell_result and sell_result.busin_serial_no:
                 logger.info(f"{user.customer_name}的加仓风向标基金{fund_name}({fund_code})卖出止盈成功")

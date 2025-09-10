@@ -11,10 +11,10 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-from code.src.API.组合管理.SubAccountMrg import getSubAccountNoByName
-from code.src.domain.user import ApiResponse
-from code.src.domain.sub_account.sub_asset_mult_list_response import SubAssetMultListResponse, SubAccountGroup
-from code.src.common.constant import DEFAULT_USER
+from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
+from src.domain.user import ApiResponse
+from src.domain.sub_account.sub_asset_mult_list_response import SubAssetMultListResponse, SubAccountGroup
+from src.common.constant import DEFAULT_USER
 
 @pytest.fixture
 def mock_success_response():
@@ -130,3 +130,23 @@ def test_get_sub_account_no_by_name_error(mock_error_response):
         print(f"获取到的组合编号: {result}")
         
         assert result is None
+
+
+def test_get_low_risk_portfolio_id():
+    print("开始测试获取低风险组合的组合编号")
+    
+    result = getSubAccountNoByName(user=DEFAULT_USER, name="低风险组合")
+    print(f"获取到的低风险组合编号: {result}")
+    
+    assert result is not None
+    assert isinstance(result, str)
+    assert len(result) > 0
+    print(f"验证通过: 成功获取到低风险组合编号 {result}")
+    
+    return result
+
+if __name__ == "__main__":
+    # 直接运行测试获取低风险组合的组合编号
+    print("直接运行获取低风险组合的组合编号测试")
+    portfolio_id = test_get_low_risk_portfolio_id()
+    print(f"低风险组合的组合编号: {portfolio_id}")

@@ -43,10 +43,10 @@ def get_withdrawable_trades(user, sub_account_no="", fund_code="", bus_type="", 
 
 def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account_no: str = "") -> int:
     """
-    统计某基金在上一个交易日（以基金的 nav_date 为准）及当天的成功交易数量。
+    统计某基金在上一个交易日（以基金的 nav_date 为准）及当天的未回撤交易数量。
     判定规则：
-    - 排除撤回：StatuIcon == 3 的交易不计入
     - 交易时间：取 StrikeStartDate 的日期部分（YYYY-MM-DD），与 nav_date 完全匹配或为当天日期
+    - 包含所有未回撤交易：无论交易是否已确认完成
     """
     logger = logging.getLogger("TradeQuery")
 
@@ -60,12 +60,13 @@ def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account
     # 获取当天日期
     today_date_str = datetime.now().strftime("%Y-%m-%d")
     
-    logger.info(f"统计基金 {fund_code} 在上一个交易日({nav_date_str})及当天({today_date_str})的成功交易数量（排除撤回）")
+    logger.info(f"统计基金 {fund_code} 在上一个交易日({nav_date_str})及当天({today_date_str})的未回撤交易数量")
 
     # 2) 拉取该基金的交易列表（不过滤状态，统一在本地筛选）
     trades = get_trades_list(user, sub_account_no, fund_code, "", "")
-    logger.info(f"获取到 {len(trades)} 条交易记录，开始筛选（排除 StatuIcon==3 且日期匹配 {nav_date_str} 或 {today_date_str}）")
-
+    # 只取前5条记录
+    trades = trades[:5] if len(trades) > 5 else trades
+    logger.info(f"获取到 {len(trades)} 条交易记录，开始筛选（排除状态文本为'已撤单(已支付)'且日期匹配 {nav_date_str}）")
     def _get(obj, *keys):
         # 兼容对象属性和字典键
         for k in keys:
@@ -77,59 +78,64 @@ def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account
                 return obj[k]
         return None
 
+    # 打印所有交易记录的原始信息
+    logger.info("\n" + "=" * 100)
+    logger.info("原始交易记录详情：")
+    
     count = 0
     for idx, trade in enumerate(trades, start=1):
-        # 撤回标记（StatuIcon == 3 表示已撤回，需要排除）
+        # 获取关键字段
         statu_icon = _get(trade, "statu_icon", "StatuIcon")
-        # 交易时间（取 StrikeStartDate 的日期部分）
         strike_start = _get(trade, "strike_start_date", "StrikeStartDate", "apply_work_day")
         strike_date = str(strike_start)[:10] if strike_start else None
-
-        # 额外打印：其他可能出现的时间字段，基金代码相关字段，业务字段，序列号以便排查
-        extra_cash_bag_time = _get(trade, "cash_bag_app_time", "CashBagAppTime")
-        extra_apply_work_day = _get(trade, "ApplyWorkDay", "applyWorkDay")
-        code_fund_code = _get(trade, "fund_code", "FundCode")
-        code_product_code = _get(trade, "ProductCode")
-        code_org_fund_code = _get(trade, "OrgFundCode")
-        product_name = _get(trade, "product_name", "ProductName", "fund_name")
-        business_type = _get(trade, "business_type", "BusinessType")
+        status_text = _get(trade, "app_state_text", "APPStateText", "status")
         serial_no = _get(trade, "busin_serial_no", "ID", "id")
-
-        # 打印调试摘要信息（INFO）
-        logger.info(
-            f"[{idx}/{len(trades)}] 序列号={serial_no} "
-            f"状态(StatuIcon)={statu_icon} "
-            f"StrikeStartDate={_get(trade, 'StrikeStartDate', 'strike_start_date')} "
-            f"CashBagAppTime={extra_cash_bag_time} "
-            f"ApplyWorkDay={_get(trade, 'apply_work_day')} / {extra_apply_work_day} "
-            f"归一化日期={strike_date} "
-            f"基金代码(fund_code)={code_fund_code} ProductCode={code_product_code} OrgFundCode={code_org_fund_code} "
-            f"产品名={product_name} 业务类型={business_type}"
-        )
-
-        # 打印是否命中过滤条件（INFO）
-        date_match = strike_date == nav_date_str or strike_date == today_date_str
-        logger.info(
-            f"    -> 过滤判断: 日期匹配上一交易日={strike_date == nav_date_str}, 日期匹配当天={strike_date == today_date_str}, "
-            f"总日期匹配={date_match}, 排除撤回(StatuIcon==3)={statu_icon == 3 or str(statu_icon) == '3'}"
-        )
-
-        # 可选：打印完整记录（DEBUG，默认 INFO 级别下不会刷屏）
+        amount = _get(trade, "amount", "Amount")
+        business_type = _get(trade, "business_type", "BusinessType")
+        product_name = _get(trade, "product_name", "ProductName", "fund_name")
+        
+        # 打印原始记录的完整信息
+        logger.info(f"\n[交易记录 {idx}/{len(trades)}]")
+        logger.info("-" * 80)
+        
+        # 尝试将对象转为字典并格式化打印所有字段
         try:
             if isinstance(trade, dict):
-                logger.debug(f"    原始记录(完整): {json.dumps(trade, ensure_ascii=False, default=str)}")
+                # 如果是字典，直接格式化打印
+                for key, value in trade.items():
+                    logger.info(f"{key:30}: {value}")
             else:
-                # 尝试将对象转字典打印
-                obj_dict = {k: getattr(trade, k) for k in dir(trade) if not k.startswith("_") and not callable(getattr(trade, k))}
-                logger.debug(f"    原始记录(完整): {json.dumps(obj_dict, ensure_ascii=False, default=str)}")
+                # 如果是对象，获取所有非私有、非方法属性
+                for attr in dir(trade):
+                    if not attr.startswith("_") and not callable(getattr(trade, attr)):
+                        value = getattr(trade, attr)
+                        logger.info(f"{attr:30}: {value}")
         except Exception as e:
-            logger.debug(f"    原始记录(完整)打印失败: {e}")
-
-        # 统计日期匹配 nav_date 或当天日期，且 非撤回 的交易
-        if (strike_date == nav_date_str or strike_date == today_date_str) and statu_icon != 3 and str(statu_icon) != "3":
+            logger.info(f"打印原始记录失败: {e}")
+        
+        # 打印关键信息摘要
+        logger.info("-" * 80)
+        logger.info(f"交易序列号: {serial_no}")
+        logger.info(f"状态码(StatuIcon): {statu_icon}")
+        logger.info(f"状态文本: {status_text}")
+        logger.info(f"交易日期: {strike_date}")
+        logger.info(f"金额: {amount}")
+        logger.info(f"业务类型: {business_type}")
+        logger.info(f"基金名称: {product_name}")
+        
+        # 统计日期匹配 nav_date 且 非撤回 的交易
+        date_match = strike_date == nav_date_str
+        # 修改判断逻辑：只有状态文本为"已撤单(已支付)"的交易不被统计
+        is_withdrawn = status_text == "已撤单(已支付)"
+        
+        if date_match and not is_withdrawn:
             count += 1
-
-    logger.info(f"基金 {fund_code} 在上一个交易日({nav_date_str})及当天({today_date_str})成功交易数量（排除撤回）: {count}")
+            logger.info(f"统计结果: 此交易被统计为未回撤交易")
+        else:
+            logger.info(f"统计结果: 此交易未被统计 (日期匹配={date_match}, 是否撤回={is_withdrawn})")
+    
+    logger.info("=" * 100)
+    logger.info(f"基金 {fund_code} 在上一个交易日({nav_date_str})未回撤交易数量: {count}")
     return count
 
 if __name__ == "__main__":

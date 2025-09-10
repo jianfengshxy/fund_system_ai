@@ -26,7 +26,7 @@ def test_count_success_trades_on_prev_nav_day():
     fund_code = "018123"
 
     # 调用函数统计上一交易日成功交易数量（排除撤回）
-    count = count_success_trades_on_prev_nav_day(DEFAULT_USER, fund_code)
+    count = count_success_trades_on_prev_nav_day(DEFAULT_USER, fund_code,'015968')
 
     # 验证返回结果类型
     assert isinstance(count, int), "返回结果应该是整数"

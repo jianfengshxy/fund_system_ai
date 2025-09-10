@@ -256,8 +256,14 @@ def add_new_funds(user: User, sub_account_name: str, total_budget: float, amount
             except Exception as e:
                 logger.warning(f"获取基金 {asset.fund_code} 信息失败: {e}")
 
-        if len(user_assets) >= 50:
+        if len(user_assets) >= 30:
             logger.info(f"用户 {customer_name} 的基金数量已达到50个，无需新增基金，退出操作")
+            return True
+            
+        # 检查资产总和是否超过总预算的80%
+        total_asset_value = sum(asset.asset_value for asset in user_assets if asset.asset_value is not None)
+        if total_asset_value > total_budget * 0.8:
+            logger.info(f"用户 {customer_name} 的资产总和({total_asset_value}元)已超过总预算({total_budget}元)的80%({total_budget * 0.8}元)，停止新增基金")
             return True
 
         # 2) 获取风向标并按基金类型过滤

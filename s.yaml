@@ -77,7 +77,7 @@ resources:
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "add_new_13918199137_low_risk"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "低风险组合","total_budget": 1000000.0,"amount": 50000.0,"fund_type": "non_index"}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "低风险组合","total_budget": 1000000.0,"amount": 20000.0,"fund_type": "non_index"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 

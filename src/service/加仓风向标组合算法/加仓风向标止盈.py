@@ -134,9 +134,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             except Exception as e:
                 logger.error(f"止盈 {fund_code} {fund_name} 失败: {e}")
     
-    # 如果组合持有基金数量>20且当天没有止盈，从加仓风向标候选中选择预估收益率最高的进行止盈
-    # 或者组合资产总和大于预算的80%，也执行止盈操作
-    
+    # 如果组合持有基金数量>20且当天没有止盈且组合资产总和大于预算的80%，从加仓风向标候选中选择基金今日估值涨幅大于3%的持有基金中止盈预估收益率最高的
     # 计算组合资产总和
     total_asset_value = sum(asset.asset_value for asset in user_assets if asset.asset_value is not None)
     asset_budget_ratio = 0
@@ -144,28 +142,60 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         asset_budget_ratio = total_asset_value / total_budget * 100
         logger.info(f"组合资产总和: {total_asset_value}，占总预算比例: {asset_budget_ratio:.2f}%")
     
-    if (fund_count > 20 and success_count == 0 and wind_vane_candidates) or \
-       (total_budget and total_asset_value > total_budget * 0.8 and wind_vane_candidates):
-        # 按预估收益率排序，选择最高的
-        wind_vane_candidates.sort(key=lambda x: x[2], reverse=True)
-        best_candidate = wind_vane_candidates[0]
-        asset, fund_info, estimated_profit_rate = best_candidate
-        
-        fund_code = asset.fund_code
-        fund_name = fund_info.fund_name
-        
-        try:
-            bank_shares = get_bank_shares(user, sub_account_no, fund_code)
-            trigger_reason = "组合基金数量>20且今日无止盈" if fund_count > 20 and success_count == 0 else f"组合资产总和({total_asset_value:.2f})超过预算({total_budget})的80%"
-            logger.info(f"{user.customer_name}的特殊止盈操作开始：加仓风向标基金{fund_name}({fund_code})预估收益{estimated_profit_rate}%. {trigger_reason}，选择收益最高的加仓风向标基金止盈")
-            sell_result = sell_low_fee_shares(user, sub_account_no, fund_code, bank_shares)
-            if sell_result and sell_result.busin_serial_no:
-                logger.info(f"{user.customer_name}的加仓风向标基金{fund_name}({fund_code})卖出止盈成功")
-                success_count += 1
-            else:
-                logger.warning(f"{user.customer_name}的加仓风向标基金{fund_name}({fund_code})止盈失败")
-        except Exception as e:
-            logger.error(f"止盈加仓风向标基金 {fund_code} {fund_name} 失败: {e}")
+    # 三个条件同时满足才触发特殊止盈：
+    # 1) 组合基金数量 > 20
+    # 2) 当天尚未发生止盈（success_count == 0）
+    # 3) 组合资产总和 > 预算的 80%（且 total_budget 有效）
+    eligible_for_special_take_profit = (
+        fund_count > 20
+        and success_count == 0
+        and (total_budget is not None and total_budget > 0)
+        and total_asset_value > total_budget * 0.8
+        and len(wind_vane_candidates) > 0
+    )
+
+    if eligible_for_special_take_profit:
+        # 仅从候选中选择“今日估值涨幅 > 3%”的持有基金，并按“预估收益率”从高到低排序
+        eligible_candidates = []
+        for asset, fund_info, estimated_profit_rate in wind_vane_candidates:
+            try:
+                est_change = getattr(fund_info, "estimated_change", 0.0) or 0.0
+            except Exception:
+                est_change = 0.0
+            if est_change > 3.0:
+                eligible_candidates.append((asset, fund_info, estimated_profit_rate, est_change))
+
+        if not eligible_candidates:
+            logger.info("满足触发条件，但加仓风向标候选中无'今日估值涨幅>3%'的持有基金，跳过特殊止盈")
+        else:
+            # 选择预估收益率最高的
+            eligible_candidates.sort(key=lambda x: x[2], reverse=True)
+            asset, fund_info, estimated_profit_rate, est_change = eligible_candidates[0]
+            fund_code = asset.fund_code
+            fund_name = fund_info.fund_name
+
+            try:
+                bank_shares = get_bank_shares(user, sub_account_no, fund_code)
+                logger.info(
+                    f"{user.customer_name}的特殊止盈开始："
+                    f"{fund_name}({fund_code}) 预估收益率={estimated_profit_rate:.2f}%，今日估值涨幅={est_change:.2f}%，"
+                    f"触发原因：基金数>{20} 且 今日未止盈 且 资产/预算>{80}%（当前{asset_budget_ratio:.2f}%）"
+                )
+                sell_result = sell_low_fee_shares(user, sub_account_no, fund_code, bank_shares)
+                if sell_result and sell_result.busin_serial_no:
+                    logger.info(f"{user.customer_name}的加仓风向标基金{fund_name}({fund_code})卖出止盈成功")
+                    success_count += 1
+                else:
+                    logger.warning(f"{user.customer_name}的加仓风向标基金{fund_name}({fund_code})止盈失败")
+            except Exception as e:
+                logger.error(f"止盈加仓风向标基金 {fund_code} {fund_name} 失败: {e}")
+    else:
+        logger.info(
+            "未触发特殊止盈条件："
+            f"fund_count={fund_count}（需>20）, success_count={success_count}（需==0）, "
+            f"total_budget={total_budget}, total_asset_value={total_asset_value}（需>80%预算）, "
+            f"候选数={len(wind_vane_candidates)}"
+        )
     
     logger.info(f"止盈操作完成，成功处理 {success_count} 个基金")
     return success_count > 0

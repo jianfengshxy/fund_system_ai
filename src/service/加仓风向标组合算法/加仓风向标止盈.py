@@ -162,7 +162,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                 est_change = getattr(fund_info, "estimated_change", 0.0) or 0.0
             except Exception:
                 est_change = 0.0
-            if est_change > 3.0:
+            if est_change > 3.0 and estimated_profit_rate > 5.0:
                 eligible_candidates.append((asset, fund_info, estimated_profit_rate, est_change))
 
         if not eligible_candidates:

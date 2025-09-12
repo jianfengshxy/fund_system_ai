@@ -261,6 +261,23 @@ def add_new_funds(user: User, sub_account_name: str, total_budget: float, amount
         if len(user_assets) >= 20 and total_asset_value > total_budget * 0.8:
             logger.info(f"用户 {customer_name} 的基金数量已达到20个，且资产总和({total_asset_value}元)已超过总预算({total_budget}元)的80%({total_budget * 0.8}元)，停止新增基金")
             return True
+        else:
+            count = len(user_assets)
+            # 避免除零错误
+            ratio = (total_asset_value / total_budget) if total_budget else None
+            ratio_pct_str = f"{ratio*100:.2f}%" if ratio is not None else "N/A"
+
+            reasons = []
+            if count < 20:
+                reasons.append(f"基金数量未达到20个(当前{count}个)")
+            # 仅当 total_budget 有效时才判断占比
+            if total_budget and total_asset_value <= total_budget * 0.8:
+                reasons.append(f"资产占比未超过80%(当前{total_asset_value}元/{total_budget}元={ratio_pct_str})")
+            if not total_budget:
+                reasons.append("总预算为0或未设置，无法计算资产占比")
+
+            reason_text = "；".join(reasons) if reasons else "条件计算异常"
+            logger.info(f"用户 {customer_name} 未满足停止新增条件：{reason_text}，继续执行新增流程")
 
         # 2) 获取风向标并按基金类型过滤
         wind_vane_funds = get_fund_investment_indicators()

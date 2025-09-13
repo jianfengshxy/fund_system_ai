@@ -107,7 +107,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         
         if in_wind_vane:
             # 收集加仓风向标基金作为候选
-            if estimated_change > 3.0 and estimated_profit_rate > 5.0:
+            if estimated_change > 1.0 and estimated_profit_rate > 5.0:
                 wind_vane_candidates.append((asset, fund_info, estimated_profit_rate))
                 logger.info(f"加入候选: {fund_code} {fund_name}: 在加仓风向标中，预估涨幅{estimated_change}%，预估收益率{estimated_profit_rate}%")
             else:
@@ -155,18 +155,18 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     )
 
     if eligible_for_special_take_profit:
-        # 仅从候选中选择“今日估值涨幅 > 3%”的持有基金，并按“预估收益率”从高到低排序
+        # 仅从候选中选择“今日估值涨幅 > 1%”的持有基金，并按“预估收益率”从高到低排序
         eligible_candidates = []
         for asset, fund_info, estimated_profit_rate in wind_vane_candidates:
             try:
                 est_change = getattr(fund_info, "estimated_change", 0.0) or 0.0
             except Exception:
                 est_change = 0.0
-            if est_change > 3.0 and estimated_profit_rate > 5.0:
+            if est_change > 1.0 and estimated_profit_rate > 5.0:
                 eligible_candidates.append((asset, fund_info, estimated_profit_rate, est_change))
 
         if not eligible_candidates:
-            logger.info("满足触发条件，但加仓风向标候选中无'今日估值涨幅>3%'的持有基金，跳过特殊止盈")
+            logger.info("满足触发条件，但加仓风向标候选中无'今日估值涨幅>1%'的持有基金，跳过特殊止盈")
         else:
             # 选择预估收益率最高的
             eligible_candidates.sort(key=lambda x: x[2], reverse=True)

@@ -3,36 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基金组合资产看板</title>
+    <title>看板</title>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
             margin: 0;
             padding: 20px;
-            background-color: #f4f7f9;
-            color: #333;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            line-height: 1.5;
         }
         .container {
             max-width: 1200px;
             margin: auto;
-            background: #fff;
+            background: #252526;
             padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            border: 1px solid #3c3c3c;
         }
         h1, h2 {
-            color: #2c3e50;
-            border-bottom: 2px solid #ecf0f1;
+            color: #569cd6;
+            border-bottom: 2px solid #3c3c3c;
             padding-bottom: 10px;
+            font-weight: 600;
         }
         .portfolio-selector {
             margin-bottom: 20px;
         }
+        .portfolio-selector label {
+            color: #9cdcfe;
+            margin-right: 10px;
+            font-size: 14px;
+        }
         .portfolio-selector select {
             padding: 8px 12px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
-            font-size: 16px;
+            border-radius: 3px;
+            border: 1px solid #3c3c3c;
+            background-color: #333;
+            color: #d4d4d4;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        .portfolio-selector select:focus {
+            outline: 1px solid #007acc;
         }
         .summary, .portfolio-details {
             margin-bottom: 20px;
@@ -40,63 +54,104 @@
         .summary-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
+            gap: 15px;
         }
         .summary-item {
-            background: #ecf0f1;
+            background: #2d2d30;
             padding: 15px;
-            border-radius: 5px;
+            border-radius: 3px;
             text-align: center;
+            border: 1px solid #3c3c3c;
         }
         .summary-item h3 {
             margin: 0 0 10px 0;
-            font-size: 16px;
-            color: #7f8c8d;
+            font-size: 14px;
+            color: #9cdcfe;
+            font-weight: normal;
         }
         .summary-item p {
             margin: 0;
-            font-size: 20px;
+            font-size: 18px;
             font-weight: bold;
+            color: #d4d4d4;
         }
         table {
             width: 100%;
             border-collapse: collapse;
+            border: 1px solid #3c3c3c;
         }
         th, td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #ddd;
+            padding: 10px 12px;
+            border-bottom: 1px solid #3c3c3c;
             text-align: left;
         }
         th {
-            background-color: #f2f2f2;
-            font-weight: bold;
+            background-color: #2d2d30;
+            color: #569cd6;
+            font-weight: 600;
+            border-right: 1px solid #3c3c3c;
+            cursor: pointer;
+            position: relative;
+            user-select: none;
+        }
+        th:hover {
+            background-color: #37373d;
+        }
+        th.sort-asc::after {
+            content: ' ▲';
+            font-size: 12px;
+            color: #4ec9b0;
+        }
+        th.sort-desc::after {
+            content: ' ▼';
+            font-size: 12px;
+            color: #f44747;
+        }
+        td {
+            color: #d4d4d4;
+            border-right: 1px solid #3c3c3c;
         }
         tr:hover {
-            background-color: #f9f9f9;
+            background-color: #2a2d2e;
         }
         .profit {
-            color: #e74c3c;
+            color: #f44747;
         }
         .loss {
-            color: #2ecc71;
+            color: #4ec9b0;
         }
         .positive {
-            color: #e74c3c;
+            color: #f44747;
         }
         .negative {
-            color: #2ecc71;
+            color: #4ec9b0;
         }
         .loader {
             text-align: center;
             padding: 50px;
-            font-size: 18px;
-            color: #7f8c8d;
+            font-size: 16px;
+            color: #6a9955;
+        }
+        /* 代码风格的滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #252526;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #424242;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4f4f4f;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>基金组合资产看板</h1>
+        <h1>看板</h1>
 
         <div class="portfolio-selector">
             <label for="portfolio-name">选择组合:</label>
@@ -118,6 +173,9 @@
         document.addEventListener('DOMContentLoaded', function() {
             const portfolioSelector = document.getElementById('portfolio-name');
             const portfolioContent = document.getElementById('portfolio-content');
+            let currentPortfolioData = null;
+            let currentSortColumn = null;
+            let currentSortDirection = null;
 
             function updatePortfolioDetails(portfolioName) {
                 portfolioContent.innerHTML = '<div class="loader">正在加载数据...</div>';
@@ -126,76 +184,138 @@
                     .then(response => response.json())
                     .then(data => {
                         if (data.error) {
-                            portfolioContent.innerHTML = `<p>加载数据失败: ${data.error}</p>`;
+                            portfolioContent.innerHTML = `<p style="color: #f44747;">加载数据失败: ${data.error}</p>`;
                             return;
                         }
 
-                        let summaryHtml = `
-                            <div class="summary">
-                                <h2>组合概览: ${portfolioName}</h2>
-                                <div class="summary-grid">
-                                    <div class="summary-item">
-                                        <h3>总资产 (元)</h3>
-                                        <p>${data.total_assets.toFixed(2)}</p>
-                                    </div>
-                                    <div class="summary-item">
-                                        <h3>持有盈亏 (元)</h3>
-                                        <p class="${data.total_profit >= 0 ? 'profit' : 'loss'}">${data.total_profit.toFixed(2)}</p>
-                                    </div>
-                                    <div class="summary-item">
-                                        <h3>今日估算涨跌幅 (%)</h3>
-                                        <p class="${data.estimated_portfolio_change_ratio >= 0 ? 'positive' : 'negative'}">${data.estimated_portfolio_change_ratio.toFixed(2)}%</p>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-
-                        let detailsHtml = `
-                            <div class="portfolio-details">
-                                <h2>持仓详情</h2>
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>基金名称</th>
-                                            <th>基金代码</th>
-                                            <th>资产</th>
-                                            <th>持有份额</th>
-                                            <th>持有收益/率</th>
-                                            <th>今日估算涨跌幅 (%)</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                        `;
-
-                        if (data.portfolio_details && data.portfolio_details.length > 0) {
-                            data.portfolio_details.forEach(asset => {
-                                detailsHtml += `
-                                    <tr>
-                                        <td>${asset.fund_name}</td>
-                                        <td>${asset.fund_code}</td>
-                                        <td>${asset.asset_value.toFixed(2)}</td>
-                                        <td>${asset.available_vol.toFixed(2)}</td>
-                                        <td>
-                                            <p class="${asset.hold_profit >= 0 ? 'profit' : 'loss'}">${asset.hold_profit.toFixed(2)}</p>
-                                            <p class="${asset.hold_profit_rate >= 0 ? 'profit' : 'loss'}">${asset.hold_profit_rate.toFixed(2)}%</p>
-                                        </td>
-                                        <td class="${asset.estimated_change >= 0 ? 'positive' : 'negative'}">${asset.estimated_change.toFixed(2)}%</td>
-                                    </tr>
-                                `;
-                            });
-                        } else {
-                            detailsHtml += '<tr><td colspan="6" style="text-align:center;">暂无持仓数据</td></tr>';
-                        }
-
-                        detailsHtml += `</tbody></table></div>`;
-                        portfolioContent.innerHTML = summaryHtml + detailsHtml;
+                        currentPortfolioData = data;
+                        renderPortfolioDetails(data);
                     })
                     .catch(error => {
-                        portfolioContent.innerHTML = `<p>加载数据时发生网络错误: ${error}</p>`;
+                        portfolioContent.innerHTML = `<p style="color: #f44747;">加载数据时发生网络错误: ${error}</p>`;
                     });
             }
 
+            function renderPortfolioDetails(data) {
+                let summaryHtml = `
+                    <div class="summary">
+                        <h2>组合概览: ${portfolioSelector.value}</h2>
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <h3>总资产 (元)</h3>
+                                <p>${data.total_assets.toFixed(2)}</p>
+                            </div>
+                            <div class="summary-item">
+                                <h3>持有盈亏 (元)</h3>
+                                <p class="${data.total_profit >= 0 ? 'profit' : 'loss'}">${data.total_profit.toFixed(2)}</p>
+                            </div>
+                            <div class="summary-item">
+                                <h3>今日估算涨跌幅 (%)</h3>
+                                <p class="${data.estimated_portfolio_change_ratio >= 0 ? 'positive' : 'negative'}">${data.estimated_portfolio_change_ratio.toFixed(2)}%</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                let detailsHtml = `
+                    <div class="portfolio-details">
+                        <h2>持仓详情</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>基金名称</th>
+                                    <th>基金代码</th>
+                                    <th>资产</th>
+                                    <th>持有份额</th>
+                                    <th data-sort="hold_profit">持有收益/率</th>
+                                    <th data-sort="estimated_change">今日估算涨跌幅 (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                let portfolioDetails = data.portfolio_details || [];
+                
+                // 应用排序
+                if (currentSortColumn && currentSortDirection) {
+                    portfolioDetails.sort((a, b) => {
+                        let valueA, valueB;
+                        
+                        if (currentSortColumn === 'hold_profit') {
+                            valueA = a.hold_profit || 0;
+                            valueB = b.hold_profit || 0;
+                        } else if (currentSortColumn === 'estimated_change') {
+                            valueA = a.estimated_change || 0;
+                            valueB = b.estimated_change || 0;
+                        }
+                        
+                        return currentSortDirection === 'asc' ? valueA - valueB : valueB - valueA;
+                    });
+                }
+
+                if (portfolioDetails.length > 0) {
+                    portfolioDetails.forEach(asset => {
+                        detailsHtml += `
+                            <tr>
+                                <td>${asset.fund_name}</td>
+                                <td>${asset.fund_code}</td>
+                                <td>${asset.asset_value.toFixed(2)}</td>
+                                <td>${asset.available_vol.toFixed(2)}</td>
+                                <td>
+                                    <p class="${asset.hold_profit >= 0 ? 'profit' : 'loss'}">${asset.hold_profit.toFixed(2)}</p>
+                                    <p class="${asset.hold_profit_rate >= 0 ? 'profit' : 'loss'}">${asset.hold_profit_rate.toFixed(2)}%</p>
+                                </td>
+                                <td class="${asset.estimated_change >= 0 ? 'positive' : 'negative'}">${asset.estimated_change.toFixed(2)}%</td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    detailsHtml += '<tr><td colspan="6" style="text-align:center;color:#6a9955;">暂无持仓数据</td></tr>';
+                }
+
+                detailsHtml += `</tbody></table></div>`;
+                portfolioContent.innerHTML = summaryHtml + detailsHtml;
+
+                // 添加排序事件监听器
+                addSortListeners();
+            }
+
+            function addSortListeners() {
+                const profitHeader = document.querySelector('th[data-sort="hold_profit"]');
+                const changeHeader = document.querySelector('th[data-sort="estimated_change"]');
+
+                if (profitHeader) {
+                    profitHeader.addEventListener('click', () => handleSort('hold_profit'));
+                    if (currentSortColumn === 'hold_profit') {
+                        profitHeader.classList.add(currentSortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+                    }
+                }
+
+                if (changeHeader) {
+                    changeHeader.addEventListener('click', () => handleSort('estimated_change'));
+                    if (currentSortColumn === 'estimated_change') {
+                        changeHeader.classList.add(currentSortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+                    }
+                }
+            }
+
+            function handleSort(column) {
+                if (currentSortColumn === column) {
+                    // 切换排序方向
+                    currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    // 新列，默认降序（从高到低）
+                    currentSortColumn = column;
+                    currentSortDirection = 'desc';
+                }
+
+                // 重新渲染表格
+                renderPortfolioDetails(currentPortfolioData);
+            }
+
             portfolioSelector.addEventListener('change', (event) => {
+                currentSortColumn = null;
+                currentSortDirection = null;
                 updatePortfolioDetails(event.target.value);
             });
 

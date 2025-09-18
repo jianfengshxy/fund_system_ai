@@ -268,8 +268,8 @@ def add_new_funds(user: User, sub_account_name: str, total_budget: float, amount
             ratio_pct_str = f"{ratio*100:.2f}%" if ratio is not None else "N/A"
 
             reasons = []
-            if count < 20:
-                reasons.append(f"基金数量未达到20个(当前{count}个)")
+            if count < 30:
+                reasons.append(f"基金数量未达到30个(当前{count}个)")
             # 仅当 total_budget 有效时才判断占比
             if total_budget and total_asset_value <= total_budget * 0.8:
                 reasons.append(f"资产占比未超过80%(当前{total_asset_value}元/{total_budget}元={ratio_pct_str})")

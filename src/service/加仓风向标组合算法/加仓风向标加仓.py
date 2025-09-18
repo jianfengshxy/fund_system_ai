@@ -93,13 +93,22 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             logger.info(f"跳过 {fund_code}: 未获取到基金基础信息")
             continue
 
-        current_profit_rate = asset.constant_profit_rate or 0.0
-        estimated_change = fi.estimated_change or 0.0
+        # 安全数值工具
+        def _safe_float(v, default=0.0):
+            try:
+                if v is None:
+                    return default
+                return float(v)
+            except Exception:
+                return default
+
+        current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
+        estimated_change = _safe_float(getattr(fi, "estimated_change", 0.0), 0.0)
         estimated_profit_rate = current_profit_rate + estimated_change
 
         # 公共前置过滤：跌幅不深、在途订单等直接跳过
         if estimated_profit_rate >= -1.0:
-            logger.info(f"跳过 {fi.fund_name}({fund_code}): 回撤不达标 estimated_profit_rate={estimated_profit_rate:.2f}%，阈值<-1.00%（current={current_profit_rate:.2f}%, change={estimated_change:.2f}%）")
+            logger.info(f"跳过 {fi.fund_name}({fund_code}): 回撤不达标 estimated_profit_rate={estimated_profit_rate:.2f}% ，阈值<-1.00%（current={current_profit_rate:.2f}%, change={estimated_change:.2f}%）")
             continue
         # 使用昨日净值日成功交易数作为“在途/已成交”的判断依据
         prev_day_success_count = count_success_trades_on_prev_nav_day(user, fund_code, sub_account_no)
@@ -131,7 +140,8 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
         # 先尝试风向标路径（仅对风向标标的）
         if in_wind_vane:
             try:
-                if asset.asset_value < total_budget:
+                safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
+                if safe_asset_value < float(total_budget):
                     res = commit_order(user, sub_account_no, fund_code, buy_amount)
                     if res:
                         logger.info(f"风向标加仓成功: {fund_name}({fund_code}) - 金额: {buy_amount} - 订单号: {res.busin_serial_no}")
@@ -140,7 +150,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                     if orders_made >= fund_num:
                         break
                 else:
-                    logger.info(f"跳过风向标 {fund_name}({fund_code}): 持仓资产 {asset.asset_value} >= 本次预算阈值 {total_budget}，不重复加仓")
+                    logger.info(f"跳过风向标 {fund_name}({fund_code}): 持仓资产 {safe_asset_value} >= 本次预算阈值 {total_budget}，不重复加仓")
                 # 对风向标标的，不走后续“排名/收益率规则路径”
                 continue
             except Exception as e:
@@ -148,26 +158,42 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                 # 不中断，继续其他标的
                 continue
 
-        # 非风向标：沿用原“排名/收益率规则路径”
+        # 非风向标：沿用原“排名/收益率规则路径”（增加空值与分母校验）
         try:
-            if fi.rank_100day < 20 or fi.rank_100day > 90 or fi.rank_30day < 5:
-                logger.info(f"跳过 {fund_name}({fund_code}): 排名条件不满足（期望 20 <= rank_100day <= 90 且 rank_30day >= 5），实际 rank_100day={fi.rank_100day}, rank_30day={fi.rank_30day}")
+            rank_100 = getattr(fi, "rank_100day", None)
+            rank_30 = getattr(fi, "rank_30day", None)
+            # 任一排名缺失都视为不满足
+            if not isinstance(rank_100, (int, float)) or not isinstance(rank_30, (int, float)):
+                logger.info(f"跳过 {fund_name}({fund_code}): 排名数据缺失（rank_100day={rank_100}, rank_30day={rank_30}）")
+                continue
+            if rank_100 < 20 or rank_100 > 90 or rank_30 < 5:
+                logger.info(f"跳过 {fund_name}({fund_code}): 排名条件不满足（期望 20 <= rank_100day <= 90 且 rank_30day >= 5），实际 rank_100day={rank_100}, rank_30day={rank_30}")
                 continue
 
-            season_growth_rate = fi.three_month_return
-            month_growth_rate = fi.month_return
-            week_growth_rate = fi.week_return
+            season_growth_rate = _safe_float(getattr(fi, "three_month_return", None), 0.0)
+            month_growth_rate = _safe_float(getattr(fi, "month_return", None), 0.0)
+            week_growth_rate = _safe_float(getattr(fi, "week_return", None), 0.0)
             if (week_growth_rate < 0.0 and month_growth_rate < 0.0 and season_growth_rate < 0.0) or \
                (season_growth_rate < 0.0 and (month_growth_rate < 0.0 or week_growth_rate < 0.0)) or \
                (season_growth_rate > 0.0 and (month_growth_rate < 0.0 and week_growth_rate < 0.0)):
                 logger.info(f"跳过 {fund_name}({fund_code}): 趋势条件不满足 week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%, season={season_growth_rate:.2f}%")
                 continue
 
-            # 排名校验
-            _, season_item_rank, season_item_sc = get_fund_growth_rate(fi, '3Y')
-            _, month_item_rank, month_item_sc = get_fund_growth_rate(fi, 'Y')
-            month_rank_rate = month_item_rank / month_item_sc
-            season_rank_rate = season_item_rank / season_item_sc
+            # 排名校验（增加返回值与分母校验）
+            try:
+                _, season_item_rank, season_item_sc = get_fund_growth_rate(fi, '3Y')
+                _, month_item_rank, month_item_sc = get_fund_growth_rate(fi, 'Y')
+            except Exception as e:
+                logger.info(f"跳过 {fund_name}({fund_code}): 获取排名数据异常 {e}")
+                continue
+
+            if not season_item_rank or not season_item_sc or season_item_sc == 0 \
+               or not month_item_rank or not month_item_sc or month_item_sc == 0:
+                logger.info(f"跳过 {fund_name}({fund_code}): 百分位排名数据不可用（season: rank={season_item_rank}, sc={season_item_sc}; month: rank={month_item_rank}, sc={month_item_sc}）")
+                continue
+
+            month_rank_rate = float(month_item_rank) / float(month_item_sc)
+            season_rank_rate = float(season_item_rank) / float(season_item_sc)
             if month_rank_rate > 0.75 or season_rank_rate > 0.75:
                 logger.info(f"跳过 {fund_name}({fund_code}): 百分位排名过高 month_rank_rate={month_rank_rate:.2%}, season_rank_rate={season_rank_rate:.2%}（阈值<=75%）")
                 continue
@@ -180,7 +206,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                 success_count += 1
             if orders_made >= fund_num:
                 break
-            # -5% 额外加仓（非必须，不满足则不会触发，非跳过原因）
+            # -5% 额外加仓
             if estimated_profit_rate < -5.0 and orders_made < fund_num:
                 res2 = commit_order(user, sub_account_no, fund_code, buy_amount)
                 if res2:

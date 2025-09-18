@@ -229,6 +229,7 @@
                                     <th>持有份额</th>
                                     <th data-sort="hold_profit">持有收益/率</th>
                                     <th data-sort="estimated_change">今日估算涨跌幅 (%)</th>
+                                    <th data-sort="estimated_profit_rate">基金预估收益率 (%)</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -247,6 +248,10 @@
                         } else if (currentSortColumn === 'estimated_change') {
                             valueA = a.estimated_change || 0;
                             valueB = b.estimated_change || 0;
+                        } else if (currentSortColumn === 'estimated_profit_rate') {
+                            // 计算预估收益率进行比较
+                            valueA = (a.constant_profit_rate || 0) + (a.estimated_change || 0);
+                            valueB = (b.constant_profit_rate || 0) + (b.estimated_change || 0);
                         }
                         
                         return currentSortDirection === 'asc' ? valueA - valueB : valueB - valueA;
@@ -255,6 +260,9 @@
 
                 if (portfolioDetails.length > 0) {
                     portfolioDetails.forEach(asset => {
+                        // 计算预估收益率 = 固定收益率 + 今日估算涨跌幅
+                        const estimatedProfitRate = (asset.constant_profit_rate || 0) + (asset.estimated_change || 0);
+                        
                         detailsHtml += `
                             <tr>
                                 <td>${asset.fund_name}</td>
@@ -263,14 +271,15 @@
                                 <td>${asset.available_vol.toFixed(2)}</td>
                                 <td>
                                     <p class="${asset.hold_profit >= 0 ? 'profit' : 'loss'}">${asset.hold_profit.toFixed(2)}</p>
-                                    <p class="${asset.hold_profit_rate >= 0 ? 'profit' : 'loss'}">${asset.hold_profit_rate.toFixed(2)}%</p>
+                                    <p class="${asset.constant_profit_rate >= 0 ? 'profit' : 'loss'}">${asset.constant_profit_rate.toFixed(2)}%</p>
                                 </td>
                                 <td class="${asset.estimated_change >= 0 ? 'positive' : 'negative'}">${asset.estimated_change.toFixed(2)}%</td>
+                                <td class="${estimatedProfitRate >= 0 ? 'positive' : 'negative'}">${estimatedProfitRate.toFixed(2)}%</td>
                             </tr>
                         `;
                     });
                 } else {
-                    detailsHtml += '<tr><td colspan="6" style="text-align:center;color:#6a9955;">暂无持仓数据</td></tr>';
+                    detailsHtml += '<tr><td colspan="7" style="text-align:center;color:#6a9955;">暂无持仓数据</td></tr>';
                 }
 
                 detailsHtml += `</tbody></table></div>`;
@@ -283,6 +292,7 @@
             function addSortListeners() {
                 const profitHeader = document.querySelector('th[data-sort="hold_profit"]');
                 const changeHeader = document.querySelector('th[data-sort="estimated_change"]');
+                const estimatedProfitHeader = document.querySelector('th[data-sort="estimated_profit_rate"]');
 
                 if (profitHeader) {
                     profitHeader.addEventListener('click', () => handleSort('hold_profit'));
@@ -295,6 +305,13 @@
                     changeHeader.addEventListener('click', () => handleSort('estimated_change'));
                     if (currentSortColumn === 'estimated_change') {
                         changeHeader.classList.add(currentSortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+                    }
+                }
+
+                if (estimatedProfitHeader) {
+                    estimatedProfitHeader.addEventListener('click', () => handleSort('estimated_profit_rate'));
+                    if (currentSortColumn === 'estimated_profit_rate') {
+                        estimatedProfitHeader.classList.add(currentSortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
                     }
                 }
             }

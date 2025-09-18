@@ -258,8 +258,8 @@ def add_new_funds(user: User, sub_account_name: str, total_budget: float, amount
 
         # 仅当“基金数量过多”且“资产总和超过80%”两个条件同时满足时，才退出
         total_asset_value = sum(asset.asset_value for asset in user_assets if asset.asset_value is not None)
-        if len(user_assets) >= 20 and total_asset_value > total_budget * 0.8:
-            logger.info(f"用户 {customer_name} 的基金数量已达到20个，且资产总和({total_asset_value}元)已超过总预算({total_budget}元)的80%({total_budget * 0.8}元)，停止新增基金")
+        if len(user_assets) >= 30 and total_asset_value > total_budget * 0.8:
+            logger.info(f"用户 {customer_name} 的基金数量已达到30个，且资产总和({total_asset_value}元)已超过总预算({total_budget}元)的80%({total_budget * 0.8}元)，停止新增基金")
             return True
         else:
             count = len(user_assets)

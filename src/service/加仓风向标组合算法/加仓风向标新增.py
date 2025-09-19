@@ -21,6 +21,7 @@ from src.service.交易管理.购买基金 import commit_order
 from src.common.constant import DEFAULT_USER  # 添加导入，如果需要
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.API.基金信息.FundRank import get_fund_growth_rate
+from src.common.errors import TradePasswordError  # 新增：捕获密码错误异常
 
 # 配置日志
 logging.basicConfig(
@@ -78,10 +79,17 @@ def add_new_funds(user: User, sub_account_name: str, total_budget: float, amount
         logger.info(f"用户持有基金代码: {user_fund_codes}")
         logger.info(f"用户持有指数基金跟踪的指数: {user_index_codes}")
         
-        # 步骤2: 判断用户所有的基金数量是否大于等于50
+        # 步骤2: 检查用户基金数量限制（阈值：MAX_FUNDS_THRESHOLD）
         logger.info("=== 步骤2: 检查用户基金数量限制 ===")
-        if len(user_assets) >= 50:
-            logger.info(f"用户 {customer_name} 的基金数量已达到50个，无需新增基金，退出操作")
+        max_funds_threshold_env = os.environ.get('MAX_FUNDS_THRESHOLD')
+        try:
+            MAX_FUNDS_THRESHOLD = int(max_funds_threshold_env) if max_funds_threshold_env else 30
+        except ValueError:
+            MAX_FUNDS_THRESHOLD = 30
+            logger.warning(f"环境变量 MAX_FUNDS_THRESHOLD 非法值: {max_funds_threshold_env}，回退为默认 30")
+        
+        if len(user_assets) >= MAX_FUNDS_THRESHOLD:
+            logger.info(f"用户 {customer_name} 的基金数量已达到{MAX_FUNDS_THRESHOLD}个，无需新增基金，退出操作")
             return True
         
         logger.info(f"用户当前基金数量: {len(user_assets)}，可以继续新增基金")
@@ -198,7 +206,9 @@ def add_new_funds(user: User, sub_account_name: str, total_budget: float, amount
                     success_count += 1
                 else:
                     logger.error(f"买入失败: {fund.fund_name}({fund.fund_code})")
-                    
+            except TradePasswordError as e:
+                logger.error(f"检测到交易密码错误，终止新增流程：{e}")
+                return False
             except Exception as e:
                 logger.error(f"买入基金 {fund.fund_name}({fund.fund_code}) 时发生异常: {e}")
         
@@ -213,19 +223,56 @@ def add_new_funds(user: User, sub_account_name: str, total_budget: float, amount
         logger.error(f"异常堆栈: {traceback.format_exc()}")
         return False
 
-def add_new_funds(user: User, sub_account_name: str, total_budget: float, amount: Optional[float] = None, fund_type: str = 'all', fund_num: int = 5, spread_days: int = 20) -> bool:
+def _get_max_funds_threshold() -> int:
+    """
+    读取最大基金数量阈值：
+    - 优先读取环境变量 MAX_FUNDS_THRESHOLD
+    - 非法或未设置时回退为 30
+    """
+    env_val = os.environ.get('MAX_FUNDS_THRESHOLD')
+    if env_val is None or env_val == "":
+        return 30
+    try:
+        return int(env_val)
+    except ValueError:
+        logger.warning(f"环境变量 MAX_FUNDS_THRESHOLD 非法值: {env_val}，回退为默认 30")
+        return 30
+
+
+def add_new_funds(
+    user: User,
+    sub_account_name: str,
+    total_budget: float,
+    amount: Optional[float] = None,
+    fund_type: str = 'all',
+    fund_num: int = 5,
+    spread_days: int = 20
+) -> bool:
     """
     新增基金策略（最小集成落地）：
     - fund_num: 本次最多买入的基金只数（默认5）
     - spread_days: 预算摊薄天数（默认20）；仅当未传入amount时生效
+    - fund_type: 'all' | 'index' | 'non_index'
+    流程：
+      1) 获取组合资产与持仓
+      2) 若“基金数>=阈值”且“资产总和>总预算的80%”，停止新增（联合条件）
+      3) 获取风向标并按 fund_type 过滤，去除已持有及重复指数
+      4) 按排名排序并截取前 fund_num 只
+      5) 根据余额可用性下调买入只数
+      6) 下单
     """
-    import time, random  # 局部导入，减少全局影响
+    import time
+    import random
+
     if not sub_account_name:
         raise ValueError("sub_account_name 是必填参数，不能为空")
     if total_budget is None:
         raise ValueError("total_budget 是必填参数，不能为空")
 
-    logger.info(f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{total_budget}元，基金类型：{fund_type}，fund_num={fund_num}，spread_days={spread_days}")
+    logger.info(
+        f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{total_budget}元，基金类型：{fund_type}，"
+        f"fund_num={fund_num}，spread_days={spread_days}"
+    )
 
     # 计算预算分配
     if amount is None:
@@ -234,9 +281,11 @@ def add_new_funds(user: User, sub_account_name: str, total_budget: float, amount
         base_per_fund = float(amount)
     logger.info(f"单只基金基础买入金额: {base_per_fund}元")
 
-    customer_name = user.customer_name
+    # 读取最大基金数阈值（本地/云端统一）
+    MAX_FUNDS_THRESHOLD = _get_max_funds_threshold()
+
     logger.info("========== 开始执行新增基金算法（最小落地版） ===========")
-    logger.info(f"用户: {customer_name}，组合名称: {sub_account_name}")
+    logger.info(f"用户: {user.customer_name}，组合名称: {sub_account_name}")
 
     try:
         # 1) 获取组合资产与持仓
@@ -248,115 +297,156 @@ def add_new_funds(user: User, sub_account_name: str, total_budget: float, amount
         user_fund_codes: Set[str] = set()
         user_index_codes: Set[str] = set()
         for asset in user_assets:
-            user_fund_codes.add(asset.fund_code)
+            # 记录已持有基金代码
+            if getattr(asset, 'fund_code', None):
+                user_fund_codes.add(asset.fund_code)
+            # 如果是指数基金，记录其跟踪指数，避免重复
             try:
                 fund_info = get_all_fund_info(user, asset.fund_code)
                 if fund_info and getattr(fund_info, 'fund_type', None) == "000" and getattr(fund_info, 'index_code', None):
                     user_index_codes.add(fund_info.index_code)
             except Exception as e:
-                logger.warning(f"获取基金 {asset.fund_code} 信息失败: {e}")
+                logger.warning(f"获取基金 {getattr(asset, 'fund_code', 'N/A')} 信息失败: {e}")
 
         # 仅当“基金数量过多”且“资产总和超过80%”两个条件同时满足时，才退出
-        total_asset_value = sum(asset.asset_value for asset in user_assets if asset.asset_value is not None)
-        if len(user_assets) >= 30 and total_asset_value > total_budget * 0.8:
-            logger.info(f"用户 {customer_name} 的基金数量已达到30个，且资产总和({total_asset_value}元)已超过总预算({total_budget}元)的80%({total_budget * 0.8}元)，停止新增基金")
+        total_asset_value = sum(
+            (asset.asset_value or 0.0) for asset in user_assets
+            if hasattr(asset, 'asset_value')
+        )
+        if len(user_assets) >= MAX_FUNDS_THRESHOLD and total_asset_value > total_budget * 0.8:
+            logger.info(
+                f"用户 {user.customer_name} 的基金数量已达到{MAX_FUNDS_THRESHOLD}个，且资产总和({total_asset_value}元)"
+                f"已超过总预算({total_budget}元)的80%({total_budget * 0.8}元)，停止新增基金"
+            )
             return True
         else:
             count = len(user_assets)
-            # 避免除零错误
             ratio = (total_asset_value / total_budget) if total_budget else None
             ratio_pct_str = f"{ratio*100:.2f}%" if ratio is not None else "N/A"
 
             reasons = []
-            if count < 30:
-                reasons.append(f"基金数量未达到30个(当前{count}个)")
-            # 仅当 total_budget 有效时才判断占比
+            if count < MAX_FUNDS_THRESHOLD:
+                reasons.append(f"基金数量未达到{MAX_FUNDS_THRESHOLD}个(当前{count}个)")
             if total_budget and total_asset_value <= total_budget * 0.8:
                 reasons.append(f"资产占比未超过80%(当前{total_asset_value}元/{total_budget}元={ratio_pct_str})")
             if not total_budget:
                 reasons.append("总预算为0或未设置，无法计算资产占比")
 
             reason_text = "；".join(reasons) if reasons else "条件计算异常"
-            logger.info(f"用户 {customer_name} 未满足停止新增条件：{reason_text}，继续执行新增流程")
+            logger.info(f"用户 {user.customer_name} 未满足停止新增条件：{reason_text}，继续执行新增流程")
 
-        # 2) 获取风向标并按基金类型过滤
+        # 2) 获取加仓风向标数据并按 fund_type 过滤
         wind_vane_funds = get_fund_investment_indicators()
         if not wind_vane_funds:
             logger.error("获取加仓风向标数据失败")
             return False
 
         if fund_type == 'index':
-            wind_vane_funds = [f for f in wind_vane_funds if f.fund_type == '000']
+            wind_vane_funds = [f for f in wind_vane_funds if getattr(f, 'fund_type', None) == '000']
         elif fund_type == 'non_index':
-            wind_vane_funds = [f for f in wind_vane_funds if f.fund_type != '000']
+            wind_vane_funds = [f for f in wind_vane_funds if getattr(f, 'fund_type', None) != '000']
+        # 'all' 不过滤
 
-        # 3) 过滤：去重已持有 + 避免指数重复
+        # 去除已持有的基金；指数基金避免重复跟踪同一指数
         candidates = []
         for f in wind_vane_funds:
-            if f.fund_code in user_fund_codes:
+            code = getattr(f, 'fund_code', None)
+            if not code or code in user_fund_codes:
                 continue
-            try:
-                fi = get_all_fund_info(user, f.fund_code)
-                if fi and getattr(fi, 'fund_type', None) == "000":
-                    idx = getattr(fi, 'index_code', None)
-                    if idx and idx in user_index_codes:
+
+            ftype = getattr(f, 'fund_type', None)
+            if ftype == '000':
+                try:
+                    info = get_all_fund_info(user, code)
+                    idx_code = getattr(info, 'index_code', None) if info else None
+                    if idx_code and idx_code in user_index_codes:
+                        # 已持有同指数的基金，跳过
                         continue
-            except Exception as e:
-                logger.warning(f"获取指数基金 {f.fund_code} 信息失败: {e}")
+                except Exception as e:
+                    logger.warning(f"获取指数基金 {code} 信息失败，仍纳入候选：{e}")
+
             candidates.append(f)
 
         if not candidates:
-            logger.info("没有需要买入的新基金")
+            logger.info("候选基金为空：风向标基金均已持有或重复指数，退出新增流程")
             return True
 
-        # 4) 选择前 N 只（按 product_rank 升序，如无则靠后）
-        selected = sorted(candidates, key=lambda x: getattr(x, 'product_rank', 1e9))[:max(fund_num, 1)]
-        logger.info(f"选择 {len(selected)} 只基金进行买入（最多 {fund_num} 只）")
+        # 按产品排名升序（越小越优），无排名置于末尾
+        try:
+            candidates.sort(key=lambda f: getattr(f, 'product_rank', float('inf')))
+        except Exception as e:
+            logger.warning(f"按排名排序候选基金失败，将按原顺序处理：{e}")
 
-        # 5) 获取余额，若不足则动态下调 buy_amount
-        asset_response = GetMyAssetMainPartAsync(user)
-        if not (asset_response.Success and asset_response.Data):
-            logger.error("资产API调用失败")
+        # 限制本次最多买入 fund_num 只
+        selected_funds = candidates[:max(fund_num, 1)]
+        logger.info(f"候选基金数: {len(candidates)}，计划买入: {len(selected_funds)} 只")
+
+        # 3) 查询余额并按余额下调买入只数
+        try:
+            asset_response = GetMyAssetMainPartAsync(user)
+            if getattr(asset_response, 'Success', False) and getattr(asset_response, 'Data', None):
+                available_balance = asset_response.Data.get('HqbValue', 0.0)
+                logger.info(f"从资产API获取HqbValue: {available_balance}元")
+            else:
+                raise Exception("资产API调用失败")
+        except Exception as e:
+            logger.error(f"获取用户资产失败: {e}")
             return False
-        available_balance = float(asset_response.Data.get('HqbValue', 0.0))
-        logger.info(f"可用余额 HqbValue: {available_balance}元")
 
-        buy_amount = base_per_fund
-        total_need = round(buy_amount * len(selected), 2)
-        if available_balance < total_need:
-            # 预留10%冗余，动态下调
-            cap = max(10.0, round((available_balance * 0.9) / len(selected), 2))
-            if cap < buy_amount:
-                logger.warning(f"余额不足以覆盖计划买入（需要{total_need}元），将单只金额下调为 {cap} 元")
-                buy_amount = cap
+        if available_balance <= 0:
+            logger.info("可用余额为0，退出新增流程")
+            return True
 
-        # 6) 获取组合账号
+        if base_per_fund <= 0:
+            logger.info(f"单只基金买入金额无效({base_per_fund})，退出新增流程")
+            return True
+
+        max_count_by_balance = int(available_balance // base_per_fund)
+        if max_count_by_balance <= 0:
+            logger.info(f"余额({available_balance}元)不足以买入一只基金({base_per_fund}元)，退出新增流程")
+            return True
+
+        if len(selected_funds) > max_count_by_balance:
+            logger.info(f"根据余额限制，将本次买入只数从{len(selected_funds)}下调为{max_count_by_balance}")
+            selected_funds = selected_funds[:max_count_by_balance]
+
+        # 4) 获取子账户编号
         sub_account_no = getSubAccountNoByName(user, sub_account_name)
         if not sub_account_no:
-            logger.error(f"未找到组合名称 {sub_account_name} 对应的组合账号")
+            logger.error(f"获取子账户编号失败: {sub_account_name}")
             return False
 
-        # 7) 下单（服务层 commit_order 已含交易时间/限额/余额保护）
+        # 5) 下单
         success_count = 0
-        for i, f in enumerate(selected, 1):
-            try:
-                fi = get_all_fund_info(user, f.fund_code)
-                if fi and hasattr(fi, 'can_purchase') and not fi.can_purchase:
-                    logger.info(f"跳过不可申购基金: {f.fund_name}({f.fund_code})")
-                    continue
+        for f in selected_funds:
+            code = getattr(f, 'fund_code', None)
+            name = getattr(f, 'fund_name', code or 'N/A')
+            buy_amount = base_per_fund
 
-                res = commit_order(user, sub_account_no, f.fund_code, buy_amount)
-                if res:
-                    logger.info(f"买入成功: {f.fund_name}({f.fund_code}) - 金额: {buy_amount}元 - 订单号: {res.busin_serial_no}")
+            # 判断是否可申购（若可获取）
+            try:
+                info = get_all_fund_info(user, code)
+                if info and hasattr(info, 'can_purchase') and not info.can_purchase:
+                    logger.warning(f"基金 {name}({code}) 当前不可申购，跳过")
+                    continue
+            except Exception as e:
+                logger.warning(f"获取基金 {code} 申购状态失败，继续尝试下单：{e}")
+
+            try:
+                result = commit_order(user, sub_account_no, code, buy_amount)
+                if result:
+                    order_no = getattr(result, 'busin_serial_no', 'N/A')
+                    logger.info(f"买入成功: {name}({code}) - 金额: {buy_amount}元 - 订单号: {order_no}")
                     success_count += 1
                 else:
-                    logger.error(f"买入失败: {f.fund_name}({f.fund_code})")
-
-                time.sleep(random.uniform(0.2, 0.8))  # 轻微限流
+                    logger.error(f"买入失败: {name}({code})")
             except Exception as e:
-                logger.error(f"买入基金 {f.fund_name}({f.fund_code}) 异常: {e}")
+                logger.error(f"买入基金 {name}({code}) 时发生异常: {e}")
 
-        logger.info(f"新增基金完成，成功买入 {success_count}/{len(selected)} 只")
+            # 控制频率，防止过快请求
+            time.sleep(random.uniform(0.3, 0.8))
+
+        logger.info(f"本次新增完成，成功买入 {success_count}/{len(selected_funds)} 只基金")
         return success_count > 0
 
     except Exception as e:
@@ -364,13 +454,4 @@ def add_new_funds(user: User, sub_account_name: str, total_budget: float, amount
         import traceback
         logger.error(f"异常堆栈: {traceback.format_exc()}")
         return False
-
-if __name__ == "__main__":
-    # 测试单个用户的新增基金流程
-    try:
-        # 执行新增基金操作
-        add_new_funds(DEFAULT_USER, "低风险组合", 1000000.0, None, 'non_index')  # 使用 DEFAULT_USER，并假设其有 budget 属性
-        logging.info(f"用户 {DEFAULT_USER.customer_name} 新增基金操作完成")
-    except Exception as e:
-        logging.error(f"测试用户处理失败：{str(e)}")
         

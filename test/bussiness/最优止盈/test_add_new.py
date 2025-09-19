@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)8s] %(m
 logger = logging.getLogger(__name__)
 
 user_list = [
-    ("13918797997","Zj951103","Zj951103","仇晓钰","最优止盈",100000.0)
+    ("13918199137","sWX15706","sWX15706","施小雨","低风险组合",1000000.0)
 ]
 
 def test_add_new_funds():
@@ -36,7 +36,7 @@ def test_add_new_funds():
         try:
             user = get_user_all_info(account, password)
             user.budget = budget
-            result = add_new_funds(user, "最优止盈", user.budget)
+            result = add_new_funds(user, "指数基金组合", user.budget,20000,fund_type='index')
             
             assert isinstance(result, bool), "返回结果应该是布尔值"
             logger.info(f"用户 {customer_name} 新增基金测试结果: {'成功' if result else '失败'}")

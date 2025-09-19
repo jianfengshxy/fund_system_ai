@@ -71,7 +71,16 @@ resources:
       runtime: ${vars.common.props.runtime}
       region: ${vars.common.props.region}
       timeout: ${vars.common.props.timeout}
-      environmentVariables: ${vars.common.props.environmentVariables}
+      environmentVariables:
+        DB_USER: ${vars.common.database.DB_USER}
+        DB_PASSWORD: ${vars.common.database.DB_PASSWORD}
+        DB_PORT: ${vars.common.database.DB_PORT}
+        DB_NAME: ${vars.common.database.DB_NAME}
+        INTERNAL_HOST: ${vars.common.database.internal_host}
+        EXTERNAL_HOST: ${vars.common.database.external_host}
+        VPC_ID: ${vars.common.database.vpc_id}
+        CIDR: ${vars.common.database.cidr}
+        MAX_FUNDS_THRESHOLD: "30"
       triggers:
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
@@ -130,6 +139,76 @@ resources:
         triggerName: "add_new_13974549306_optimal_take_profit"
         triggerConfig:
           payload: '{"account": "13974549306","password": "huigengsi937367","sub_account_name": "最优止盈","total_budget": 50000.0,"fund_type": "all"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_13977796363_optimal_take_profit"
+        triggerConfig:
+          payload: '{"account": "13977796363","password": "tang6363","sub_account_name": "最优止盈","total_budget": 400000.0,"fund_type": "all"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_15373193078_optimal_take_profit"
+        triggerConfig:
+          payload: '{"account": "15373193078","password": "sy811123","sub_account_name": "最优止盈","total_budget": 40000.0,"fund_type": "all"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_15936530625_optimal_take_profit"
+        triggerConfig:
+          payload: '{"account": "15936530625","password": "wch601249697","sub_account_name": "最优止盈","total_budget": 40000.0,"fund_type": "all"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_18648900788_optimal_take_profit"
+        triggerConfig:
+          payload: '{"account": "18648900788","password": "ldw88888","sub_account_name": "最优止盈","total_budget": 40000.0,"fund_type": "all"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_13426206037_optimal_take_profit"
+        triggerConfig:
+          payload: '{"account": "13426206037","password": "fuyj223147","sub_account_name": "最优止盈","total_budget": 40000.0,"fund_type": "all"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_13500819290_optimal_take_profit"
+        triggerConfig:
+          payload: '{"account": "13500819290","password": "guojing1985","sub_account_name": "最优止盈","total_budget": 200000.0,"fund_type": "all"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_13562500306_optimal_take_profit"
+        triggerConfig:
+          payload: '{"account": "13562500306","password": "lilin926","sub_account_name": "最优止盈","total_budget": 60000.0,"fund_type": "all"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_13571973393_optimal_take_profit"
+        triggerConfig:
+          payload: '{"account": "13571973393","password": "wj121109","sub_account_name": "最优止盈","total_budget": 500000.0,"fund_type": "all"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_13584903800_optimal_take_profit"
+        triggerConfig:
+          payload: '{"account": "13584903800","password": "hu123321","sub_account_name": "最优止盈","total_budget": 300000.0,"fund_type": "all"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_13817533699_optimal_take_profit"
+        triggerConfig:
+          payload: '{"account": "13817533699","password": "demone40","sub_account_name": "最优止盈","total_budget": 150000.0,"fund_type": "all"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
       - qualifier: ${vars.common.props.triggerConfig.qualifier}

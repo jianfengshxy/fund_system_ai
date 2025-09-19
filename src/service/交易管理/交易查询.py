@@ -66,7 +66,7 @@ def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account
     trades = get_trades_list(user, sub_account_no, fund_code, "", "")
     # 只取前5条记录
     trades = trades[:5] if len(trades) > 5 else trades
-    logger.info(f"获取到 {len(trades)} 条交易记录，开始筛选（排除状态文本为'已撤单(已支付)'且日期匹配 {nav_date_str}）")
+    logger.info(f"获取到 {len(trades)} 条交易记录，开始筛选（排除状态文本为'已撤单(已支付)'且日期匹配 {nav_date_str} 或 {today_date_str}）")
     def _get(obj, *keys):
         # 兼容对象属性和字典键
         for k in keys:
@@ -123,19 +123,20 @@ def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account
         logger.info(f"业务类型: {business_type}")
         logger.info(f"基金名称: {product_name}")
         
-        # 统计日期匹配 nav_date 且 非撤回 的交易
-        date_match = strike_date == nav_date_str
-        # 修改判断逻辑：只有状态文本为"已撤单(已支付)"的交易不被统计
+        # 统计日期匹配 nav_date 或 当天 且 非撤回 的交易
+        date_match_prev = strike_date == nav_date_str
+        date_match_today = strike_date == today_date_str
+        date_match = date_match_prev or date_match_today
         is_withdrawn = status_text == "已撤单(已支付)"
         
         if date_match and not is_withdrawn:
             count += 1
-            logger.info(f"统计结果: 此交易被统计为未回撤交易")
+            logger.info(f"统计结果: 此交易被统计为未回撤交易 (日期匹配={'上一交易日' if date_match_prev else '当天'})")
         else:
-            logger.info(f"统计结果: 此交易未被统计 (日期匹配={date_match}, 是否撤回={is_withdrawn})")
+            logger.info(f"统计结果: 此交易未被统计 (日期匹配上一交易日={date_match_prev}, 日期匹配当天={date_match_today}, 是否撤回={is_withdrawn})")
     
     logger.info("=" * 100)
-    logger.info(f"基金 {fund_code} 在上一个交易日({nav_date_str})未回撤交易数量: {count}")
+    logger.info(f"基金 {fund_code} 在上一个交易日({nav_date_str})及当天({today_date_str})未回撤交易数量: {count}")
     return count
 
 if __name__ == "__main__":

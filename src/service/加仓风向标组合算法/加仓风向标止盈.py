@@ -31,18 +31,21 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     """
     加仓风向标止盈算法实现（不依赖定投）：
     1. 获取组合所有基金资产
-    2. 对于每个基金，如果在加仓风向标中，且组合持有基金数量<=20或已有止盈，则跳过
-    3. 如果组合持有基金数量>20且当天没有止盈，从加仓风向标中选择预估涨幅>3%且持有基金预估收益率>5%的最高收益基金进行止盈
-    4. 对于非加仓风向标基金，计算预估收益率，检查止盈条件
+    2. 对于每个基金：
+       - 若在加仓风向标中且为非指数型基金（fund_type != '000'），常规止盈阶段跳过，仅收集为候选（等待“特殊止盈”）
+       - 若为指数型基金（fund_type == '000'），即使在风向标中也按常规止盈逻辑执行
+    3. 当组合持有基金数量>20、当天未发生止盈、且组合资产总和>预算的80%时，
+       从加仓风向标候选中选择“今日估值涨跌幅>1% 且 预估收益率>5%”的持有基金，按“预估收益率从高到低”挑选1只执行止盈
+    4. 对于常规止盈路径（非风向标基金，或在风向标中的指数型基金），计算预估收益率并检查止盈条件
     5. 根据条件执行赎回操作
-    
+
     Args:
         user: 用户对象
         sub_account_name: 组合名称
         total_budget: 总预算（用于计算止盈点等）
         amount: 可选的赎回金额
         fund_type: 基金类型 ('all', 'index', 'non_index')
-    
+
     Returns:
         bool: 操作是否成功
     """
@@ -105,20 +108,34 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             logger.info(f"{user.customer_name}的基金{fund_name}({fund_code})可用份额为0, 跳过赎回.")
             continue
         
+        # 检查是否在风向标中
+        in_wind_vane = False
+        if fund_info.fund_type == '000':
+            if fund_info.index_code in wind_vane_indices:
+                in_wind_vane = True
+        elif fund_code in wind_vane_codes:
+            in_wind_vane = True
+        
+        # 仅“非指数型基金”在风向标中时跳出常规止盈，指数基金不再受庇护
         if in_wind_vane:
-            # 收集加仓风向标基金作为候选
             if estimated_change > 1.0 and estimated_profit_rate > 5.0:
                 wind_vane_candidates.append((asset, fund_info, estimated_profit_rate))
                 logger.info(f"加入候选: {fund_code} {fund_name}: 在加仓风向标中，预估涨幅{estimated_change}%，预估收益率{estimated_profit_rate}%")
             else:
-                logger.info(f"跳过 {fund_code} {fund_name}: 在加仓风向标中，但不满足候选条件")
-            continue
+                logger.info(f"跳过加入候选: {fund_code} {fund_name}: 在加仓风向标中，但不满足候选条件（涨幅<=1%或预估收益率<=5%）")
+            
+            if fund_info.fund_type != '000':
+                # 非指数型基金：保持原策略——不在常规阶段止盈，仅进入候选，等特殊止盈
+                logger.info(f"非指数型基金在加仓风向标内，本轮按规则不止盈，进入候选等待特殊止盈: {fund_name}({fund_code})")
+                continue
+            else:
+                # 指数基金：不再受庇护，继续走常规止盈逻辑
+                logger.info(f"指数型基金在加仓风向标内，但不再跳过，继续按常规止盈逻辑检查: {fund_name}({fund_code})")
         
-        # 处理非加仓风向标基金
+        # 常规止盈路径（适用于非风向标基金，及“在风向标中的指数型基金”）
         volatility = fund_info.volatility
         stop_rate = min(volatility * 100, 5.0) if estimated_change != 0.0 else 5.0
         
-        # 记录计算细节
         logger.info(f"{user.customer_name}的基金{fund_name}({fund_code})的收益{current_profit_rate}加上估值增长率{estimated_change}结果{estimated_profit_rate},计算止盈点:{volatility},实际止盈点:{stop_rate}")
         
         if estimated_profit_rate > stop_rate and estimated_profit_rate > 1.0:

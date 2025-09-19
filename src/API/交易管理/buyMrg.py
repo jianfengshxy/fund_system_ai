@@ -20,6 +20,15 @@ from src.domain.user.User import User
 from typing import List, Optional, Dict, Any
 from src.common.constant import MOBILE_KEY
 from src.API.工具.utils import get_fund_system_time_trade
+from src.common.errors import TradePasswordError  # 新增：密码错误异常
+
+def _is_password_error_message(msg: str) -> bool:
+    """根据返回文案判断是否为密码相关错误（保守匹配，避免误伤）。"""
+    if not msg:
+        return False
+    text = str(msg)
+    keywords = ["密码错误", "交易密码", "支付密码", "口令错误", "输错", "ErrPass"]
+    return any(k in text for k in keywords)
 
 def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float) -> Optional[TradeResult]:
     """
@@ -116,7 +125,11 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
             time.sleep(1)
             return trade_result
         elif 'FirstError' in result:
-            logger.error(f"提交订单失败: {result['FirstError']}")
+            first_error = result.get('FirstError') or result.get('Message') or ""
+            if _is_password_error_message(first_error):
+                logger.error(f"提交订单失败(疑似密码错误): {first_error}，立即终止流程")
+                raise TradePasswordError(first_error)
+            logger.error(f"提交订单失败: {first_error}")
             return None
         else:
             logger.error("提交订单失败: 未知错误")
@@ -124,6 +137,10 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
     except requests.exceptions.RequestException as e:
         logger.error(f"请求失败: {str(e)}。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}")
         return None
+    except TradePasswordError as e:
+        # 重要：不要吞掉密码错误，让上层立刻中止流程
+        logger.error(f"提交订单失败(密码错误)：{e}，向上抛出")
+        raise
     except Exception as e:
         logger.error(f"提交订单失败: {str(e)}。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}")
         return None

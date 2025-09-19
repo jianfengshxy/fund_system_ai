@@ -29,6 +29,7 @@ from src.domain.fund.fund_info import FundInfo
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.service.交易管理.购买基金 import commit_order
+from src.common.errors import TradePasswordError
 # 用户配置列表
 # 第一列：手机号 account
 # 第二列：密码 password
@@ -293,6 +294,9 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
                                 else:
                                     error_msg = getattr(trade_result, 'FirstError', '未知错误') if trade_result else '未知错误'
                                     print(f"  ❌ 买入失败: {error_msg}")
+                            except TradePasswordError as e:
+                                print(f"  ❌ 交易密码错误，终止本次流程: {str(e)}")
+                                return
                             except Exception as buy_e:
                                 print(f"  ❌ 买入时发生异常: {str(buy_e)}")                      
                         else:

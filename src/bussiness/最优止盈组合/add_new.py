@@ -102,7 +102,7 @@ def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budg
 if __name__ == "__main__":
     # 测试 amount 不传的情况
     try:
-        success = add_new_funds(DEFAULT_USER, "低风险组合", 1000000.0,fund_type='index')  # amount 不传，使用 None
+        success = add_new_funds(DEFAULT_USER, "指数基金组合", 1000000.0,fund_type='index')  # amount 不传，使用 None
         if success:
             logging.info("测试成功（amount 未传）")
         else:

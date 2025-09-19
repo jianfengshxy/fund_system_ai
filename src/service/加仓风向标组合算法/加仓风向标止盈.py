@@ -135,7 +135,19 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         # 常规止盈路径（适用于非风向标基金，及“在风向标中的指数型基金”）
         volatility = fund_info.volatility
         stop_rate = min(volatility * 100, 5.0) if estimated_change != 0.0 else 5.0
-        
+    
+        # 新增：指数基金且估值增长不为0（或空），且100日排名>90，强制将止盈点设为3.0
+        rank_100 = getattr(fund_info, "rank_100day", None)
+        if fund_info.fund_type == '000':
+            try:
+                r100 = float(rank_100) if rank_100 is not None else None
+            except (TypeError, ValueError):
+                r100 = None
+            if r100 is not None and r100 > 90 and estimated_change != 0.0:
+                prev_stop_rate = stop_rate
+                stop_rate = 3.0
+                logger.info(f"指数基金100日排名>90且估值变化非0，强制刷新止盈点为3.0（原止盈点={prev_stop_rate}）。{fund_name}({fund_code}) rank_100day={r100}, estimated_change={estimated_change}")
+    
         logger.info(f"{user.customer_name}的基金{fund_name}({fund_code})的收益{current_profit_rate}加上估值增长率{estimated_change}结果{estimated_profit_rate},计算止盈点:{volatility},实际止盈点:{stop_rate}")
         
         if estimated_profit_rate > stop_rate and estimated_profit_rate > 1.0:
@@ -219,7 +231,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
 if __name__ == "__main__":
     try:
-        redeem_funds(DEFAULT_USER, "低风险组合", 1000000.0)
+        redeem_funds(DEFAULT_USER, "指数基金组合", 1000000.0)
         logging.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

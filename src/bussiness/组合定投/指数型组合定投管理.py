@@ -25,6 +25,7 @@ from src.service.定投管理.组合定投.组合定投管理 import create_peri
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.service.交易管理.购买基金 import commit_order
+from src.common.errors import TradePasswordError
 from src.API.组合管理.SubAccountMrg import getSubAssetMultList
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
             
@@ -283,6 +284,9 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
                                 else:
                                     error_msg = getattr(trade_result, 'FirstError', '未知错误') if trade_result else '未知错误'
                                     print(f"  ❌ 买入失败: {error_msg}")
+                            except TradePasswordError as e:
+                                print(f"  ❌ 交易密码错误，终止本次流程: {str(e)}")
+                                return
                             except Exception as buy_e:
                                 print(f"  ❌ 买入时发生异常: {str(buy_e)}")
                         else:

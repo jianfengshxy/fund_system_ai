@@ -125,11 +125,35 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                 logger.info(f"跳过加入候选: {fund_code} {fund_name}: 在加仓风向标中，但不满足候选条件（涨幅<=1%或预估收益率<=5%）")
             
             if fund_info.fund_type != '000':
-                # 非指数型基金：保持原策略——不在常规阶段止盈，仅进入候选，等特殊止盈
+                # 修正逻辑：达到常规止盈点，但“估值净值 < 近5日平均净值”时进行处理
+                try:
+                    volatility = fund_info.volatility
+                    stop_rate = min(volatility * 100, 5.0) if estimated_change != 0.0 else 5.0
+                except Exception:
+                    stop_rate = 5.0
+                est_nav = getattr(fund_info, "estimated_value", None)
+                nav5 = getattr(fund_info, "nav_5day_avg", None)
+                if (estimated_profit_rate >= stop_rate) and (estimated_profit_rate > 1.0) and (est_nav is not None) and (nav5 is not None) and (est_nav < nav5):
+                    try:
+                        bank_shares = get_bank_shares(user, sub_account_no, fund_code)
+                        logger.info(
+                            f"{user.customer_name}的止盈操作开始（非指数风向标特殊规则）："
+                            f"{fund_name}({fund_code}) 预估收益率={estimated_profit_rate:.2f}% ≥ 止盈点={stop_rate:.2f}% 且 "
+                            f"估值净值={est_nav:.4f} < 近5日均值={nav5:.4f}，触发处理"
+                        )
+                        sell_result = sell_low_fee_shares(user, sub_account_no, fund_code, bank_shares)
+                        if sell_result and sell_result.busin_serial_no:
+                            logger.info(f"{user.customer_name}的基金{fund_name}({fund_code})卖出止盈成功（达到止盈点且估值<5日均值触发）")
+                            success_count += 1
+                        else:
+                            logger.warning(f"{user.customer_name}的基金{fund_name}({fund_code})止盈失败（达到止盈点且估值<5日均值触发）")
+                    except Exception as e:
+                        logger.error(f"止盈 {fund_code} {fund_name} 失败（达到止盈点且估值<5日均值触发）: {e}")
+                
+                # 非指数型基金：仍不走常规止盈，仅候选，等待“特殊止盈”
                 logger.info(f"非指数型基金在加仓风向标内，本轮按规则不止盈，进入候选等待特殊止盈: {fund_name}({fund_code})")
                 continue
             else:
-                # 指数基金：不再受庇护，继续走常规止盈逻辑
                 logger.info(f"指数型基金在加仓风向标内，但不再跳过，继续按常规止盈逻辑检查: {fund_name}({fund_code})")
         
         # 常规止盈路径（适用于非风向标基金，及“在风向标中的指数型基金”）
@@ -230,7 +254,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
 if __name__ == "__main__":
     try:
-        redeem_funds(DEFAULT_USER, "指数基金组合", 1000000.0)
+        redeem_funds(DEFAULT_USER, "低风险组合", 1000000.0)
         logging.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

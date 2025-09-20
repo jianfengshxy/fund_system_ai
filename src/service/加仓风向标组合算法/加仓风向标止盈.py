@@ -34,7 +34,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     2. 对于每个基金：
        - 若在加仓风向标中且为非指数型基金（fund_type != '000'），常规止盈阶段跳过，仅收集为候选（等待“特殊止盈”）
        - 若为指数型基金（fund_type == '000'），即使在风向标中也按常规止盈逻辑执行
-    3. 当组合持有基金数量>20、当天未发生止盈、且组合资产总和>预算的80%时，
+    3. 当组合持有基金数量>20、当天累计止盈<3、且组合资产总和>预算的80%时，
        从加仓风向标候选中选择“今日估值涨跌幅>1% 且 预估收益率>5%”的持有基金，按“预估收益率从高到低”挑选1只执行止盈
     4. 对于常规止盈路径（非风向标基金，或在风向标中的指数型基金），计算预估收益率并检查止盈条件
     5. 根据条件执行赎回操作
@@ -173,11 +173,11 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     
     # 三个条件同时满足才触发特殊止盈：
     # 1) 组合基金数量 > 20
-    # 2) 当天尚未发生止盈（success_count == 0）
+    # 2) 当天累计止盈数量 < 3（success_count < 3）
     # 3) 组合资产总和 > 预算的 80%（且 total_budget 有效）
     eligible_for_special_take_profit = (
         fund_count > 20
-        and success_count == 0
+        and success_count < 3
         and (total_budget is not None and total_budget > 0)
         and total_asset_value > total_budget * 0.8
         and len(wind_vane_candidates) > 0
@@ -208,7 +208,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                 logger.info(
                     f"{user.customer_name}的特殊止盈开始："
                     f"{fund_name}({fund_code}) 预估收益率={estimated_profit_rate:.2f}%，今日估值涨幅={est_change:.2f}%，"
-                    f"触发原因：基金数>{20} 且 今日未止盈 且 资产/预算>{80}%（当前{asset_budget_ratio:.2f}%）"
+                    f"触发原因：基金数>{20} 且 今日累计止盈<3 且 资产/预算>{80}%（当前{asset_budget_ratio:.2f}%）"
                 )
                 sell_result = sell_low_fee_shares(user, sub_account_no, fund_code, bank_shares)
                 if sell_result and sell_result.busin_serial_no:
@@ -221,9 +221,8 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     else:
         logger.info(
             "未触发特殊止盈条件："
-            f"fund_count={fund_count}（需>20）, success_count={success_count}（需==0）, "
-            f"total_budget={total_budget}, total_asset_value={total_asset_value}（需>80%预算）, "
-            f"候选数={len(wind_vane_candidates)}"
+            f"触发条件检查: fund_count={fund_count}（需>20）, success_count={success_count}（需<3）, "
+            f"total_budget={total_budget}, total_asset_value={total_asset_value}（需>预算80%）"
         )
     
     logger.info(f"止盈操作完成，成功处理 {success_count} 个基金")

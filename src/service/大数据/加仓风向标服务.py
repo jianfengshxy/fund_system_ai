@@ -26,15 +26,6 @@ from datetime import datetime
 def process_fund_investment_indicators(user, page_size=50) -> List[FundInvestmentIndicator]:
     """
     处理基金投资指标数据，按规则过滤并返回结果
-    
-    调整后规则：
-    1. 保留基金名中包含"C"的基金
-    2. 过滤规则：
-        - 过滤掉基金名包含"债"的
-        - 过滤掉 fund_sub_type == "002003" 的
-        - 仅保留 fund_type in ["000","001","002"]
-        - 当 fund_type == "000" 时，只保留 fund_sub_type == "000001"
-    3. 获取基金详细信息以获得index_code并进行去重
     """
     logger = logging.getLogger("FundInvestmentIndicatorService")
     
@@ -96,26 +87,36 @@ def process_fund_investment_indicators(user, page_size=50) -> List[FundInvestmen
         
         logger.info(f"=== 步骤2: 多条件过滤完成，过滤后数量: {len(filtered_indicators)} ===")
         
-        # === 步骤3: 获取基金详细信息以获得index_code ===
+        # === 步骤3: 获取基金详细信息并进行index_code去重 ===
         logger.info("=== 步骤3: 获取基金详细信息并进行index_code去重 ===")
         
         # 为每个基金添加index_code信息
+        # 新增：在此处先根据 six_month_return 是否有值进行“历史数据齐全/成立>=6个月”过滤
+        age_ok_indicators = []
         for indicator in filtered_indicators:
             fund_info = get_all_fund_info(user, indicator.fund_code)
-            if fund_info:
-                indicator.index_code = getattr(fund_info, 'index_code', None)
-                indicator.tracking_index = indicator.index_code  # 根据index_code赋值tracking_index
-                logger.info(f"基金 {indicator.fund_name}({indicator.fund_code}) 获得index_code: {indicator.index_code}, tracking_index: {indicator.tracking_index}")
-            else:
-                indicator.index_code = ''
-                indicator.tracking_index = None  # 或 ''
-                logger.warning(f"基金 {indicator.fund_name}({indicator.fund_code}) 未找到详细信息")
+            if not fund_info:
+                logger.info(f"剔除基金 {indicator.fund_name}({indicator.fund_code}): 无法获取基金详情，视为历史数据不全")
+                continue
+
+            six_month_return = getattr(fund_info, 'six_month_return', None)
+            if six_month_return is None:
+                logger.info(f"剔除基金 {indicator.fund_name}({indicator.fund_code}): six_month_return 无值，历史数据不全或成立不足6个月")
+                continue
+
+            # 历史数据齐全，保留并补充 index_code/tracking_index
+            indicator.index_code = getattr(fund_info, 'index_code', None)
+            indicator.tracking_index = indicator.index_code
+            logger.info(f"基金 {indicator.fund_name}({indicator.fund_code}) 通过历史数据检查，index_code: {indicator.index_code}, tracking_index: {indicator.tracking_index}")
+            age_ok_indicators.append(indicator)
+        
+        logger.info(f"=== 历史数据齐全过滤后基金数量: {len(age_ok_indicators)} ===")
         
         # 根据index_code进行去重
         seen_index_codes = set()
         final_indicators = []
         
-        for indicator in filtered_indicators:
+        for indicator in age_ok_indicators:
             if indicator.index_code:
                 if indicator.index_code not in seen_index_codes:
                     seen_index_codes.add(indicator.index_code)

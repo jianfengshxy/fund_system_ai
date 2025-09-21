@@ -21,6 +21,8 @@ from src.API.大数据.加仓风向标 import getFundInvestmentIndicators as get
 from src.db.fund_repository_impl import FundRepositoryImpl
 from src.db.fund_investment_indicator_repository_impl import FundInvestmentIndicatorRepositoryImpl
 from datetime import datetime
+from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
+from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 
 
 def process_fund_investment_indicators(user, page_size=50) -> List[FundInvestmentIndicator]:
@@ -112,22 +114,54 @@ def process_fund_investment_indicators(user, page_size=50) -> List[FundInvestmen
         
         logger.info(f"=== 历史数据齐全过滤后基金数量: {len(age_ok_indicators)} ===")
         
-        # 根据index_code进行去重
-        seen_index_codes = set()
-        final_indicators = []
-        
-        for indicator in age_ok_indicators:
-            if indicator.index_code:
-                if indicator.index_code not in seen_index_codes:
-                    seen_index_codes.add(indicator.index_code)
-                    final_indicators.append(indicator)
-                    logger.info(f"保留基金: {indicator.fund_name}({indicator.fund_code}) - index_code: {indicator.index_code}")
-                else:
-                    logger.info(f"过滤重复index_code基金: {indicator.fund_name}({indicator.fund_code}) - index_code: {indicator.index_code}")
+        # 根据index_code进行去重（新增：优先保留“指数基金组合”中的已持有基金）
+        try:
+            sub_name = "指数基金组合"
+            sub_no = getSubAccountNoByName(user, sub_name)
+            if not sub_no:
+                logger.warning(f"未找到组合 {sub_name} 的账号，持仓优先去重失效")
+                holdings = []
             else:
-                # 没有index_code的基金也保留
-                final_indicators.append(indicator)
-                logger.info(f"保留无index_code基金: {indicator.fund_name}({indicator.fund_code})")
+                holdings = get_asset_list_of_sub(user, sub_no)
+            held_codes = {a.fund_code for a in holdings} if holdings else set()
+            logger.info(f"已获取组合[{sub_name}]持仓基金数量: {len(held_codes)}（sub_account_no={sub_no}）")
+        except Exception as e:
+            logger.warning(f"获取组合持仓失败，退化为不考虑持仓优先: {e}")
+            held_codes = set()
+
+        # 先将无 index_code 的直接保留
+        final_indicators: List[FundInvestmentIndicator] = []
+        for ind in age_ok_indicators:
+            if not getattr(ind, "index_code", None):
+                final_indicators.append(ind)
+                logger.info(f"保留无index_code基金: {ind.fund_name}({ind.fund_code})")
+        
+        # 对有 index_code 的按 index_code 分组
+        grouped: Dict[str, List[FundInvestmentIndicator]] = {}
+        for ind in age_ok_indicators:
+            idx = getattr(ind, "index_code", None)
+            if idx:
+                grouped.setdefault(idx, []).append(ind)
+
+        # 每个 index_code 只保留一个：优先保留已持有，其次 product_rank 最优
+        for idx, group in grouped.items():
+            group = [g for g in group if not any((g.fund_code == x.fund_code) for x in final_indicators)]
+            if not group:
+                continue
+
+            held_group = [g for g in group if g.fund_code in held_codes]
+            if held_group:
+                chosen = min(held_group, key=lambda x: x.product_rank)
+                reason = "按持仓优先保留"
+            else:
+                chosen = min(group, key=lambda x: x.product_rank)
+                reason = "未持有该指数，按排名保留"
+
+            final_indicators.append(chosen)
+            logger.info(f"{reason}: {chosen.fund_name}({chosen.fund_code}) - index_code: {idx}")
+            for g in group:
+                if g.fund_code != chosen.fund_code:
+                    logger.info(f"过滤重复index_code基金（优先保留已持有）: 被剔除 {g.fund_name}({g.fund_code}) - index_code: {idx}，保留: {chosen.fund_name}({chosen.fund_code})")
         
         logger.info(f"=== 步骤3: index_code去重后基金数量: {len(final_indicators)} ===")
         

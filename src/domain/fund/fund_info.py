@@ -39,6 +39,8 @@ class FundInfo:
     rank_100day: Optional[int]             # 近100日排名 RANK_100DAY
     rank_30day: Optional[int]              # 近30日排名 RANK_30DAY
     volatility: Optional[float]           # 波动率 VOLATILITY
+    # 新增：近5日平均净值（由历史净值计算得到，用于与当日估值净值比较）
+    nav_5day_avg: Optional[float] = None
 
 
 
@@ -83,7 +85,8 @@ class FundInfo:
             tracking_error=safe_float(data.get('TRKERROR1'), None),
             rank_100day = 0,
             rank_30day = 0 ,
-            volatility = 0.0
+            volatility = 0.0,
+            nav_5day_avg = None
         )
 
     def __str__(self) -> str:

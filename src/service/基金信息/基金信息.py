@@ -98,6 +98,18 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     except Exception as e:
         logger.error(f"{fund_info.fund_name}获取基金30日波动率信息时发生异常: {str(e)}")
     
+    # 新增：第5.1步 获取近5日平均净值（用于与当日估值净值比较）
+    try:
+        nav5_result = get_fund_volatility_api(user, fund_info, 5)
+        if nav5_result is not None:
+            mean_5d, _, _ = nav5_result
+            fund_info.nav_5day_avg = mean_5d
+            logger.debug(f"{fund_info.fund_name}成功获取近5日平均净值: {mean_5d}")
+        else:
+            logger.warning(f"{fund_info.fund_name}获取近5日平均净值失败: {fund_code}")
+    except Exception as e:
+        logger.error(f"{fund_info.fund_name}获取近5日平均净值时发生异常: {str(e)}")
+    
     # 打印基金跟踪的指数信息
     if hasattr(fund_info, 'index_code') and fund_info.index_code:
         logger.debug(f"{fund_info.fund_name}跟踪指数代码: {fund_info.index_code}")

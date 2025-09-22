@@ -34,7 +34,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     2. 对于每个基金：
        - 若在加仓风向标中且为非指数型基金（fund_type != '000'），常规止盈阶段跳过，仅收集为候选（等待“特殊止盈”）
        - 若为指数型基金（fund_type == '000'），即使在风向标中也按常规止盈逻辑执行
-    3. 当组合持有基金数量>20、当天未发生止盈、且组合资产总和>预算的80%时，
+    3. 当组合持有基金数量>20、当天累计止盈<3、且组合资产总和>预算的80%时，
        从加仓风向标候选中选择“今日估值涨跌幅>1% 且 预估收益率>5%”的持有基金，按“预估收益率从高到低”挑选1只执行止盈
     4. 对于常规止盈路径（非风向标基金，或在风向标中的指数型基金），计算预估收益率并检查止盈条件
     5. 根据条件执行赎回操作
@@ -125,11 +125,35 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                 logger.info(f"跳过加入候选: {fund_code} {fund_name}: 在加仓风向标中，但不满足候选条件（涨幅<=1%或预估收益率<=5%）")
             
             if fund_info.fund_type != '000':
-                # 非指数型基金：保持原策略——不在常规阶段止盈，仅进入候选，等特殊止盈
+                # 修正逻辑：达到常规止盈点，但“估值净值 < 近5日平均净值”时进行处理
+                try:
+                    volatility = fund_info.volatility
+                    stop_rate = min(volatility * 100, 5.0) if estimated_change != 0.0 else 5.0
+                except Exception:
+                    stop_rate = 5.0
+                est_nav = getattr(fund_info, "estimated_value", None)
+                nav5 = getattr(fund_info, "nav_5day_avg", None)
+                if (estimated_profit_rate >= stop_rate) and (estimated_profit_rate > 1.0) and (est_nav is not None) and (nav5 is not None) and (est_nav < nav5):
+                    try:
+                        bank_shares = get_bank_shares(user, sub_account_no, fund_code)
+                        logger.info(
+                            f"{user.customer_name}的止盈操作开始（非指数风向标特殊规则）："
+                            f"{fund_name}({fund_code}) 预估收益率={estimated_profit_rate:.2f}% ≥ 止盈点={stop_rate:.2f}% 且 "
+                            f"估值净值={est_nav:.4f} < 近5日均值={nav5:.4f}，触发处理"
+                        )
+                        sell_result = sell_low_fee_shares(user, sub_account_no, fund_code, bank_shares)
+                        if sell_result and sell_result.busin_serial_no:
+                            logger.info(f"{user.customer_name}的基金{fund_name}({fund_code})卖出止盈成功（达到止盈点且估值<5日均值触发）")
+                            success_count += 1
+                        else:
+                            logger.warning(f"{user.customer_name}的基金{fund_name}({fund_code})止盈失败（达到止盈点且估值<5日均值触发）")
+                    except Exception as e:
+                        logger.error(f"止盈 {fund_code} {fund_name} 失败（达到止盈点且估值<5日均值触发）: {e}")
+                
+                # 非指数型基金：仍不走常规止盈，仅候选，等待“特殊止盈”
                 logger.info(f"非指数型基金在加仓风向标内，本轮按规则不止盈，进入候选等待特殊止盈: {fund_name}({fund_code})")
                 continue
             else:
-                # 指数基金：不再受庇护，继续走常规止盈逻辑
                 logger.info(f"指数型基金在加仓风向标内，但不再跳过，继续按常规止盈逻辑检查: {fund_name}({fund_code})")
         
         # 常规止盈路径（适用于非风向标基金，及“在风向标中的指数型基金”）
@@ -173,11 +197,11 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     
     # 三个条件同时满足才触发特殊止盈：
     # 1) 组合基金数量 > 20
-    # 2) 当天尚未发生止盈（success_count == 0）
+    # 2) 当天累计止盈数量 < 3（success_count < 3）
     # 3) 组合资产总和 > 预算的 80%（且 total_budget 有效）
     eligible_for_special_take_profit = (
         fund_count > 20
-        and success_count == 0
+        and success_count < 3
         and (total_budget is not None and total_budget > 0)
         and total_asset_value > total_budget * 0.8
         and len(wind_vane_candidates) > 0
@@ -208,7 +232,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                 logger.info(
                     f"{user.customer_name}的特殊止盈开始："
                     f"{fund_name}({fund_code}) 预估收益率={estimated_profit_rate:.2f}%，今日估值涨幅={est_change:.2f}%，"
-                    f"触发原因：基金数>{20} 且 今日未止盈 且 资产/预算>{80}%（当前{asset_budget_ratio:.2f}%）"
+                    f"触发原因：基金数>{20} 且 今日累计止盈<3 且 资产/预算>{80}%（当前{asset_budget_ratio:.2f}%）"
                 )
                 sell_result = sell_low_fee_shares(user, sub_account_no, fund_code, bank_shares)
                 if sell_result and sell_result.busin_serial_no:
@@ -221,9 +245,8 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     else:
         logger.info(
             "未触发特殊止盈条件："
-            f"fund_count={fund_count}（需>20）, success_count={success_count}（需==0）, "
-            f"total_budget={total_budget}, total_asset_value={total_asset_value}（需>80%预算）, "
-            f"候选数={len(wind_vane_candidates)}"
+            f"触发条件检查: fund_count={fund_count}（需>20）, success_count={success_count}（需<3）, "
+            f"total_budget={total_budget}, total_asset_value={total_asset_value}（需>预算80%）"
         )
     
     logger.info(f"止盈操作完成，成功处理 {success_count} 个基金")
@@ -231,7 +254,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
 if __name__ == "__main__":
     try:
-        redeem_funds(DEFAULT_USER, "指数基金组合", 1000000.0)
+        redeem_funds(DEFAULT_USER, "低风险组合", 1000000.0)
         logging.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

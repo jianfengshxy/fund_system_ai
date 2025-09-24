@@ -129,6 +129,26 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
     orders_made = 0
     logger.info("本次加仓处理顺序：风向标基金优先")
 
+    # 抽取：估算净值 > 5日均值 判定（复用于两条路径）
+    def _nav5_gate(fi, fund_name: str, fund_code: str, label: str = "") -> bool:
+        prefix = "风向标 " if label == "wind_vane" else ""
+        est_nav = getattr(fi, "estimated_value", None)
+        nav5 = getattr(fi, "nav_5day_avg", None)
+        try:
+            est_val = float(est_nav) if est_nav is not None else None
+            nav5_val = float(nav5) if nav5 is not None else None
+        except Exception:
+            est_val = None
+            nav5_val = None
+
+        if est_val is None or nav5_val is None:
+            logger.info(f"跳过{prefix}{fund_name}({fund_code}): 缺少估算净值或5日均值（estimated_value={est_nav}, nav_5day_avg={nav5}）")
+            return False
+        if not (est_val > nav5_val):
+            logger.info(f"跳过{prefix}{fund_name}({fund_code}): 估算净值 {est_val:.4f} <= 5日均值 {nav5_val:.4f}，暂不加仓")
+            return False
+        return True
+
     for asset, fi, in_wind_vane, estimated_profit_rate in enriched:
         if orders_made >= fund_num:
             logger.info(f"已达本次下单上限 {fund_num} 笔，提前结束")
@@ -142,6 +162,10 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             try:
                 safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
                 if safe_asset_value < float(total_budget):
+                    # 使用抽取的 5日均值判定
+                    if not _nav5_gate(fi, fund_name, fund_code, label="wind_vane"):
+                        continue
+
                     res = commit_order(user, sub_account_no, fund_code, buy_amount)
                     if res:
                         logger.info(f"风向标加仓成功: {fund_name}({fund_code}) - 金额: {buy_amount} - 订单号: {res.busin_serial_no}")
@@ -196,6 +220,10 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             season_rank_rate = float(season_item_rank) / float(season_item_sc)
             if month_rank_rate > 0.75 or season_rank_rate > 0.75:
                 logger.info(f"跳过 {fund_name}({fund_code}): 百分位排名过高 month_rank_rate={month_rank_rate:.2%}, season_rank_rate={season_rank_rate:.2%}（阈值<=75%）")
+                continue
+
+            # 使用抽取的 5日均值判定（非风向标同样要求）
+            if not _nav5_gate(fi, fund_name, fund_code):
                 continue
 
             # 基础加仓

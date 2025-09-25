@@ -215,6 +215,16 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                 est_change = getattr(fund_info, "estimated_change", 0.0) or 0.0
             except Exception:
                 est_change = 0.0
+
+            # 新增：候选基金必须有效份额>0（避免无意义止盈）
+            try:
+                avail = float(getattr(asset, "available_vol", 0.0) or 0.0)
+            except Exception:
+                avail = 0.0
+            if avail <= 0.0:
+                logger.info(f"特殊止盈候选过滤：{fund_info.fund_name}({asset.fund_code}) 有效份额为0，跳过")
+                continue
+
             if est_change > 1.0 and estimated_profit_rate > 5.0:
                 eligible_candidates.append((asset, fund_info, estimated_profit_rate, est_change))
 

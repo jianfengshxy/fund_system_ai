@@ -14,6 +14,15 @@ class FundInvestmentIndicator:
     update_date: str = ''                # 更新日期 update_date
     update_time: str = ''                # 更新时间 update_time
     tracking_index: Optional[str] = None # 追踪指数（可选）
+    # 新增：基金更多信息（来自 get_all_fund_info）与排名分母信息（来自 get_fund_growth_rate）
+    rank_100day: Optional[int] = None
+    rank_30day: Optional[int] = None
+    volatility: Optional[float] = None
+    nav_5day_avg: Optional[float] = None
+    season_item_rank: Optional[int] = None
+    season_item_sc: Optional[int] = None
+    month_item_rank: Optional[int] = None
+    month_item_sc: Optional[int] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'FundInvestmentIndicator':
@@ -24,6 +33,14 @@ class FundInvestmentIndicator:
                 return default
             try:
                 return float(value)
+            except (ValueError, TypeError):
+                return default
+        # 新增：安全的整数转换
+        def safe_int(value, default=None):
+            if value is None or value == '':
+                return default
+            try:
+                return int(value)
             except (ValueError, TypeError):
                 return default
         
@@ -37,8 +54,18 @@ class FundInvestmentIndicator:
         product_rank = safe_float(data.get('product_rank') or data.get('PRODUCT_RANK'))
         update_date = (data.get('update_date') or data.get('EUTIME', '').split(' ')[0])
         update_time = data.get('update_time') or data.get('EUTIME', '')
-        tracking_index = data.get('tracking_index') or data.get('tracking_index', None)  # 假设API无此键，使用数据库的
-        
+        tracking_index = data.get('tracking_index') or data.get('tracking_index', None)
+
+        # 新增字段的容错取值（查询时 SELECT * 会返回这些列；旧数据或旧表结构可能缺失）
+        rank_100day = safe_int(data.get('rank_100day'))
+        rank_30day = safe_int(data.get('rank_30day'))
+        volatility = safe_float(data.get('volatility'), default=None)
+        nav_5day_avg = safe_float(data.get('nav_5day_avg'), default=None)
+        season_item_rank = safe_int(data.get('season_item_rank'))
+        season_item_sc = safe_int(data.get('season_item_sc'))
+        month_item_rank = safe_int(data.get('month_item_rank'))
+        month_item_sc = safe_int(data.get('month_item_sc'))
+
         return cls(
             fund_code=fund_code,
             fund_name=fund_name,
@@ -49,7 +76,16 @@ class FundInvestmentIndicator:
             product_rank=product_rank,
             update_date=update_date,
             update_time=update_time,
-            tracking_index=tracking_index
+            tracking_index=tracking_index,
+            # 新增字段
+            rank_100day=rank_100day,
+            rank_30day=rank_30day,
+            volatility=volatility,
+            nav_5day_avg=nav_5day_avg,
+            season_item_rank=season_item_rank,
+            season_item_sc=season_item_sc,
+            month_item_rank=month_item_rank,
+            month_item_sc=month_item_sc
         )
     
     def __str__(self) -> str:

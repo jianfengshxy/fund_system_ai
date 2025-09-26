@@ -41,3 +41,13 @@ DELIMITER ;
 -- 验证事件
 SHOW EVENTS LIKE 'delete_old_fund_indicators';
 SHOW CREATE EVENT delete_old_fund_indicators;
+
+ALTER TABLE fund_investment_indicators
+  ADD COLUMN rank_100day INT NULL COMMENT '近100日排名',
+  ADD COLUMN rank_30day INT NULL COMMENT '近30日排名',
+  ADD COLUMN volatility DECIMAL(10,4) NULL COMMENT '波动率',
+  ADD COLUMN nav_5day_avg DECIMAL(10,4) NULL COMMENT '近5日平均净值',
+  ADD COLUMN season_item_rank INT NULL COMMENT '3个月排名值',
+  ADD COLUMN season_item_sc INT NULL COMMENT '3个月排名总数',
+  ADD COLUMN month_item_rank INT NULL COMMENT '月排名值',
+  ADD COLUMN month_item_sc INT NULL COMMENT '月排名总数';

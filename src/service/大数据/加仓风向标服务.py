@@ -184,6 +184,59 @@ def save_fund_investment_indicators(user):
     # 从第一个指标的 update_time 提取 update_date
     update_time = indicators[0].update_time
     update_date = datetime.strptime(update_time, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d')
+
+    # 补齐新增字段并打印每只基金的关键字段
+    from src.API.基金信息.FundRank import get_fund_growth_rate  # 就地导入，避免顶层改动
+    for ind in indicators:
+        # 获取完整基金信息（包含排名、波动率、近5日均值等）
+        fund_info = get_all_fund_info(user,ind.fund_code)
+        ind.rank_100day = getattr(fund_info, 'rank_100day', None)
+        ind.rank_30day = getattr(fund_info, 'rank_30day', None)
+        ind.volatility = getattr(fund_info, 'volatility', None)
+        ind.nav_5day_avg = getattr(fund_info, 'nav_5day_avg', None)
+
+        # 补齐 3Y 和 1Y 的排名信息（分子/分母）
+        season_rate, season_item_rank, season_item_sc = get_fund_growth_rate(fund_info, '3Y')
+        month_rate, month_item_rank, month_item_sc = get_fund_growth_rate(fund_info, '1Y')
+        ind.season_item_rank = season_item_rank
+        ind.season_item_sc = season_item_sc
+        ind.month_item_rank = month_item_rank
+        ind.month_item_sc = month_item_sc
+
+        # 细粒度日志，便于确认补齐值
+        logging.getLogger().info(
+            f"入库前补齐({ind.fund_code} {ind.fund_name}): "
+            f"rank30={ind.rank_30day}, rank100={ind.rank_100day}, vol={ind.volatility}, nav5={ind.nav_5day_avg}, "
+            f"season={ind.season_item_rank}/{ind.season_item_sc}, month={ind.month_item_rank}/{ind.month_item_sc}"
+        )
+
+    # 补齐完成统计
+    fields = [
+        'rank_30day', 'rank_100day', 'volatility', 'nav_5day_avg',
+        'season_item_rank', 'season_item_sc', 'month_item_rank', 'month_item_sc'
+    ]
+    total = len(indicators)
+    counts = {f: sum(1 for x in indicators if getattr(x, f, None) is not None) for f in fields}
+    logging.getLogger().info(
+        "补齐完成统计: " +
+        ", ".join([f"{f}={counts[f]}/{total}" for f in fields])
+    )
+
+    # 入库前质量统计与严格断言（可选）
+    import os
+    print(f"[质量统计] 待入库基金数: {total}")
+    for f in (['tracking_index'] + fields):
+        c = sum(1 for x in indicators if getattr(x, f, None) is not None)
+        ratio = (c / total) if total > 0 else 0.0
+        print(f"[质量统计] {f}: 非空 {c}/{total} ({ratio:.1%})")
+
+    strict = os.environ.get('STRICT_QUALITY_CHECK', '0') == '1'
+    critical_fields = ['rank_100day', 'rank_30day', 'volatility', 'season_item_rank', 'month_item_rank']
+    if strict and all(sum(1 for x in indicators if getattr(x, f, None) is not None) == 0 for f in critical_fields):
+        raise ValueError(f"质量断言失败：关键字段全部为空，终止入库。统计={counts}")
+
+    # 仓库保存（本地实例化，避免作用域问题）
+    from src.db.fund_investment_indicator_repository_impl import FundInvestmentIndicatorRepositoryImpl
     repo = FundInvestmentIndicatorRepositoryImpl()
     repo.save_investment_indicators(indicators, update_date)
 

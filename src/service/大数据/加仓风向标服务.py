@@ -189,15 +189,19 @@ def save_fund_investment_indicators(user):
     from src.API.基金信息.FundRank import get_fund_growth_rate  # 就地导入，避免顶层改动
     for ind in indicators:
         # 获取完整基金信息（包含排名、波动率、近5日均值等）
-        fund_info = get_all_fund_info(user,ind.fund_code)
+        fund_info = get_all_fund_info(user, ind.fund_code)
         ind.rank_100day = getattr(fund_info, 'rank_100day', None)
         ind.rank_30day = getattr(fund_info, 'rank_30day', None)
         ind.volatility = getattr(fund_info, 'volatility', None)
         ind.nav_5day_avg = getattr(fund_info, 'nav_5day_avg', None)
 
-        # 补齐 3Y 和 1Y 的排名信息（分子/分母）
+        # 补齐 3Y 和 1Y(实际参数为 'Y') 的排名信息（分子/分母）
         season_rate, season_item_rank, season_item_sc = get_fund_growth_rate(fund_info, '3Y')
-        month_rate, month_item_rank, month_item_sc = get_fund_growth_rate(fund_info, '1Y')
+        month_rate, month_item_rank, month_item_sc = get_fund_growth_rate(fund_info, 'Y')  # 修复：'1Y' -> 'Y'
+        # 若接口偶发缺数据返回 0/0，则不入库（置为 None，避免写入错误0值）
+        if month_item_rank == 0 and month_item_sc == 0:
+            month_item_rank, month_item_sc = None, None
+
         ind.season_item_rank = season_item_rank
         ind.season_item_sc = season_item_sc
         ind.month_item_rank = month_item_rank

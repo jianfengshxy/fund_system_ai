@@ -68,7 +68,7 @@ logger = logging.getLogger(__name__)
 # 第六列：预算
 user_list = [
     ("13918797997","Zj951103","Zj951103","仇晓钰","最优止盈",300000.0),
-    # ("13918199137", "sWX15706","sWX15706","最优止盈","低风险组合",1000000.0),
+    # ("13918199137", "sWX15706","sWX15706","最优止盈","飞龙在天",1000000.0),
     ("13820198186", "tang8186","tang8186","唐祖华","最优止盈",450000.0),
     ("17782571152", "s00127479","s00127479","邵科","最优止盈",150000.0),
     # ("13830702104", "chb201106?","chb201106?","程斌","最优止盈",100000.0),
@@ -109,7 +109,7 @@ def redeem(user: User, sub_account_name: str, total_budget: Optional[float] = No
 if __name__ == "__main__":
     # 测试 amount 不传的情况
     try:
-        success = redeem(DEFAULT_USER, "低风险组合",1000000)  
+        success = redeem(DEFAULT_USER, "飞龙在天",1000000)  
         if success:
             logging.info("测试成功（amount 未传）")
         else:

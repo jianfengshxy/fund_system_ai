@@ -252,7 +252,7 @@ if __name__ == "__main__":
     # 测试单个用户的加仓流程
     try:
         # 执行加仓操作
-        increase_funds(DEFAULT_USER, "低风险组合", 1000000.0, None, 'non_index')  # 使用 DEFAULT_USER，并假设参数合适
+        increase_funds(DEFAULT_USER, "飞龙在天", 1000000.0, None, 'non_index')  # 使用 DEFAULT_USER，并假设参数合适
         logging.info(f"用户 {DEFAULT_USER.customer_name} 加仓操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

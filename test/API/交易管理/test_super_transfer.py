@@ -27,7 +27,7 @@ def test_super_transfer_and_revoke():
     logger.info("开始测试基金超级转换并撤销")
     
     # 测试参数
-    name = "低风险组合"
+    name = "飞龙在天"
     fund_code = "016531"
     
     # 获取子账户编号

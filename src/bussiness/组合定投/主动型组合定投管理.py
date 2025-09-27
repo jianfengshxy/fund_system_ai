@@ -39,7 +39,7 @@ from src.common.errors import TradePasswordError
 # 第六列：budget 预算
 user_list = [
     # ("13918797997","Zj951103","Zj951103","仇晓钰","最优止盈",1000000.0),
-    ("13918199137", "sWX15706", "sWX15706", "施小雨", "低风险组合", 3000000.0)
+    ("13918199137", "sWX15706", "sWX15706", "施小雨", "飞龙在天", 3000000.0)
 ]
 
 
@@ -622,5 +622,5 @@ def dissolve_plan_by_group(user: User, sub_account_name: str, budget: float):
         print(f"错误详情: {traceback.format_exc()}")
 
 if __name__ == '__main__':
-    create_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0,50000.0)
-    # dissolve_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0)
+    create_plan_by_group(DEFAULT_USER,"飞龙在天",1000000.0,50000.0)
+    # dissolve_plan_by_group(DEFAULT_USER,"飞龙在天",1000000.0)

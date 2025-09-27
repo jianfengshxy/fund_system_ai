@@ -24,7 +24,7 @@ def test_get_fund_asset_detail_success():
     logger.info("开始测试 get_fund_asset_detail 函数 - 成功案例")
     
     user = DEFAULT_USER
-    sub_account_name = "低风险组合"
+    sub_account_name = "飞龙在天"
     fund_code = "001770"
     
     sub_account_no = getSubAccountNoByName(user, sub_account_name)

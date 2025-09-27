@@ -174,12 +174,12 @@ def dissolve_period_index_investment(event, context):
 
 def create_period_smart_investment(event, context):   
     # add_plan(DEFAULT_USER, 3000)
-    create_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0,50000.0)
+    create_plan_by_group(DEFAULT_USER,"飞龙在天",1000000.0,50000.0)
     pass
 
 def dissolve_period_smart_investment(event, context):          
     # dissolve_daily_plan(DEFAULT_USER)
-    dissolve_plan_by_group(DEFAULT_USER,"低风险组合",1000000.0)
+    dissolve_plan_by_group(DEFAULT_USER,"飞龙在天",1000000.0)
     pass
 
 if __name__ == "__main__":

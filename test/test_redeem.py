@@ -14,7 +14,7 @@ def test_redeem_success():
     payload = {
         "account": "13918199137",
         "password": "sWX15706",
-        "sub_account_name": "低风险组合",
+        "sub_account_name": "飞龙在天",
         "total_budget": 1000000.0
     }
     event = {'payload': json.dumps(payload)}

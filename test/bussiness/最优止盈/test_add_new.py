@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)8s] %(m
 logger = logging.getLogger(__name__)
 
 user_list = [
-    ("13918199137","sWX15706","sWX15706","施小雨","低风险组合",1000000.0)
+    ("13918199137","sWX15706","sWX15706","施小雨","飞龙在天",1000000.0)
 ]
 
 def test_add_new_funds():

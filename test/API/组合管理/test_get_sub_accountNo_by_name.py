@@ -133,20 +133,20 @@ def test_get_sub_account_no_by_name_error(mock_error_response):
 
 
 def test_get_low_risk_portfolio_id():
-    print("开始测试获取低风险组合的组合编号")
+    print("开始测试获取飞龙在天的组合编号")
     
-    result = getSubAccountNoByName(user=DEFAULT_USER, name="低风险组合")
-    print(f"获取到的低风险组合编号: {result}")
+    result = getSubAccountNoByName(user=DEFAULT_USER, name="飞龙在天")
+    print(f"获取到的飞龙在天编号: {result}")
     
     assert result is not None
     assert isinstance(result, str)
     assert len(result) > 0
-    print(f"验证通过: 成功获取到低风险组合编号 {result}")
+    print(f"验证通过: 成功获取到飞龙在天编号 {result}")
     
     return result
 
 if __name__ == "__main__":
-    # 直接运行测试获取低风险组合的组合编号
-    print("直接运行获取低风险组合的组合编号测试")
+    # 直接运行测试获取飞龙在天的组合编号
+    print("直接运行获取飞龙在天的组合编号测试")
     portfolio_id = test_get_low_risk_portfolio_id()
-    print(f"低风险组合的组合编号: {portfolio_id}")
+    print(f"飞龙在天的组合编号: {portfolio_id}")

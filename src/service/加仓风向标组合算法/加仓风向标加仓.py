@@ -31,7 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def increase_funds(user: User, sub_account_name: str, total_budget: float, amount: Optional[float] = None, fund_type: str = 'all', fund_num: int = 5, spread_days: int = 20) -> bool:
+def increase_funds(user: User, sub_account_name: str, total_budget: float, amount: Optional[float] = None, fund_type: str = 'all', fund_num: int = 5, spread_days: int = 5) -> bool:
     """
     加仓（最小集成落地版）：
     - fund_num: 本次最多下单次数（默认5）
@@ -40,8 +40,8 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
     """
     logger.info(f"参数: fund_num={fund_num}, spread_days={spread_days}")
     # 计算基础单笔金额
-    base_amount = float(amount) if amount is not None else round(total_budget / max(fund_num, 1) / max(spread_days, 1), 2)
-
+    base_amount = float(amount) if amount is not None else round(total_budget / max(fund_num, 1) / max(spread_days, 1), 2) * 2
+    logger.info(f"单只基金基础买入金额: {base_amount}元(是新增金额的2倍)")
     # 查询余额并动态下调
     try:
         asset_response = GetMyAssetMainPartAsync(user)

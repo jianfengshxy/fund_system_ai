@@ -64,22 +64,23 @@ def select_low_position_indicators(
 
     date_list = [row['update_date'] for row in recent_dates]
     min_date = min(date_list)
-    max_date = max(date_list)
-    logger.info(f"[低位筛选] 时间窗口: [{min_date} ~ {max_date}]")
+    max_date_window = max(date_list)
+    logger.info(f"[低位筛选] 时间窗口: [{min_date} ~ {max_date_window}]")
 
-    # 修改点：不再回退到 threshold=1，始终使用传入的 min_appear
+    # 统一使用传入的出现次数阈值，不回退
     effective_threshold = min_appear
     if len(recent_dates) < days:
         logger.warning(f"[低位筛选] 实际交易日不足 {days}，不回退：仍使用出现次数阈值 {min_appear}")
     logger.info(f"[低位筛选] 使用出现次数阈值: {effective_threshold}")
 
+    # Step 1: 候选集（满足出现次数阈值，并取窗口内最新日期的数据行）
     indicators: List[FundInvestmentIndicator] = repo.get_frequent_indicators(days, effective_threshold)
     logger.info(f"[低位筛选] 初始候选（days={days}, min_appear={min_appear}, effective_threshold={effective_threshold}）数量: {len(indicators)}")
     if not indicators:
         logger.warning("[低位筛选] 候选集为空，直接返回空列表")
         return []
 
-    # 新增：计算每只候选基金在窗口内的出现次数，并记录日志
+    # 统计出现次数
     codes = [ind.fund_code for ind in indicators]
     counts_map = {}
     if codes:
@@ -91,14 +92,65 @@ def select_low_position_indicators(
               AND fund_code IN ({placeholders})
             GROUP BY fund_code
         """
-        rows = db.execute_query(sql_counts, (min_date, max_date, *codes))
+        rows = db.execute_query(sql_counts, (min_date, max_date_window, *codes))
         for r in rows:
             counts_map[r["fund_code"]] = r["cnt"]
 
-    for ind in indicators:
-        logger.info(f"[低位筛选] 候选基金: {ind.fund_name}({ind.fund_code}) 出现次数: {counts_map.get(ind.fund_code, 0)}")
+    # 新增：为候选基金获取“全表最新记录”，并用其字段做判断
+    latest_map = {}
+    if codes:
+        placeholders = ",".join(["%s"] * len(codes))
+        latest_sql = f"""
+            SELECT t.*
+            FROM fund_investment_indicators t
+            JOIN (
+                SELECT fund_code, MAX(update_date) AS max_ud
+                FROM fund_investment_indicators
+                WHERE fund_code IN ({placeholders})
+                GROUP BY fund_code
+            ) m ON t.fund_code = m.fund_code AND t.update_date = m.max_ud
+        """
+        latest_rows = db.execute_query(latest_sql, (*codes,))
+        for r in latest_rows:
+            latest_map[r["fund_code"]] = r
 
-    # Step 2: 弱势与100日排名过滤，输出逐基金原因
+    # 打印候选基金的出现次数与日期信息
+    for ind in indicators:
+        cnt = counts_map.get(ind.fund_code, 0)
+        latest_row = latest_map.get(ind.fund_code)
+        latest_date_global = latest_row["update_date"] if latest_row else None
+        logger.info(
+            f"[低位筛选] 候选基金: {ind.fund_name}({ind.fund_code}) "
+            f"出现次数: {cnt}, 窗口内最新日期: {max_date_window}, 全表最新日期: {latest_date_global}"
+        )
+
+    # 使用“全表最新记录”的字段覆盖，确保判断依据是最新数据
+    fields_to_update = [
+        "season_item_rank", "season_item_sc",
+        "month_item_rank", "month_item_sc",
+        "rank_100day", "rank_30day", "volatility", "nav_5day_avg",
+        "product_rank", "tracking_index", "update_time"
+    ]
+    for ind in indicators:
+        latest_row = latest_map.get(ind.fund_code)
+        if latest_row:
+            # 记录是否与窗口最新日期不同
+            if latest_row["update_date"] != max_date_window:
+                logger.info(
+                    f"[低位筛选] 使用全表最新记录覆盖: {ind.fund_name}({ind.fund_code}) "
+                    f"窗口最新={max_date_window} != 全表最新={latest_row['update_date']}"
+                )
+            for f in fields_to_update:
+                val = latest_row.get(f, None)
+                try:
+                    setattr(ind, f, val)
+                except Exception:
+                    # 某些字段可能不在模型里，忽略
+                    pass
+        else:
+            logger.warning(f"[低位筛选] 未找到全表最新记录: {ind.fund_name}({ind.fund_code})，沿用窗口内最新数据行")
+
+    # 判定与原因
     def check_and_reason(ind: FundInvestmentIndicator) -> (bool, str):
         s_rank = getattr(ind, "season_item_rank", None)
         s_sc   = getattr(ind, "season_item_sc", None)
@@ -106,7 +158,6 @@ def select_low_position_indicators(
         m_sc   = getattr(ind, "month_item_sc", None)
         r100   = getattr(ind, "rank_100day", None)
 
-        # 字段检查
         missing = []
         if s_rank is None: missing.append("season_item_rank")
         if s_sc   is None: missing.append("season_item_sc")
@@ -119,7 +170,6 @@ def select_low_position_indicators(
         if s_sc == 0 or m_sc == 0:
             return False, f"数据异常: 分母为0（season_item_sc={s_sc}, month_item_sc={m_sc}）"
 
-        # 条件判定
         cond_season = (s_rank > s_sc * weak_ratio)
         cond_month  = (m_rank > m_sc * weak_ratio)
         cond_r100   = (r100 < max_rank_100day)
@@ -140,18 +190,24 @@ def select_low_position_indicators(
     for ind in indicators:
         ok, reason = check_and_reason(ind)
         count = counts_map.get(ind.fund_code, 0)
+        latest_row = latest_map.get(ind.fund_code)
+        latest_date_global = latest_row["update_date"] if latest_row else None
         if ok:
             filtered.append(ind)
             logger.info(
                 f"[保留] {ind.fund_name}({ind.fund_code}) "
-                f"出现次数={count}, season={ind.season_item_rank}/{ind.season_item_sc}, "
-                f"month={ind.month_item_rank}/{ind.month_item_sc}, rank_100day={getattr(ind, 'rank_100day', None)}；原因: {reason}"
+                f"出现次数={count}, 全表最新日期={latest_date_global}, "
+                f"season={ind.season_item_rank}/{ind.season_item_sc}, "
+                f"month={ind.month_item_rank}/{ind.month_item_sc}, "
+                f"rank_100day={getattr(ind, 'rank_100day', None)}；原因: {reason}"
             )
         else:
             logger.info(
                 f"[剔除] {ind.fund_name}({ind.fund_code}) "
-                f"出现次数={count}, season={ind.season_item_rank}/{ind.season_item_sc}, "
-                f"month={ind.month_item_rank}/{ind.month_item_sc}, rank_100day={getattr(ind, 'rank_100day', None)}；原因: {reason}"
+                f"出现次数={count}, 全表最新日期={latest_date_global}, "
+                f"season={ind.season_item_rank}/{ind.season_item_sc}, "
+                f"month={ind.month_item_rank}/{ind.month_item_sc}, "
+                f"rank_100day={getattr(ind, 'rank_100day', None)}；原因: {reason}"
             )
 
     logger.info(f"[低位筛选] 过滤后基金数量: {len(filtered)}")

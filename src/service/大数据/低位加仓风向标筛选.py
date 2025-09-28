@@ -229,7 +229,7 @@ if __name__ == "__main__":
     result = select_low_position_indicators(
         user=DEFAULT_USER,
         days=50,
-        min_appear=10,
+        min_appear=15,
         weak_ratio=0.75,
         max_rank_100day=20,
         fallback_all_if_insufficient=True

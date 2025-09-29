@@ -25,7 +25,7 @@ def test_create_plan_by_group():
     assert user is not None, "获取用户失败"
     
     # 第二步：调用创建定投计划函数
-    sub_account_name = "低风险组合"  # 根据主动型示例调整
+    sub_account_name = "飞龙在天"  # 根据主动型示例调整
     budget = 1000000.0
     investment_amount = 10000.0  # 根据函数参数调整
     create_plan_by_group(user, sub_account_name, budget, investment_amount)
@@ -44,7 +44,7 @@ def test_dissolve_plan_by_group():
     assert user is not None, "获取用户失败"
     
     # 第二步：调用解散定投计划函数
-    sub_account_name = "低风险组合"
+    sub_account_name = "飞龙在天"
     budget = 1000000.0
     dissolve_plan_by_group(user, sub_account_name, budget)
     

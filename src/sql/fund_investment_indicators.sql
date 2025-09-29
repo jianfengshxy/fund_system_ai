@@ -12,14 +12,14 @@ CREATE TABLE fund_investment_indicators (
     PRIMARY KEY (update_date, fund_code)
 );
 
--- 创建事件以自动删除过期数据（保留最近30天）
+-- 创建事件以自动删除过期数据（保留最近180天）
 DELIMITER //
 CREATE EVENT IF NOT EXISTS delete_old_fund_indicators
 ON SCHEDULE EVERY 1 DAY
 DO
 BEGIN
     DELETE FROM fund_investment_indicators
-    WHERE update_date < DATE_SUB(CURDATE(), INTERVAL 30 DAY);
+    WHERE update_date < DATE_SUB(CURDATE(), INTERVAL 180 DAY);
 END //
 DELIMITER ;
 
@@ -34,7 +34,7 @@ ON SCHEDULE EVERY 1 DAY
 DO
 BEGIN
     DELETE FROM fund_investment_indicators
-    WHERE update_date < DATE_SUB(CURDATE(), INTERVAL 30 DAY);
+    WHERE update_date < DATE_SUB(CURDATE(), INTERVAL 180 DAY);
 END //
 DELIMITER ;
 

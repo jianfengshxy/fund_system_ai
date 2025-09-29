@@ -123,7 +123,7 @@ if __name__ == '__main__':
         amount= "2000.0",  
         period_type=4,
         period_value=1,  # 修改为整数
-        sub_account_name="低风险组合"
+        sub_account_name="飞龙在天"
     )
     sleep(10)
     # dissolve_period_investment_by_group(

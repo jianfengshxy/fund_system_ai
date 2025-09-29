@@ -85,16 +85,17 @@ resources:
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "add_new_13918199137_low_risk"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "低风险组合","total_budget": 1000000.0,"amount": 50000.0,"fund_type": "non_index"}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "飞龙在天","total_budget": 1000000.0,"amount": 50000.0,"fund_type": "non_index"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "add_new_13918199137_index_fund_portfolio"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "指数基金组合","total_budget": 1000000.0,"amount": 50000.0,"fund_type": "index"}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "马丁格尔plus","total_budget": 100000.0,"fund_type": "index"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
+  
       # 最优止盈（optimal_take_profit）账户清单（去重后仅保留首个定义）
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
@@ -216,7 +217,7 @@ resources:
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "increase_13918199137_low_risk"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "低风险组合","total_budget": 1000000.0,"amount": 50000.0,"fund_type": "non_index"}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "飞龙在天","total_budget": 1000000.0,"amount": 50000.0,"fund_type": "non_index"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 53 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
@@ -225,6 +226,14 @@ resources:
         triggerName: "increase_13918199137_index_fund_portfolio"
         triggerConfig:
           payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "指数基金组合","total_budget": 1000000.0,"amount": 30000.0,"fund_type": "index"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 4 53 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "increase_13918199137_index_fund_portfolio"
+        triggerConfig:
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "马丁格尔plus","total_budget": 100000.0,"fund_type": "index"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 53 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
@@ -357,12 +366,12 @@ resources:
       timeout: ${vars.common.props.timeout}
       environmentVariables: ${vars.common.props.environmentVariables}
       triggers:
-      # 低风险组合
+      # 飞龙在天
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "redeem_13918199137_low_risk"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "低风险组合","total_budget":1000000.0}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "飞龙在天","total_budget":1000000.0}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
       # 指数基金组合
@@ -371,6 +380,15 @@ resources:
         triggerName: "redeem_13918199137_index_fund_portfolio"
         triggerConfig:
           payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "指数基金组合","total_budget": 1000000.0}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+      # 马丁格尔plus
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "redeem_13918199137_index_fund_portfolio"
+        triggerConfig:
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "马丁格尔plus","total_budget": 100000.0}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 

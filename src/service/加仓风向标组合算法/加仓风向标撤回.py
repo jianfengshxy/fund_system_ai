@@ -78,4 +78,4 @@ def revoke_funds(user: User, sub_account_name: str = "最优止盈") -> bool:
 if __name__ == "__main__":
     # 测试代码，例如使用 DEFAULT_USER
     from src.common.constant import DEFAULT_USER
-    revoke_funds(DEFAULT_USER, '低风险组合')
+    revoke_funds(DEFAULT_USER, '飞龙在天')

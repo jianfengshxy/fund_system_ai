@@ -24,7 +24,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def increase(user: User, sub_account_name: str = "低风险组合", amount: int = 10000.0) -> bool:
+def increase(user: User, sub_account_name: str = "飞龙在天", amount: int = 10000.0) -> bool:
     """组合定投加仓实现"""
     # 第一步：获取加仓风向标
     indicators = get_fund_investment_indicators(days=10, threshold=3)

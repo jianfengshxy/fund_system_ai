@@ -190,7 +190,7 @@ def increase(user: User, sub_account_name: str, total_budget: Optional[float] = 
 if __name__ == "__main__":
     # 测试 amount 不传的情况
     try:
-        success = increase(DEFAULT_USER, "低风险组合", 1000000.0, fund_type='index')  # amount 不传，使用 None
+        success = increase(DEFAULT_USER, "飞龙在天", 1000000.0, fund_type='index')  # amount 不传，使用 None
         if success:
             logging.info("测试成功（amount 未传）")
         else:

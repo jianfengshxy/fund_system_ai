@@ -81,5 +81,5 @@ def get_sub_account_asset_by_name(user: User, sub_account_name: str) -> Optional
     return asset_details_list
     
 if __name__ == "__main__":
-    get_sub_account_asset_by_name(DEFAULT_USER,"低风险组合")
+    get_sub_account_asset_by_name(DEFAULT_USER,"飞龙在天")
     pass

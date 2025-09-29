@@ -52,13 +52,13 @@ def add_new_funds(
     total_budget: float,
     amount: Optional[float] = None,
     fund_type: str = 'all',
-    fund_num: int = 5,
-    spread_days: int = 20
+    fund_num: int = 1,
+    spread_days: int = 5
 ) -> bool:
     """
     新增基金策略（最小集成落地）：
     - fund_num: 本次最多买入的基金只数（默认5）
-    - spread_days: 预算摊薄天数（默认20）；仅当未传入amount时生效
+    - spread_days: 预算摊薄天数（默认5）；仅当未传入amount时生效
     - fund_type: 'all' | 'index' | 'non_index'
     流程：
       1) 获取组合资产与持仓
@@ -80,16 +80,17 @@ def add_new_funds(
         f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{total_budget}元，基金类型：{fund_type}，"
         f"fund_num={fund_num}，spread_days={spread_days}"
     )
+    # 读取最大基金数阈值（本地/云端统一）
+    MAX_FUNDS_THRESHOLD = _get_max_funds_threshold()
 
     # 计算预算分配
     if amount is None:
-        base_per_fund = round(total_budget / max(fund_num, 1) / max(spread_days, 1), 2)
+        base_per_fund = round(total_budget / max(MAX_FUNDS_THRESHOLD, 1) / max(spread_days, 1), 2)
     else:
         base_per_fund = float(amount)
     logger.info(f"单只基金基础买入金额: {base_per_fund}元")
 
-    # 读取最大基金数阈值（本地/云端统一）
-    MAX_FUNDS_THRESHOLD = _get_max_funds_threshold()
+
 
     logger.info("========== 开始执行新增基金算法（最小落地版） ===========")
     logger.info(f"用户: {user.customer_name}，组合名称: {sub_account_name}")

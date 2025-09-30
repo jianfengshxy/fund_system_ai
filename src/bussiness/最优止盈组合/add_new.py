@@ -82,10 +82,10 @@ def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budg
     
     return success
 
-def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budget: float = 10000.0, amount: Optional[float] = None, fund_type: str = 'all', fund_num: int = 5, spread_days: int = 5) -> bool:
+def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budget: float = 10000.0, amount: Optional[float] = None, fund_type: str = 'all', fund_num: int = 1, spread_days: int = 5) -> bool:
     """
     新增基金（最小集成落地版）：
-    - fund_num: 本次最多买入的基金只数（默认5）
+    - fund_num: 本次最多买入的基金只数（默认1）
     - spread_days: 将total_budget按交易天数摊薄（默认20），仅在未显式传入amount时生效
     """
     logger.info(f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{total_budget}元，fund_num={fund_num}, spread_days={spread_days}")

@@ -190,6 +190,48 @@ def add_new_jianlong(event, context):
         logger.error(f"add_new_jianlong 函数执行错误: {str(e)}")
         return
 
+# 新增：见龙在田加仓入口（参考 add_new_jianlong）
+def increase_jianlong(event, context):
+    try:
+        evt, payload = parse_fc_event(event)
+
+        # 提取参数（与 add_new_jianlong 对齐）
+        account = payload.get('account')
+        password = payload.get('password')
+        sub_account_name = payload.get('sub_account_name')
+        total_budget = payload.get('total_budget')
+        amount = payload.get('amount')  # Optional
+        fund_type = payload.get('fund_type', 'all')
+        fund_num = payload.get('fund_num', 5)
+        spread_days = payload.get('spread_days', 5)
+
+        # 校验
+        if not all([account, password, sub_account_name, total_budget]):
+            logger.error("Payload缺少必填参数: account, password, sub_account_name 或 total_budget")
+            return
+
+        # 获取用户对象
+        user = get_user_all_info(account, password)
+        if not user:
+            logger.error(f"获取用户 {account} 信息失败")
+            return
+
+        logger.info(f"[见龙在田] 开始为用户 {user.customer_name} 执行加仓操作，组合：{sub_account_name}，预算：{total_budget}，amount：{amount}，fund_type：{fund_type}，fund_num：{fund_num}，spread_days：{spread_days}")
+
+        # 业务调用（见龙在田的加仓）
+        # 导入见龙在田的加仓业务逻辑
+        from src.bussiness.见龙在田.increase import increase as jianlong_increase_biz
+        success = jianlong_increase_biz(user, sub_account_name, total_budget, amount, fund_type, fund_num, spread_days)
+
+        if success:
+            logger.info(f"[见龙在田] 用户 {user.customer_name} 加仓操作成功")
+        else:
+            logger.error(f"[见龙在田] 用户 {user.customer_name} 加仓操作失败")
+
+    except Exception as e:
+        logger.error(f"increase_jianlong 函数执行错误: {str(e)}")
+        return
+
 def increase_all_fund_plans(event, context):
     """为所有基金定投计划执行加仓"""
     increase_all_fund_plans_biz(DEFAULT_USER)
@@ -223,6 +265,51 @@ def dissolve_period_smart_investment(event, context):
     # dissolve_daily_plan(DEFAULT_USER)
     dissolve_plan_by_group(DEFAULT_USER,"飞龙在天",1000000.0)
     pass
+
+def redeem_jianlong(event, context):
+    try:
+        evt, payload = parse_fc_event(event)
+
+        # 提取参数（与 add_new_jianlong/increase_jianlong 对齐）
+        account = payload.get('account')
+        password = payload.get('password')
+        sub_account_name = payload.get('sub_account_name')
+        total_budget = payload.get('total_budget')
+        # 新增：可选止盈阈值（未传或格式异常时默认 20）
+        profit_threshold = payload.get('profit_threshold')
+        try:
+            profit_threshold = float(profit_threshold) if profit_threshold is not None else 20.0
+        except Exception:
+            profit_threshold = 20.0
+
+        # 校验（保持原有：阈值为可选，不纳入必填校验）
+        if not all([account, password, sub_account_name, total_budget]):
+            logger.error("Payload缺少必填参数: account, password, sub_account_name 或 total_budget")
+            return
+
+        # 获取用户对象
+        user = get_user_all_info(account, password)
+        if not user:
+            logger.error(f"获取用户 {account} 信息失败")
+            return
+
+        logger.info(f"[见龙在田] 开始为用户 {user.customer_name} 执行止盈操作，组合：{sub_account_name}，预算：{total_budget}，止盈阈值：{profit_threshold}%")
+
+        # 业务调用（见龙在田的止盈）
+        from src.bussiness.见龙在田.redeem import redeem as jianlong_redeem_biz
+        try:
+            tb = float(total_budget)
+        except Exception:
+            tb = 100000.0
+        success = jianlong_redeem_biz(user, sub_account_name, tb, profit_threshold)
+        if success:
+            logger.info(f"[见龙在田] 用户 {user.customer_name} 止盈操作完成")
+        else:
+            logger.error(f"[见龙在田] 用户 {user.customer_name} 止盈操作失败")
+        return
+    except Exception as e:
+        logger.error(f"[见龙在田] 止盈入口异常：{e}")
+        return
 
 if __name__ == "__main__":
     # 根据需要调用 redeem 或 increase 函数

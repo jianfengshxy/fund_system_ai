@@ -226,6 +226,31 @@ resources:
           cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
+  increase_jianlong:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.increase_jianlong"
+      functionName: "increase_jianlong"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "increase_13918199137_jianlong"
+        triggerConfig:
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "见龙在田","total_budget": 1000000.0,,"fund_type": "non_index"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 4 43 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
   increase:
     component: ${vars.common.component}
     actions: ${vars.common.actions}
@@ -255,7 +280,7 @@ resources:
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "increase_13918199137_index_fund_portfolio"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "Martin plus","total_budget": 1000000.0,"amount": 30000.0,"fund_type": "index"}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "马丁格尔plus","total_budget": 1000000.0,"amount": 30000.0,"fund_type": "index"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 53 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
@@ -263,7 +288,7 @@ resources:
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "increase_13918199137_index_fund_portfolio"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "Martin plus","total_budget": 100000.0,"fund_type": "index"}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "马丁格尔plus","total_budget": 100000.0,"fund_type": "index"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 53 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
@@ -379,6 +404,32 @@ resources:
           cronExpression: "CRON_TZ=Asia/Shanghai 4 53 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
+  redeem_jianlong:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.redeem_jianlong"
+      functionName: "redeem_jianlong"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      # 见龙在田
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "redeem_13918199137_jianlong"
+        triggerConfig:
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "见龙在田","total_budget":1000000.0}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 13 51 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
   redeem:
     component: ${vars.common.component}
     actions: ${vars.common.actions}
@@ -405,12 +456,12 @@ resources:
           cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
           
-      # Martin plus
+      # 马丁格尔plus
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "redeem_13918199137_index_fund_portfolio"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "Martin plus","total_budget": 100000.0}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "马丁格尔plus","total_budget": 100000.0}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
@@ -543,7 +594,7 @@ resources:
         region: ${vars.common.props.region}
         timeout: ${vars.common.props.timeout}
         environmentVariables:
-          INDEX_FUNDS_SUB_ACCOUNT_NAME: "Martin plus"
+          INDEX_FUNDS_SUB_ACCOUNT_NAME: "马丁格尔plus"
         triggers:
         - qualifier: ${vars.common.props.triggerConfig.qualifier}
           triggerType: ${vars.common.props.triggerConfig.triggerType}

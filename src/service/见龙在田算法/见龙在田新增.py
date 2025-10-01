@@ -46,9 +46,14 @@ def add_new_funds(
     sub_account_name: str,
     total_budget: float,
     amount: Optional[float] = None,
-    fund_type: str = 'all',
+    fund_type: str = 'index',
     fund_num: int = 1,
-    spread_days: int = 5
+    spread_days: int = 5,
+    selector_days: int = 50,
+    selector_min_appear: int = 15,
+    selector_weak_ratio: float = 0.75,
+    selector_max_rank_100day: int = 20,
+    selector_fallback_all_if_insufficient: bool = True
 ) -> bool:
     """
     见龙在田新增基金策略（结构与加仓风向标新增一致）：
@@ -156,14 +161,14 @@ def add_new_funds(
             else:
                 selector_fund_type = []  # 默认等同于全部类型，由筛选器内部处理
 
-            # 采用你提供的参数进行选取（使用转换后的 selector_fund_type）
+            # 采用业务层传入的参数；未传则使用默认值
             candidates_from_selector: List = select_low_position_indicators(
                 user=user,
-                days=50,
-                min_appear=15,
-                weak_ratio=0.75,
-                max_rank_100day=20,
-                fallback_all_if_insufficient=True,
+                days=selector_days,
+                min_appear=selector_min_appear,
+                weak_ratio=selector_weak_ratio,
+                max_rank_100day=selector_max_rank_100day,
+                fallback_all_if_insufficient=selector_fallback_all_if_insufficient,
                 fund_type=selector_fund_type
             )
         except Exception as e:
@@ -205,17 +210,11 @@ def add_new_funds(
             logger.info("[见龙在田] 候选基金为空：返回基金均已持有或重复指数，退出新增流程")
             return True
 
-        # 按产品排名升序（越小越优），无排名置于末尾
-        try:
-            candidates.sort(key=lambda f: getattr(f, 'product_rank', float('inf')))
-        except Exception as e:
-            logger.warning(f"[见龙在田] 按排名排序候选基金失败，将按原顺序处理：{e}")
-
         # 限制本次最多买入 fund_num 只
         selected_funds = candidates[:max(fund_num, 1)]
         logger.info(f"[见龙在田] 候选基金数: {len(candidates)}，计划买入: {len(selected_funds)} 只")
 
-        # 3) 查询余额并按余额下调买入只数
+        # 3) 查询余额并根据余额下调买入只数
         try:
             asset_response = GetMyAssetMainPartAsync(user)
             if getattr(asset_response, 'Success', False) and getattr(asset_response, 'Data', None):

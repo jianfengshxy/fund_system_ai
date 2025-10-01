@@ -41,6 +41,9 @@ from src.bussiness.最优止盈组合.increase import increase as increase_biz
 # 新增：导入 bussiness 层的止盈薄封装
 from src.bussiness.最优止盈组合.redeem import redeem as redeem_biz
 
+# 新增：导入“见龙在田”业务层新增薄封装
+from src.bussiness.见龙在田.add_new import add_new_funds as jianlong_add_new_biz
+
 # 初始化日志记录器
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -146,6 +149,45 @@ def add_new(event, context):
 
     except Exception as e:
         logger.error(f"add_new 函数执行错误: {str(e)}")
+        return
+
+def add_new_jianlong(event, context):
+    try:
+        evt, payload = parse_fc_event(event)
+
+        # 提取参数
+        account = payload.get('account')
+        password = payload.get('password')
+        sub_account_name = payload.get('sub_account_name')
+        total_budget = payload.get('total_budget')
+        amount = payload.get('amount')  # Optional
+        fund_type = payload.get('fund_type', 'all')
+        fund_num = payload.get('fund_num', 1)
+        spread_days = payload.get('spread_days', 5)
+
+        # 校验
+        if not all([account, password, sub_account_name, total_budget]):
+            logger.error("Payload缺少必填参数: account, password, sub_account_name 或 total_budget")
+            return
+
+        # 获取用户对象
+        user = get_user_all_info(account, password)
+        if not user:
+            logger.error(f"获取用户 {account} 信息失败")
+            return
+
+        logger.info(f"[见龙在田] 开始为用户 {user.customer_name} 执行新增基金操作，组合：{sub_account_name}，预算：{total_budget}，amount：{amount}，fund_type：{fund_type}，fund_num：{fund_num}，spread_days：{spread_days}")
+
+        # 业务调用（见龙在田的新增）
+        success = jianlong_add_new_biz(user, sub_account_name, total_budget, amount, fund_type, fund_num, spread_days)
+
+        if success:
+            logger.info(f"[见龙在田] 用户 {user.customer_name} 新增基金操作成功")
+        else:
+            logger.error(f"[见龙在田] 用户 {user.customer_name} 新增基金操作失败")
+
+    except Exception as e:
+        logger.error(f"add_new_jianlong 函数执行错误: {str(e)}")
         return
 
 def increase_all_fund_plans(event, context):

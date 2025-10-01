@@ -8,7 +8,6 @@ vars:
     database:
         vpc_id: vpc-uf6ewma5cv187wp8m1yej
         cidr: 172.16.0.0/12
-        internal_host: rm-uf614tc8841ee6nwiwo.rwlb.rds.aliyuncs.com
         external_host: rm-uf614tc8841ee6nwiwo.rwlb.rds.aliyuncs.com
         port: 3306
         DB_USER: jianfengshxy
@@ -49,12 +48,44 @@ vars:
         DB_PASSWORD: ${vars.common.database.DB_PASSWORD}
         DB_PORT: ${vars.common.database.DB_PORT}
         DB_NAME: ${vars.common.database.DB_NAME}
-        INTERNAL_HOST: ${vars.common.database.internal_host}
         EXTERNAL_HOST: ${vars.common.database.external_host}
         VPC_ID: ${vars.common.database.vpc_id}
         CIDR: ${vars.common.database.cidr}
 
 resources:
+  add_new_jianlong:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.add_new_jianlong"
+      functionName: "add_new_jianlong"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables:
+        DB_USER: ${vars.common.database.DB_USER}
+        DB_PASSWORD: ${vars.common.database.DB_PASSWORD}
+        DB_PORT: ${vars.common.database.DB_PORT}
+        DB_NAME: ${vars.common.database.DB_NAME}
+        EXTERNAL_HOST: ${vars.common.database.external_host}
+        VPC_ID: ${vars.common.database.vpc_id}
+        CIDR: ${vars.common.database.cidr}
+        MAX_FUNDS_THRESHOLD: "30"
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_13918199137_jianlong"
+        triggerConfig:
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "见龙在田","total_budget": 1000000.0,"fund_type": "non_index"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 37 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
   add_new:
     component: ${vars.common.component}
     actions: ${vars.common.actions}
@@ -75,7 +106,6 @@ resources:
         DB_PASSWORD: ${vars.common.database.DB_PASSWORD}
         DB_PORT: ${vars.common.database.DB_PORT}
         DB_NAME: ${vars.common.database.DB_NAME}
-        INTERNAL_HOST: ${vars.common.database.internal_host}
         EXTERNAL_HOST: ${vars.common.database.external_host}
         VPC_ID: ${vars.common.database.vpc_id}
         CIDR: ${vars.common.database.cidr}
@@ -225,7 +255,7 @@ resources:
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "increase_13918199137_index_fund_portfolio"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "马丁格尔plus","total_budget": 1000000.0,"amount": 30000.0,"fund_type": "index"}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "Martin plus","total_budget": 1000000.0,"amount": 30000.0,"fund_type": "index"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 53 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
@@ -233,7 +263,7 @@ resources:
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "increase_13918199137_index_fund_portfolio"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "马丁格尔plus","total_budget": 100000.0,"fund_type": "index"}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "Martin plus","total_budget": 100000.0,"fund_type": "index"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 53 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
@@ -375,12 +405,12 @@ resources:
           cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
           
-      # 马丁格尔plus
+      # Martin plus
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "redeem_13918199137_index_fund_portfolio"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "马丁格尔plus","total_budget": 100000.0}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "Martin plus","total_budget": 100000.0}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
@@ -513,7 +543,7 @@ resources:
         region: ${vars.common.props.region}
         timeout: ${vars.common.props.timeout}
         environmentVariables:
-          INDEX_FUNDS_SUB_ACCOUNT_NAME: "马丁格尔plus"
+          INDEX_FUNDS_SUB_ACCOUNT_NAME: "Martin plus"
         triggers:
         - qualifier: ${vars.common.props.triggerConfig.qualifier}
           triggerType: ${vars.common.props.triggerConfig.triggerType}

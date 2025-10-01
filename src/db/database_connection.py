@@ -6,8 +6,9 @@ from mysql.connector import Error
 class DatabaseConnection:
     def __init__(self, pool_size=10):
         if 'FC_FUNCTION_NAME' in os.environ:
+            # 云端直接使用外网地址
             self.dbconfig = {
-                'host': os.environ.get('INTERNAL_HOST', 'rm-uf614tc8841ee6nwi.rwlb.rds.aliyuncs.com'),
+                'host': os.environ.get('EXTERNAL_HOST', 'rm-uf614tc8841ee6nwiwo.rwlb.rds.aliyuncs.com'),
                 'port': int(os.environ.get('DB_PORT', 3306)),
                 'user': os.environ.get('DB_USER', 'jianfengshxy'),
                 'password': os.environ.get('DB_PASSWORD', 'jianfeng1984Aa+'),

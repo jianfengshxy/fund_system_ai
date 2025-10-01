@@ -512,7 +512,8 @@ resources:
         runtime: ${vars.common.props.runtime}
         region: ${vars.common.props.region}
         timeout: ${vars.common.props.timeout}
-        environmentVariables: ${vars.common.props.environmentVariables}
+        environmentVariables:
+          INDEX_FUNDS_SUB_ACCOUNT_NAME: "马丁格尔plus"
         triggers:
         - qualifier: ${vars.common.props.triggerConfig.qualifier}
           triggerType: ${vars.common.props.triggerConfig.triggerType}

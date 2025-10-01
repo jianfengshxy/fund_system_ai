@@ -114,9 +114,9 @@ def process_fund_investment_indicators(user, page_size=50) -> List[FundInvestmen
         
         logger.info(f"=== 历史数据齐全过滤后基金数量: {len(age_ok_indicators)} ===")
         
-        # 根据index_code进行去重（新增：优先保留“指数基金组合”中的已持有基金）
+        # 根据index_code进行去重（新增：优先保留组合中的已持有基金）
         try:
-            sub_name = "指数基金组合"
+            sub_name = os.getenv("INDEX_FUNDS_SUB_ACCOUNT_NAME", "")
             sub_no = getSubAccountNoByName(user, sub_name)
             if not sub_no:
                 logger.warning(f"未找到组合 {sub_name} 的账号，持仓优先去重失效")

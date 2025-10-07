@@ -27,11 +27,11 @@ logger = logging.getLogger(__name__)
 
 
 def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] = None) -> bool:
-    """自定义组合算法加仓：从 payload 传入的 fund_list 获取要交易的基金及其金额。
-    先完成新增逻辑：对于组合中未持有的基金，直接按 amount 进行购买；已持有基金的加仓逻辑后续补充。
+    """自定义组合算法新增：从 payload 传入的 fund_list 获取要交易的基金及其金额。
+    对于组合中未持有的基金，直接按 amount 进行购买；已持有基金暂不处理。
     """
     customer_name = user.customer_name
-    logger.info(f"开始为用户 {customer_name} 执行加仓操作，组合: {sub_account_name}")
+    logger.info(f"开始为用户 {customer_name} 执行新增操作，组合: {sub_account_name}")
 
     # 获取组合账号
     sub_account_no = getSubAccountNoByName(user, sub_account_name)
@@ -41,7 +41,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
 
     # 校验 payload 的基金列表
     if not fund_list or not isinstance(fund_list, list):
-        logger.info(f"未提供 fund_list 或格式不正确，跳过自定义组合加仓")
+        logger.info(f"未提供 fund_list 或格式不正确，跳过自定义组合新增")
         return False
 
     # 获取组合资产，构建已持有基金集合
@@ -81,13 +81,13 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 # 新增逻辑只覆盖“未持有→购买”，继续处理下一只
                 continue
 
-            # 已持有基金：当前先不处理加仓（后续补充完整加仓逻辑）
-            logger.info(f"已持有基金，暂不处理加仓：{fund_name}({fund_code})；后续将补充加仓策略")
+            # 已持有基金：当前先不处理新增（后续补充完整加仓逻辑）
+            logger.info(f"已持有基金，新增逻辑不处理：{fund_name}({fund_code})")
 
         except Exception as e:
             logger.error(f"处理 {fund_item} 失败: {e}")
 
-    logger.info(f"加仓完成：{customer_name} 成功执行 {success_count} 次购买操作")
+    logger.info(f"新增完成：{customer_name} 成功执行 {success_count} 次购买操作")
     return success_count > 0
 
 
@@ -104,6 +104,6 @@ if __name__ == "__main__":
                 {"fund_code": "019449", "fund_name": "摩根日本精选股票(QDII)C", "amount": 5000.0}
             ]
         )
-        logging.info(f"用户 {DEFAULT_USER.customer_name} 加仓操作完成")
+        logging.info(f"用户 {DEFAULT_USER.customer_name} 新增操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

@@ -238,8 +238,8 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
 if __name__ == "__main__":
     try:
-        # redeem_funds(DEFAULT_USER, "飞龙在天", 1000000.0)
-        redeem_funds(DEFAULT_USER, "马丁格尔plus", 1000000.0)
+        redeem_funds(DEFAULT_USER, "飞龙在天", 1000000.0)
+        # redeem_funds(DEFAULT_USER, "马丁格尔plus", 1000000.0)
         logging.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

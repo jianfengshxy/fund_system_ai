@@ -71,7 +71,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 logger.info(f"发现新基金，未持有，准备购买：{fund_name}({fund_code})，金额: {fund_amount}")
                 try:
                     res = commit_order(user, sub_account_no, fund_code, float(fund_amount))
-                    if res is not None and getattr(res, 'status', None) == 1:
+                    if res and getattr(res, 'busin_serial_no', None):
                         success_count += 1
                         logger.info(f"购买成功：{fund_name}({fund_code})，金额: {fund_amount}")
                     else:

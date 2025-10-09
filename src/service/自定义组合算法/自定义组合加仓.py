@@ -111,19 +111,44 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
 
             # 仅对已持有基金执行加仓
             if fund_code in held_codes:
-                # 拉取资产详情用于收益率计算
+                # 拉取资产详情用于收益率/倍数计算
                 try:
-                    asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
-                    if asset_detail is None:
+                    asset = get_fund_asset_detail(user, sub_account_no, fund_code)
+                    if asset is None:
                         logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}资产为空。Skip .........")
                         continue
                 except Exception as e:
                     logger.error(f"获取资产详情失败: {e}")
                     continue
 
-                current_profit_rate = _safe_float(getattr(asset_detail, 'constant_profit_rate', None), 0.0)
+                current_profit_rate = _safe_float(getattr(asset, 'constant_profit_rate', None), 0.0)
                 estimated_change = _safe_float(getattr(fund_info, 'estimated_change', None), 0.0)
                 estimated_profit_rate = current_profit_rate + estimated_change
+
+
+                # 昨日净值日成交成功数 >0 则跳过（替代在途判断）
+                prev_day_success_count = count_success_trades_on_prev_nav_day(user, fund_code, sub_account_no)
+                if prev_day_success_count > 0 or asset.on_way_transaction_count > 0:
+                    logger.info(
+                        f"跳过 {fund_name}({fund_code}):已经有在途交易"
+                    )
+                    continue
+                
+                safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
+                times = round(safe_asset_value / float(fund_amount), 2)
+                if times < 0.98 and times > 0.0:
+                    logger.info(f"组合{sub_account_no}，基金{fund_name}({fund_code})资产{safe_asset_value:.2f}，当前资产倍数{times},满足加仓条件。")
+                    res0 = commit_order(user, sub_account_no, fund_code, float(fund_amount))
+                    # 成功条件：存在返回对象，且流水号可用（API购买返回status通常为None）
+                    if res0 and getattr(res0, 'busin_serial_no', None):
+                        success_count += 1
+                        logger.info(
+                            f"限购加仓成功: {fund_name}({fund_code}) - 金额: {fund_amount} - 订单号: {getattr(res0, 'busin_serial_no', '')}"
+                        )
+                    else:
+                        logger.info(f"限购加仓失败{fund_name}({fund_code})")            
+                    return True 
+
 
                 # 回撤不足直接跳过（阈值：-1%）
                 if estimated_profit_rate >= -1.0:
@@ -132,13 +157,8 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                     )
                     continue
 
-                # 昨日净值日成交成功数 >0 则跳过（替代在途判断）
-                prev_day_success_count = count_success_trades_on_prev_nav_day(user, fund_code, sub_account_no)
-                if prev_day_success_count > 0:
-                    logger.info(
-                        f"跳过 {fund_name}({fund_code}): 昨日或今日成交成功 {prev_day_success_count} 笔（按昨日净值日统计，替代在途交易判断）"
-                    )
-                    continue
+
+                
 
                 # 估算净值（或上一交易日净值）> 5 日均值
                 if not _nav5_gate(fund_info, fund_name, fund_code):
@@ -214,10 +234,10 @@ if __name__ == "__main__":
             DEFAULT_USER,
             "海外基金组合",
             fund_list=[
-                {"fund_code": "016702", "fund_name": "银华海外数字经济量化选股混合发起式(QDII)C", "amount": 5000.0},
+                # {"fund_code": "016702", "fund_name": "银华海外数字经济量化选股混合发起式(QDII)C", "amount": 5000.0},
                 {"fund_code": "006105", "fund_name": "宏利印度股票(QDII)", "amount": 5000.0},
-                {"fund_code": "161226", "fund_name": "国投瑞银白银期货(LOF)A", "amount": 5000.0},
-                {"fund_code": "017873", "fund_name": "汇添富香港优势精选混合(QDII)C", "amount": 5000.0},
+                # {"fund_code": "161226", "fund_name": "国投瑞银白银期货(LOF)A", "amount": 5000.0},
+                # {"fund_code": "017873", "fund_name": "汇添富香港优势精选混合(QDII)C", "amount": 5000.0},
                 {"fund_code": "019449", "fund_name": "摩根日本精选股票(QDII)C", "amount": 5000.0}
             ]
         )

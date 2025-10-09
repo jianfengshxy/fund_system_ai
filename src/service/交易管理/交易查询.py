@@ -56,11 +56,14 @@ def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account
         logger.warning(f"获取基金 {fund_code} 的 nav_date 失败，返回 0")
         return 0
     nav_date_str = str(fi.nav_date)  # 形如 'YYYY-MM-DD'
+    fund_name = getattr(fi, "fund_name", fund_code)
     
     # 获取当天日期
     today_date_str = datetime.now().strftime("%Y-%m-%d")
     
-    logger.info(f"统计基金 {fund_code} 在上一个交易日({nav_date_str})及当天({today_date_str})的未回撤交易数量")
+    # 开始统计时输出基金名+代码
+    logger.info(f"统计基金 {fund_name}({fund_code}) 在上一个交易日({nav_date_str})及当天({today_date_str})的未回撤交易数量")
+
 
     # 2) 拉取该基金的交易列表（不过滤状态，统一在本地筛选）
     trades = get_trades_list(user, sub_account_no, fund_code, "", "")
@@ -78,9 +81,9 @@ def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account
                 return obj[k]
         return None
 
-    # 打印所有交易记录的原始信息
-    logger.info("\n" + "=" * 100)
-    logger.info("原始交易记录详情：")
+    # # 打印所有交易记录的原始信息
+    # logger.info("\n" + "=" * 100)
+    # logger.info("原始交易记录详情：")
     
     count = 0
     for idx, trade in enumerate(trades, start=1):
@@ -95,33 +98,34 @@ def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account
         product_name = _get(trade, "product_name", "ProductName", "fund_name")
         
         # 打印原始记录的完整信息
-        logger.info(f"\n[交易记录 {idx}/{len(trades)}]")
-        logger.info("-" * 80)
+        # logger.info(f"\n[交易记录 {idx}/{len(trades)}]")
+        # logger.info("-" * 80)
         
         # 尝试将对象转为字典并格式化打印所有字段
         try:
             if isinstance(trade, dict):
                 # 如果是字典，直接格式化打印
                 for key, value in trade.items():
-                    logger.info(f"{key:30}: {value}")
+                    # logger.info(f"{key:30}: {value}")
+                    pass
             else:
                 # 如果是对象，获取所有非私有、非方法属性
                 for attr in dir(trade):
                     if not attr.startswith("_") and not callable(getattr(trade, attr)):
                         value = getattr(trade, attr)
-                        logger.info(f"{attr:30}: {value}")
+                        # logger.info(f"{attr:30}: {value}")
         except Exception as e:
             logger.info(f"打印原始记录失败: {e}")
         
         # 打印关键信息摘要
-        logger.info("-" * 80)
-        logger.info(f"交易序列号: {serial_no}")
-        logger.info(f"状态码(StatuIcon): {statu_icon}")
-        logger.info(f"状态文本: {status_text}")
-        logger.info(f"交易日期: {strike_date}")
-        logger.info(f"金额: {amount}")
-        logger.info(f"业务类型: {business_type}")
-        logger.info(f"基金名称: {product_name}")
+        # logger.info("-" * 80)
+        # logger.info(f"交易序列号: {serial_no}")
+        # logger.info(f"状态码(StatuIcon): {statu_icon}")
+        # logger.info(f"状态文本: {status_text}")
+        # logger.info(f"交易日期: {strike_date}")
+        # logger.info(f"金额: {amount}")
+        # logger.info(f"业务类型: {business_type}")
+        # logger.info(f"基金名称: {product_name}")
         
         # 统计日期匹配 nav_date 或 当天 且 非撤回 的交易
         date_match_prev = strike_date == nav_date_str
@@ -129,14 +133,14 @@ def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account
         date_match = date_match_prev or date_match_today
         is_withdrawn = status_text == "已撤单(已支付)"
         
-        if date_match and not is_withdrawn:
-            count += 1
-            logger.info(f"统计结果: 此交易被统计为未回撤交易 (日期匹配={'上一交易日' if date_match_prev else '当天'})")
-        else:
-            logger.info(f"统计结果: 此交易未被统计 (日期匹配上一交易日={date_match_prev}, 日期匹配当天={date_match_today}, 是否撤回={is_withdrawn})")
+    #     if date_match and not is_withdrawn:
+    #         count += 1
+    #         logger.info(f"统计结果: 此交易被统计为未回撤交易 (日期匹配={'上一交易日' if date_match_prev else '当天'})")
+    #     else:
+    #         logger.info(f"统计结果: 此交易未被统计 (日期匹配上一交易日={date_match_prev}, 日期匹配当天={date_match_today}, 是否撤回={is_withdrawn})")
     
-    logger.info("=" * 100)
-    logger.info(f"基金 {fund_code} 在上一个交易日({nav_date_str})及当天({today_date_str})未回撤交易数量: {count}")
+    # logger.info("=" * 100)
+    logger.info(f"基金 {fund_name}({fund_code}) 在上一个交易日({nav_date_str})及当天({today_date_str})未回撤交易数量: {count}")
     return count
 
 if __name__ == "__main__":

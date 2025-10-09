@@ -8,7 +8,6 @@ vars:
     database:
         vpc_id: vpc-uf6ewma5cv187wp8m1yej
         cidr: 172.16.0.0/12
-        internal_host: rm-uf614tc8841ee6nwiwo.rwlb.rds.aliyuncs.com
         external_host: rm-uf614tc8841ee6nwiwo.rwlb.rds.aliyuncs.com
         port: 3306
         DB_USER: jianfengshxy
@@ -49,12 +48,69 @@ vars:
         DB_PASSWORD: ${vars.common.database.DB_PASSWORD}
         DB_PORT: ${vars.common.database.DB_PORT}
         DB_NAME: ${vars.common.database.DB_NAME}
-        INTERNAL_HOST: ${vars.common.database.internal_host}
         EXTERNAL_HOST: ${vars.common.database.external_host}
         VPC_ID: ${vars.common.database.vpc_id}
         CIDR: ${vars.common.database.cidr}
+  # 自定义组合共享 payload（避免三处重复维护）
+  custom_portfolio_payload: >
+    {"account": "13918199137", "password": "sWX15706",
+     "sub_account_name": "海外基金组合",
+     "fund_list": [
+       {"fund_code": "100055", "fund_name": "富国全球科技互联网股票(QDII)A", "amount": 5000.0},
+       {"fund_code": "021540", "fund_name": "华安法国CAC40ETF发起式联接(QDII)C", "amount": 5000.0},
+       {"fund_code": "501018", "fund_name": "南方原油A", "amount": 5000.0},
+       {"fund_code": "161226", "fund_name": "国投瑞银白银期货(LOF)A", "amount": 5000.0},
+       {"fund_code": "021539", "fund_name": "华安法国CAC40ETF发起式联接(QDII)A", "amount": 5000.0},
+       {"fund_code": "008764", "fund_name": "天弘越南市场股票发起(QDII)C", "amount": 5000.0},
+       {"fund_code": "016453", "fund_name": "南方纳斯达克100指数发起(QDII)C", "amount": 5000.0},
+       {"fund_code": "016702", "fund_name": "银华海外数字经济量化选股混合发起式(QDII)C", "amount": 5000.0},
+       {"fund_code": "019449", "fund_name": "摩根日本精选股票(QDII)C", "amount": 5000.0},
+       {"fund_code": "015016", "fund_name": "华安德国(DAX)联接(QDII)C", "amount": 5000.0},
+       {"fund_code": "000614", "fund_name": "华安德国(DAX)联接(QDII)A", "amount": 5000.0},
+       {"fund_code": "017204", "fund_name": "华宝海外科技股票(QDII-LOF)C", "amount": 5000.0},
+       {"fund_code": "501312", "fund_name": "华宝海外科技股票(QDII-LOF)A", "amount": 5000.0},
+       {"fund_code": "009975", "fund_name": "华宝标普美国消费人民币C", "amount": 5000.0},
+       {"fund_code": "008706", "fund_name": "建信富时100指数(QDII)C人民币", "amount": 5000.0},
+       {"fund_code": "006105", "fund_name": "宏利印度股票(QDII)", "amount": 5000.0},
+       {"fund_code": "007844", "fund_name": "华宝标普油气上游股票人民币C", "amount": 5000.0},
+       {"fund_code": "017873", "fund_name": "汇添富香港优势精选混合(QDII)C", "amount": 5000.0}
+     ]
+    }
 
 resources:
+  add_new_jianlong:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.add_new_jianlong"
+      functionName: "add_new_jianlong"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables:
+        DB_USER: ${vars.common.database.DB_USER}
+        DB_PASSWORD: ${vars.common.database.DB_PASSWORD}
+        DB_PORT: ${vars.common.database.DB_PORT}
+        DB_NAME: ${vars.common.database.DB_NAME}
+        EXTERNAL_HOST: ${vars.common.database.external_host}
+        VPC_ID: ${vars.common.database.vpc_id}
+        CIDR: ${vars.common.database.cidr}
+        MAX_FUNDS_THRESHOLD: "30"
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_13918199137_jianlong"
+        triggerConfig:
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "见龙在田","total_budget": 1000000.0,"amount": 50000.0,"fund_type": "non_index"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 37 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
   add_new:
     component: ${vars.common.component}
     actions: ${vars.common.actions}
@@ -75,7 +131,6 @@ resources:
         DB_PASSWORD: ${vars.common.database.DB_PASSWORD}
         DB_PORT: ${vars.common.database.DB_PORT}
         DB_NAME: ${vars.common.database.DB_NAME}
-        INTERNAL_HOST: ${vars.common.database.internal_host}
         EXTERNAL_HOST: ${vars.common.database.external_host}
         VPC_ID: ${vars.common.database.vpc_id}
         CIDR: ${vars.common.database.cidr}
@@ -194,6 +249,31 @@ resources:
         triggerConfig:
           payload: '{"account": "13584903800","password": "hu123321","sub_account_name": "最优止盈","total_budget": 30000.0,"fund_type": "all"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+  increase_jianlong:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.increase_jianlong"
+      functionName: "increase_jianlong"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "increase_13918199137_jianlong"
+        triggerConfig:
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "见龙在田","total_budget": 1000000.0,,"fund_type": "non_index"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 4 43 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
   increase:
@@ -349,6 +429,32 @@ resources:
           cronExpression: "CRON_TZ=Asia/Shanghai 4 53 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
+  redeem_jianlong:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.redeem_jianlong"
+      functionName: "redeem_jianlong"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      # 见龙在田
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "redeem_13918199137_jianlong"
+        triggerConfig:
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "见龙在田","total_budget":1000000.0}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 13 51 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
   redeem:
     component: ${vars.common.component}
     actions: ${vars.common.actions}
@@ -497,6 +603,81 @@ resources:
           cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
+  add_new_custom:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.add_new_custom"
+      functionName: "add_new_custom"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_custom_13918199137_portfolio"
+        triggerConfig:
+          payload: ${vars.custom_portfolio_payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 11 45 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+  increase_custom:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.increase_custom"
+      functionName: "increase_custom"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "increase_custom_13918199137_portfolio"
+        triggerConfig:
+          payload: ${vars.custom_portfolio_payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 23 45 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+  redeem_custom:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.redeem_custom"
+      functionName: "redeem_custom"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "redeem_custom_13918199137_portfolio"
+        triggerConfig:
+          payload: ${vars.custom_portfolio_payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 39 45 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
   sync_investment_indicators:
       component: ${vars.common.component}
       actions: ${vars.common.actions}
@@ -512,7 +693,8 @@ resources:
         runtime: ${vars.common.props.runtime}
         region: ${vars.common.props.region}
         timeout: ${vars.common.props.timeout}
-        environmentVariables: ${vars.common.props.environmentVariables}
+        environmentVariables:
+          INDEX_FUNDS_SUB_ACCOUNT_NAME: "马丁格尔plus"
         triggers:
         - qualifier: ${vars.common.props.triggerConfig.qualifier}
           triggerType: ${vars.common.props.triggerConfig.triggerType}

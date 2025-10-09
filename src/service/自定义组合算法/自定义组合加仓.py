@@ -146,8 +146,9 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                             f"限购加仓成功: {fund_name}({fund_code}) - 金额: {fund_amount} - 订单号: {getattr(res0, 'busin_serial_no', '')}"
                         )
                     else:
-                        logger.info(f"限购加仓失败{fund_name}({fund_code})")            
-                    return True 
+                        logger.info(f"限购加仓失败{fund_name}({fund_code})")
+                    # 不提前结束，继续处理后续基金
+                    continue 
 
 
                 # 回撤不足直接跳过（阈值：-1%）
@@ -196,10 +197,11 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                     logger.info("季度为正但月、周均为负 - 跳过加仓")
                     continue
 
-                # 基础加仓 + 回撤<-5%时额外加仓（延续现有加仓风格）
+                # 方法: increase_funds
+                # 修复基础加仓与额外加仓成功判断
                 try:
                     res1 = commit_order(user, sub_account_no, fund_code, float(fund_amount))
-                    if res1 is not None and getattr(res1, 'status', None) == 1:
+                    if res1 and getattr(res1, 'busin_serial_no', None):
                         success_count += 1
                         logger.info(
                             f"基础加仓成功: {fund_name}({fund_code}) - 金额: {fund_amount} - 订单号: {getattr(res1, 'busin_serial_no', '')}"
@@ -209,7 +211,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
 
                     if estimated_profit_rate < -5.0:
                         res2 = commit_order(user, sub_account_no, fund_code, float(fund_amount))
-                        if res2 is not None and getattr(res2, 'status', None) == 1:
+                        if res2 and getattr(res2, 'busin_serial_no', None):
                             success_count += 1
                             logger.info(
                                 f"额外加仓成功(-5%): {fund_name}({fund_code}) - 金额: {fund_amount} - 订单号: {getattr(res2, 'busin_serial_no', '')}"

@@ -142,8 +142,9 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                     # 成功条件：存在返回对象，且流水号可用（API购买返回status通常为None）
                     if res0 and getattr(res0, 'busin_serial_no', None):
                         success_count += 1
+                        actual_amount = getattr(res0, 'amount', fund_amount)
                         logger.info(
-                            f"限购加仓成功: {fund_name}({fund_code}) - 金额: {fund_amount} - 订单号: {getattr(res0, 'busin_serial_no', '')}"
+                            f"限购加仓成功: {fund_name}({fund_code}) - 金额: {actual_amount} - 订单号: {getattr(res0, 'busin_serial_no', '')}"
                         )
                     else:
                         logger.info(f"限购加仓失败{fund_name}({fund_code})")
@@ -203,8 +204,9 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                     res1 = commit_order(user, sub_account_no, fund_code, float(fund_amount))
                     if res1 and getattr(res1, 'busin_serial_no', None):
                         success_count += 1
+                        actual_amount = getattr(res1, 'amount', fund_amount)
                         logger.info(
-                            f"基础加仓成功: {fund_name}({fund_code}) - 金额: {fund_amount} - 订单号: {getattr(res1, 'busin_serial_no', '')}"
+                            f"基础加仓成功: {fund_name}({fund_code}) - 金额: {actual_amount} - 订单号: {getattr(res1, 'busin_serial_no', '')}"
                         )
                     else:
                         logger.info(f"基础加仓未成功或被系统保护跳过：{fund_name}({fund_code})")
@@ -213,8 +215,9 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                         res2 = commit_order(user, sub_account_no, fund_code, float(fund_amount))
                         if res2 and getattr(res2, 'busin_serial_no', None):
                             success_count += 1
+                            actual_amount = getattr(res2, 'amount', fund_amount)
                             logger.info(
-                                f"额外加仓成功(-5%): {fund_name}({fund_code}) - 金额: {fund_amount} - 订单号: {getattr(res2, 'busin_serial_no', '')}"
+                                f"额外加仓成功(-5%): {fund_name}({fund_code}) - 金额: {actual_amount} - 订单号: {getattr(res2, 'busin_serial_no', '')}"
                             )
                         else:
                             logger.info(f"额外加仓未成功或被系统保护跳过：{fund_name}({fund_code})")

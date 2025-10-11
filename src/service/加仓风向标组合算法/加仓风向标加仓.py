@@ -1,3 +1,4 @@
+# 顶部导入片段
 import logging
 import os
 import sys
@@ -22,6 +23,7 @@ from src.common.constant import DEFAULT_USER
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
+from src.service.公共服务.nav_gate_service import nav5_gate
 
 import datetime
 
@@ -149,6 +151,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             return False
         return True
 
+    # 加仓流程中风向标路径的判定替换
     for asset, fi, in_wind_vane, estimated_profit_rate in enriched:
         if orders_made >= fund_num:
             logger.info(f"已达本次下单上限 {fund_num} 笔，提前结束")
@@ -222,8 +225,8 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                 logger.info(f"跳过 {fund_name}({fund_code}): 百分位排名过高 month_rank_rate={month_rank_rate:.2%}, season_rank_rate={season_rank_rate:.2%}（阈值<=75%）")
                 continue
 
-            # 使用抽取的 5日均值判定（非风向标同样要求）
-            if not _nav5_gate(fi, fund_name, fund_code):
+            # 使用公共 5 日均值判定
+            if not nav5_gate(fi, fund_name, fund_code, logger):
                 continue
 
             # 基础加仓

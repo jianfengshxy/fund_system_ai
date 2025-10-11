@@ -1,3 +1,4 @@
+# 顶部导入片段
 import logging
 import sys
 import os
@@ -22,6 +23,7 @@ from src.common.constant import DEFAULT_USER  # 添加导入，如果需要
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.common.errors import TradePasswordError  # 新增：捕获密码错误异常
+from src.service.公共服务.nav_gate_service import nav5_gate
 
 # 配置日志
 logging.basicConfig(
@@ -155,23 +157,33 @@ def add_new_funds(
             wind_vane_funds = [f for f in wind_vane_funds if getattr(f, 'fund_type', None) != '000']
         # 'all' 不过滤
 
-        # 去除已持有的基金；指数基金避免重复跟踪同一指数
+        # 去除已持有的基金；指数基金避免重复跟踪同一指数；新增：在候选阶段应用净值门槛
         candidates = []
         for f in wind_vane_funds:
             code = getattr(f, 'fund_code', None)
             if not code or code in user_fund_codes:
                 continue
 
+            name = getattr(f, 'fund_name', code or 'N/A')
             ftype = getattr(f, 'fund_type', None)
+
+            # 获取基金信息（用于指数去重与净值门槛）
+            try:
+                info = get_all_fund_info(user, code)
+            except Exception as e:
+                logger.warning(f"获取基金 {code} 信息失败，跳过该基金：{e}")
+                continue
+
+            # 指数基金：避免重复跟踪同一指数
             if ftype == '000':
-                try:
-                    info = get_all_fund_info(user, code)
-                    idx_code = getattr(info, 'index_code', None) if info else None
-                    if idx_code and idx_code in user_index_codes:
-                        # 已持有同指数的基金，跳过
-                        continue
-                except Exception as e:
-                    logger.warning(f"获取指数基金 {code} 信息失败，仍纳入候选：{e}")
+                idx_code = getattr(info, 'index_code', None)
+                if idx_code and idx_code in user_index_codes:
+                    continue
+
+            # 新增：候选阶段净值门槛
+            if not nav5_gate(info, name, code, logger):
+                # 日志由公共方法输出
+                continue
 
             candidates.append(f)
 
@@ -226,11 +238,12 @@ def add_new_funds(
 
         # 5) 下单
         success_count = 0
+        # 新增：估算净值（无估值则用上一交易日净值）> 5 日均值门槛
         for f in selected_funds:
             code = getattr(f, 'fund_code', None)
             name = getattr(f, 'fund_name', code or 'N/A')
             buy_amount = base_per_fund
-
+        
             # 判断是否可申购（若可获取）
             try:
                 info = get_all_fund_info(user, code)
@@ -239,7 +252,12 @@ def add_new_funds(
                     continue
             except Exception as e:
                 logger.warning(f"获取基金 {code} 申购状态失败，继续尝试下单：{e}")
-
+        
+            # 新增：估算净值（或上一交易日净值）> 5 日均值判定，不满足则跳过（公共方法）
+            if not nav5_gate(info, name, code, logger):
+                logger.info(f"净值未达条件，跳过新增：{name}({code})")
+                continue
+        
             try:
                 result = commit_order(user, sub_account_no, code, buy_amount)
                 if result:

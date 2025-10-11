@@ -1,3 +1,4 @@
+# 顶部导入片段
 import logging
 import os
 import sys
@@ -20,6 +21,7 @@ from src.service.资产管理.get_fund_asset_detail import (
 from src.service.交易管理.购买基金 import commit_order
 from src.common.constant import DEFAULT_USER
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
+from src.service.公共服务.nav_gate_service import nav5_gate
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,38 +62,6 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
         except Exception:
             return default
 
-    def _nav5_gate(fi, fund_name: str, fund_code: str) -> bool:
-            # 当缺少估算净值时，使用上一交易日净值进行门槛判定
-            est_nav = getattr(fi, 'estimated_value', None)
-            nav_prev = getattr(fi, 'nav', None)
-            nav5 = getattr(fi, 'nav_5day_avg', None)
-            used_prev = False
-            try:
-                if est_nav is None:
-                    est_val = float(nav_prev) if nav_prev is not None else None
-                    used_prev = True
-                else:
-                    est_val = float(est_nav)
-                nav5_val = float(nav5) if nav5 is not None else None
-            except Exception:
-                est_val = None
-                nav5_val = None
-
-            if est_val is None or nav5_val is None:
-                logger.info(f"跳过{fund_name}({fund_code}): 缺少用于对比的净值（estimated_value={est_nav}, prev_nav={nav_prev}, nav_5day_avg={nav5}）")
-                return False
-
-            # 新增：对比双方的数值都输出
-            if used_prev:
-                logger.info(f"{fund_name}({fund_code})缺少估值，使用上一交易日净值 {est_val:.4f} 与5日均值 {nav5_val:.4f} 进行对比")
-            else:
-                logger.info(f"{fund_name}({fund_code})使用估算净值 {est_val:.4f} 与5日均值 {nav5_val:.4f} 进行对比")
-
-            if not (est_val > nav5_val):
-                logger.info(f"跳过{fund_name}({fund_code}): 对比净值 {est_val:.4f} <= 5日均值 {nav5_val:.4f}，暂不加仓")
-                return False
-            return True
-
     success_count = 0
 
     for fund_item in fund_list:
@@ -111,7 +81,11 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
 
             # 仅对已持有基金执行加仓
             if fund_code in held_codes:
-                # 拉取资产详情用于收益率/倍数计算
+                # 提前进行五日均值过滤（候选阶段）
+                if not nav5_gate(fund_info, fund_name, fund_code, logger):
+                    logger.info(f"净值未达条件，跳过候选加仓：{fund_name}({fund_code})")
+                    continue
+
                 try:
                     asset = get_fund_asset_detail(user, sub_account_no, fund_code)
                     if asset is None:
@@ -139,7 +113,6 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 if times < 0.98 and times > 0.0:
                     logger.info(f"组合{sub_account_no}，基金{fund_name}({fund_code})资产{safe_asset_value:.2f}，当前资产倍数{times},满足加仓条件。")
                     res0 = commit_order(user, sub_account_no, fund_code, float(fund_amount))
-                    # 成功条件：存在返回对象，且流水号可用（API购买返回status通常为None）
                     if res0 and getattr(res0, 'busin_serial_no', None):
                         success_count += 1
                         actual_amount = getattr(res0, 'amount', fund_amount)
@@ -148,8 +121,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                         )
                     else:
                         logger.info(f"限购加仓失败{fund_name}({fund_code})")
-                    # 不提前结束，继续处理后续基金
-                    continue 
+                    continue
 
 
                 # 回撤不足直接跳过（阈值：-1%）
@@ -159,14 +131,8 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                     )
                     continue
 
+                # 原先此处的净值门槛判断已提前到候选阶段，这里不再重复
 
-                
-
-                # 估算净值（或上一交易日净值）> 5 日均值
-                if not _nav5_gate(fund_info, fund_name, fund_code):
-                    continue
-
-                # 新增：排名与收益率检查（参考全局智能定投 increase.py#L235-274）
                 r100 = _safe_float(getattr(fund_info, 'rank_100day', None), 0.0)
                 r30 = _safe_float(getattr(fund_info, 'rank_30day', None), 0.0)
                 if r100 and r100 < 20:
@@ -225,7 +191,6 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                     logger.error(f"加仓失败：{fund_name}({fund_code})，异常: {e}")
             else:
                 logger.info(f"未持有基金，当前文件逻辑跳过：{fund_name}({fund_code})；请在新增文件中处理该基金的购买")
-
         except Exception as e:
             logger.error(f"处理 {fund_item} 失败: {e}")
 

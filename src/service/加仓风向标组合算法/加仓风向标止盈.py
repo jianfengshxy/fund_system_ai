@@ -71,6 +71,16 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     # 第一轮：构建候选并执行赎回0费率份额
     success_count = 0
     post_selection_candidates: List[Tuple] = []  # [(asset, fund_info, estimated_profit_rate)]
+    # 新增：跳过原因统计
+    skip_stats = {
+        "no_fund_info": 0,
+        "index_threshold_not_met": 0,
+        "index_zero_fee_none": 0,
+        "non_index_in_wind_vane_skipped": 0,
+        "non_index_threshold_not_met": 0,
+        "non_index_week_return_non_positive": 0,
+        "non_index_rank_checks_failed": 0,
+    }
     
     def _safe_float(v, default=0.0):
         try:
@@ -85,6 +95,8 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         fund_code = asset.fund_code
         fund_info = get_all_fund_info(user, fund_code)
         if not fund_info:
+            skip_stats["no_fund_info"] += 1
+            logger.info(f"后选跳过：无法获取基金信息 {fund_code}")
             continue
         
         fund_name = getattr(fund_info, "fund_name", fund_code)
@@ -112,13 +124,32 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                 if estimated_profit_rate > 5.0 and zero_fee_shares > 0.0:
                     post_selection_candidates.append((asset, fund_info, estimated_profit_rate))
                     logger.info(f"后选加入（指数/风向标中，阈值5.0）：{fund_name}({fund_code}) 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
+                else:
+                    reasons = []
+                    if estimated_profit_rate <= 5.0:
+                        reasons.append("预估收益率<=5.0")
+                        skip_stats["index_threshold_not_met"] += 1
+                    if zero_fee_shares <= 0.0:
+                        reasons.append("0费率份额=0")
+                        skip_stats["index_zero_fee_none"] += 1
+                    logger.info(f"后选跳过（指数/风向标中）：{fund_name}({fund_code}) 原因={','.join(reasons)} 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
             else:
                 if estimated_profit_rate > 3.0 and zero_fee_shares > 0.0:
                     post_selection_candidates.append((asset, fund_info, estimated_profit_rate))
                     logger.info(f"后选加入（指数/非风向标，阈值3.0）：{fund_name}({fund_code}) 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
+                else:
+                    reasons = []
+                    if estimated_profit_rate <= 3.0:
+                        reasons.append("预估收益率<=3.0")
+                        skip_stats["index_threshold_not_met"] += 1
+                    if zero_fee_shares <= 0.0:
+                        reasons.append("0费率份额=0")
+                        skip_stats["index_zero_fee_none"] += 1
+                    logger.info(f"后选跳过（指数/非风向标）：{fund_name}({fund_code}) 原因={','.join(reasons)} 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
         else:
             # 非指数基金：在风向标中则跳过
             if in_wind_vane:
+                skip_stats["non_index_in_wind_vane_skipped"] += 1
                 logger.info(f"非指数基金在加仓风向标中，按规则跳过：{fund_name}({fund_code})")
                 continue
             
@@ -126,6 +157,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             if estimated_profit_rate > 5.0 and zero_fee_shares > 0.0:
                 week_growth_rate = _safe_float(getattr(fund_info, "week_return", None), 0.0)
                 if week_growth_rate <= 0.0:
+                    skip_stats["non_index_week_return_non_positive"] += 1
                     logger.info(f"非指数后选检查：{fund_name}({fund_code}) 周收益率<=0，跳过")
                     continue
                 
@@ -146,9 +178,19 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                     logger.info(f"后选加入（非指数/严格条件）：{fund_name}({fund_code}) 预估收益={estimated_profit_rate:.2f}% 周收益率={week_growth_rate:.2f}% "
                                 f"month_rank_rate={month_rank_rate:.3f} rank_100day={r100}")
                 else:
-                    logger.info(f"非指数后选检查未通过：{fund_name}({fund_code}) "
-                                f"month_rank_rate={month_rank_rate if month_rank_rate is not None else 'N/A'} rank_100day={r100 if r100 is not None else 'N/A'}")
+                    skip_stats["non_index_rank_checks_failed"] += 1
+                    logger.info(f"非指数后选检查未通过：{fund_name}({fund_code}) month_rank_rate={month_rank_rate if month_rank_rate is not None else 'N/A'} rank_100day={r100 if r100 is not None else 'N/A'}")
+            else:
+                skip_stats["non_index_threshold_not_met"] += 1
+                logger.info(f"后选跳过（非指数/阈值未达）：{fund_name}({fund_code}) 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
     
+    # 新增：候选阶段跳过统计汇总
+    logger.info(
+        f"第一轮后选候选统计：候选={len(post_selection_candidates)}，跳过："
+        f"无信息={skip_stats['no_fund_info']}，指数阈值未过={skip_stats['index_threshold_not_met']}，指数0费率=0={skip_stats['index_zero_fee_none']}，"
+        f"非指数在风向标中跳过={skip_stats['non_index_in_wind_vane_skipped']}，非指数阈值未过={skip_stats['non_index_threshold_not_met']}，"
+        f"非指数周收益<=0={skip_stats['non_index_week_return_non_positive']}，非指数排名未达标={skip_stats['non_index_rank_checks_failed']}"
+    )
     # 第一轮执行：对候选逐一赎回“0费率份额”（按预估收益率从高到低排序，最多3个）
     if len(post_selection_candidates) > 0:
         post_selection_candidates.sort(key=lambda x: x[2], reverse=True)
@@ -196,6 +238,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             fund_code = asset.fund_code
             fund_info = get_all_fund_info(user, fund_code)
             if not fund_info:
+                logger.info(f"第二轮跳过：无法获取基金信息 {fund_code}")
                 continue
             
             fund_type = getattr(fund_info, "fund_type", None)
@@ -205,6 +248,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             
             in_wind_vane = fund_code in wind_vane_codes
             if not in_wind_vane:
+                logger.info(f"第二轮跳过：不在风向标内 {fund_code}")
                 continue
             
             current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
@@ -215,6 +259,13 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             if estimated_profit_rate > 5.0 and zero_fee_shares > 0.0:
                 if best_candidate is None or estimated_profit_rate > best_candidate[2]:
                     best_candidate = (asset, fund_info, estimated_profit_rate)
+            else:
+                reasons = []
+                if estimated_profit_rate <= 5.0:
+                    reasons.append("预估收益率<=5.0")
+                if zero_fee_shares <= 0.0:
+                    reasons.append("0费率份额=0")
+                logger.info(f"第二轮跳过候选：{fund_code} 原因={','.join(reasons)} 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
         
         if best_candidate is not None:
             asset, fund_info, est_profit = best_candidate
@@ -238,8 +289,8 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
 if __name__ == "__main__":
     try:
-        redeem_funds(DEFAULT_USER, "飞龙在天", 1000000.0)
-        # redeem_funds(DEFAULT_USER, "马丁格尔plus", 1000000.0)
+        redeem_funds(DEFAULT_USER, "马丁格尔plus", 1000000.0)
+        # redeem_funds(DEFAULT_USER, "Martin Geggs", 1000000.0)
         logging.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

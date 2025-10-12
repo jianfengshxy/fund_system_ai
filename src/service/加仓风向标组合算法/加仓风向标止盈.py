@@ -109,13 +109,13 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         if fund_type == "000":
             # 指数基金
             if in_wind_vane:
+                if estimated_profit_rate > 5.0 and zero_fee_shares > 0.0:
+                    post_selection_candidates.append((asset, fund_info, estimated_profit_rate))
+                    logger.info(f"后选加入（指数/风向标中，阈值5.0）：{fund_name}({fund_code}) 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
+            else:
                 if estimated_profit_rate > 3.0 and zero_fee_shares > 0.0:
                     post_selection_candidates.append((asset, fund_info, estimated_profit_rate))
-                    logger.info(f"后选加入（指数/风向标中，阈值3.0）：{fund_name}({fund_code}) 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
-            else:
-                if estimated_profit_rate > 1.0 and zero_fee_shares > 0.0:
-                    post_selection_candidates.append((asset, fund_info, estimated_profit_rate))
-                    logger.info(f"后选加入（指数/非风向标，阈值1.0）：{fund_name}({fund_code}) 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
+                    logger.info(f"后选加入（指数/非风向标，阈值3.0）：{fund_name}({fund_code}) 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
         else:
             # 非指数基金：在风向标中则跳过
             if in_wind_vane:
@@ -182,7 +182,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     # 4) 组合资产总和 > 预算的 80%
     eligible_for_special_take_profit = (
         len(post_selection_candidates) == 0
-        and fund_count > 20
+        and fund_count > 15
         and success_count < 3
         and (total_budget is not None and total_budget > 0.0)
         and total_asset_value > total_budget * 0.8

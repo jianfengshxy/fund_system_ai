@@ -231,52 +231,62 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         logger.info(f"单笔交易处理 - 组合{sub_account_no}的{fund_name}{fund_code}今天只有一个可以回撤的交易进行加仓判断")
         if estimated_profit_rate < -1.0 :
             logger.info(f"预估收益率符合条件 - {customer_name}的组合{sub_account_name}{fund_name}的预估收益率{estimated_profit_rate} < -1.0")  
-            
-            # 100日排名检查
-            if fund_info.rank_100day < 20:
-                logger.info(f"100日排名过低 - {fund_name} rank_100 {fund_info.rank_100day} < 20, 执行回撤")
-                #回撤所有交易
-                for i, trade in enumerate(trades):
-                    logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
-                    try:
-                        revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
-                        logger.info(f"交易回撤成功")
-                    except Exception as e:
-                        logger.error(f"交易回撤失败: {e}")
-                logger.info(f"{fund_name} rank_100 {fund_info.rank_100day} < 20. Skip......")
-                return  True    
-                
-            if fund_info.rank_100day > 90:
-                logger.info(f"100日排名过高 - {fund_name} rank_100 {fund_info.rank_100day} > 90, 执行回撤")
-                #回撤所有交易
-                for i, trade in enumerate(trades):
-                    logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
-                    try:
-                        revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
-                        logger.info(f"交易回撤成功")
-                    except Exception as e:
-                        logger.error(f"交易回撤失败: {e}")
-                logger.info(f"{fund_name} rank_100 {fund_info.rank_100day} > 90. Skip......")
-                return  True                 
-                
-            if fund_info.rank_30day < 5:
-                logger.info(f"30日排名过低 - {fund_name} rank_30 {fund_info.rank_30day} < 5, 执行回撤")
-                #回撤所有交易
-                for i, trade in enumerate(trades):
-                    logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
-                    try:
-                        revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
-                        logger.info(f"交易回撤成功")
-                    except Exception as e:
-                        logger.error(f"交易回撤失败: {e}")
-                logger.info(f"{fund_name} rank_30 {fund_info.rank_30day} < 5. Skip......")
-                return  True
-                
-            season_growth_rate = fund_info.three_month_return
-            month_growth_rate = fund_info.month_return
-            week_growth_rate = fund_info.week_return
+
+            # 提取并校验排名字段，缺失时给出跳过原因并不参与阈值判断
+            fund_name = plan_detail.rationPlan.fundName
+            fund_code = plan_detail.rationPlan.fundCode
+            rank_100 = getattr(fund_info, "rank_100day", None)
+            rank_30 = getattr(fund_info, "rank_30day", None)
+            if not isinstance(rank_100, (int, float)) or not isinstance(rank_30, (int, float)):
+                logger.info(f"跳过排名判断：{fund_name}({fund_code}) 排名数据缺失（rank_100day={rank_100}, rank_30day={rank_30}）")
+            else:
+                if rank_100 < 20:
+                    logger.info(f"100日排名过低 - {fund_name} rank_100 {rank_100} < 20, 执行回撤")
+                    # 回撤交易
+                    for i, trade in enumerate(trades):
+                        logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+                        try:
+                            revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
+                            logger.info("交易回撤成功")
+                        except Exception as e:
+                            logger.error(f"交易回撤失败: {e}")
+                    logger.info(f"{fund_name} rank_100 {rank_100} < 20. Skip......")
+                    return True
+                if rank_100 > 90:
+                    logger.info(f"100日排名过高 - {fund_name} rank_100 {rank_100} > 90, 执行回撤")
+                    for i, trade in enumerate(trades):
+                        logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+                        try:
+                            revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
+                            logger.info("交易回撤成功")
+                        except Exception as e:
+                            logger.error(f"交易回撤失败: {e}")
+                    logger.info(f"{fund_name} rank_100 {rank_100} > 90. Skip......")
+                    return True
+                if rank_30 < 5:
+                    logger.info(f"30日排名过低 - {fund_name} rank_30 {rank_30} < 5, 执行回撤")
+                    for i, trade in enumerate(trades):
+                        logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+                        try:
+                            revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
+                            logger.info("交易回撤成功")
+                        except Exception as e:
+                            logger.error(f"交易回撤失败: {e}")
+                    logger.info(f"{fund_name} rank_30 {rank_30} < 5. Skip......")
+                    return True
+
+            # 收益率字段防空与类型兜底（缺失时按0.0处理并打印原因）
+            week_growth_raw = getattr(fund_info, "week_return", None)
+            month_growth_raw = getattr(fund_info, "month_return", None)
+            season_growth_raw = getattr(fund_info, "three_month_return", None)
+            if week_growth_raw is None or month_growth_raw is None or season_growth_raw is None:
+                logger.info(f"跳过部分收益率判断：{fund_name}({fund_code}) 周/月/季收益存在缺失（week={week_growth_raw}, month={month_growth_raw}, season={season_growth_raw}）")
+            week_growth_rate = float(week_growth_raw) if isinstance(week_growth_raw, (int, float)) else 0.0
+            month_growth_rate = float(month_growth_raw) if isinstance(month_growth_raw, (int, float)) else 0.0
+            season_growth_rate = float(season_growth_raw) if isinstance(season_growth_raw, (int, float)) else 0.0
+
             logger.info(f"收益率数据 - {fund_name}周收益率预估:{week_growth_rate},{fund_name}月收益率预估:{month_growth_rate},季度收益率预估:{season_growth_rate}")
-            
+
             if  week_growth_rate <  0.0 and month_growth_rate < 0.0 and season_growth_rate < 0.0:
                 logger.info(f"全部收益率为负 - 周、月、季度收益率均为负数，执行回撤")
                 # 回撤所有交易  
@@ -284,37 +294,48 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                     logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
                     try:
                         revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
-                        logger.info(f"交易回撤成功")
+                        logger.info("交易回撤成功")
                     except Exception as e:
                         logger.error(f"交易回撤失败: {e}")
                 logger.info(f"{fund_name}周收益率预估:{week_growth_rate},{fund_name}月收益率预估:{month_growth_rate},季度收益率预估:{season_growth_rate}.Skip......")
                 return  True    
-                
+
             if  season_growth_rate < 0.0 and (month_growth_rate < 0.0 or week_growth_rate < 0.0 ):
                 logger.info(f"季度收益率为负且月/周收益率至少一个为负 - 执行跳过")
                 logger.info(f"{fund_name}周收益率预估:{week_growth_rate},{fund_name}月收益率预估:{month_growth_rate},季度收益率预估:{season_growth_rate}.Skip......")
                 return  True
-                
+
             if  season_growth_rate > 0.0 and (month_growth_rate < 0.0 and week_growth_rate < 0.0 ):
                 logger.info(f"季度收益率为正但月、周收益率均为负 - 执行跳过")
                 logger.info(f"{fund_name}周收益率预估:{week_growth_rate},{fund_name}月收益率预估:{month_growth_rate},季度收益率预估:{season_growth_rate}.Skip......")
                 return  True
 
+            # 月/季排名比例防空（仅在可计算时参与判断）
+            month_rank_rate = None
+            season_rank_rate = None
             try:
-                season_growth_rate, season_item_rank, season_item_sc = get_fund_growth_rate(fund_info, '3Y')
-                month_growth_rate, month_item_rank, month_item_sc = get_fund_growth_rate(fund_info, 'Y')
-                logger.info(f"排名数据获取 - 季度排名: {season_item_rank}/{season_item_sc}, 月排名: {month_item_rank}/{month_item_sc}")
-                
-                month_rank_rate  =  month_item_rank  /  month_item_sc      
-                season_rank_rate  =  season_item_rank  /  season_item_sc
-                logger.info(f"排名占比计算 - 季度排名占比: {season_rank_rate:.4f}, 月排名占比: {month_rank_rate:.4f}")
-                
-                if  month_rank_rate  >  0.75 or season_rank_rate  >  0.75:
-                    logger.info(f"排名占比过高 - {fund_name}季度排名占比:{season_rank_rate},月排名占比:{month_rank_rate}, 执行跳过")
-                    return  True
+                _, month_item_rank, month_item_sc = get_fund_growth_rate(fund_info, 'Y')
+                if month_item_rank is not None and month_item_sc not in (None, 0):
+                    month_rank_rate = float(month_item_rank) / float(month_item_sc)
             except Exception as e:
-                logger.error(f"获取基金排名数据失败: {e}")
-                return False
+                logger.info(f"获取月度排名数据异常: {e}")
+            try:
+                _, season_item_rank, season_item_sc = get_fund_growth_rate(fund_info, 'S')
+                if season_item_rank is not None and season_item_sc not in (None, 0):
+                    season_rank_rate = float(season_item_rank) / float(season_item_sc)
+            except Exception as e:
+                logger.info(f"获取季度排名数据异常: {e}")
+
+            if (month_rank_rate is not None and month_rank_rate > 0.75) or (season_rank_rate is not None and season_rank_rate > 0.75):
+                logger.info(f"月/季排名比例过高：month_rank_rate={month_rank_rate}, season_rank_rate={season_rank_rate}，执行回撤")
+                for i, trade in enumerate(trades):
+                    logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+                    try:
+                        revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
+                        logger.info("交易回撤成功")
+                    except Exception as e:
+                        logger.error(f"交易回撤失败: {e}")
+                return True
 
             logger.info(f"所有条件检查通过 - {customer_name}在组合{sub_account_name}中{fund_name}{fund_code}候选成功.") 
             
@@ -372,7 +393,13 @@ def increase_all_fund_plans(user: User):
         futures = [executor.submit(increase, user, plan_detail) 
                   for plan_detail in fund_plan_details]
         
-    results = [future.result() for future in futures]
+    results = []
+    for i, future in enumerate(futures):
+        try:
+            results.append(future.result())
+        except Exception as e:
+            logger.error(f"定投计划线程执行异常（index={i}）: {e}")
+            results.append(False)
     success_count = sum(1 for result in results if result)
     logger.info(f"{user.customer_name}有{len(results)}个定投计划执行加仓操作，成功{success_count}个，失败{len(results) - success_count}个")
     logger.info(f"========== 全部基金计划加仓执行完成 ==========")

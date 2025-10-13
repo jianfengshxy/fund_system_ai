@@ -1,3 +1,4 @@
+# 顶部导入处（新增公共方法引用）
 import logging
 import os
 import sys
@@ -18,6 +19,7 @@ from src.service.资产管理.get_fund_asset_detail import (
 )
 from src.service.交易管理.购买基金 import commit_order
 from src.common.constant import DEFAULT_USER
+from src.service.公共服务.nav_gate_service import nav5_gate
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,6 +53,8 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
 
     success_count = 0
 
+    # 新增：估算净值（无估值则用上一交易日净值）> 5 日均值门槛
+    # 删除本地 _nav5_gate，改为调用公共方法
     for fund_item in fund_list:
         try:
             fund_code = (fund_item or {}).get('fund_code')
@@ -66,9 +70,14 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             fund_name = getattr(fund_info, 'fund_name', fund_code)
             logger.info(f"基金信息：{fund_name}({fund_code})，可申购：{getattr(fund_info, 'can_purchase', None)}")
 
-            # 若基金不在资产列表中，则直接购买
+            # 若基金不在资产列表中，则直接购买（新增前加净值门槛）
             if fund_code not in held_codes:
-                logger.info(f"发现新基金，未持有，准备购买：{fund_name}({fund_code})，金额: {fund_amount}")
+                # 候选阶段先应用五日均值过滤
+                if not nav5_gate(fund_info, fund_name, fund_code, logger):
+                    logger.info(f"净值未达条件，跳过候选：{fund_name}({fund_code})")
+                    continue
+
+                logger.info(f"候选通过，准备购买：{fund_name}({fund_code})，金额: {fund_amount}")
                 try:
                     res = commit_order(user, sub_account_no, fund_code, float(fund_amount))
                     if res and getattr(res, 'busin_serial_no', None):
@@ -78,7 +87,6 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                         logger.info(f"购买未成功或被系统保护跳过：{fund_name}({fund_code})")
                 except Exception as e:
                     logger.error(f"购买失败：{fund_name}({fund_code})，异常: {e}")
-                # 新增逻辑只覆盖“未持有→购买”，继续处理下一只
                 continue
 
             # 已持有基金：当前先不处理新增（后续补充完整加仓逻辑）

@@ -99,13 +99,19 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 estimated_change = _safe_float(getattr(fund_info, 'estimated_change', None), 0.0)
                 estimated_profit_rate = current_profit_rate + estimated_change
 
-
-                # 昨日净值日成交成功数 >0 则跳过（替代在途判断）
-                prev_day_success_count = count_success_trades_on_prev_nav_day(user, fund_code, sub_account_no)
-                if prev_day_success_count > 0 or asset.on_way_transaction_count > 0:
-                    logger.info(
-                        f"跳过 {fund_name}({fund_code}):已经有在途交易"
-                    )
+                # 使用“昨日净值日(nav_date)+今天”的守卫：任一天存在非撤的买入/定投则跳过
+                from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
+                import datetime
+                nav_date_str = getattr(fund_info, "nav_date", None)
+                try:
+                    prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
+                except Exception:
+                    prev_trade_day = None
+                today = datetime.date.today()
+                prev_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {d for d in [prev_trade_day] if d})
+                today_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {today})
+                if prev_trade_pre is not None or today_trade_pre is not None:
+                    logger.info(f"跳过 {fund_name}({fund_code}): 昨日(nav_date)或今日存在买入/定投提交（非撤）")
                     continue
                 
                 safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)

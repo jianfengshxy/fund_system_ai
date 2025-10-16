@@ -81,11 +81,6 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
 
             # 仅对已持有基金执行加仓
             if fund_code in held_codes:
-                # 提前进行五日均值过滤（候选阶段）
-                if not nav5_gate(fund_info, fund_name, fund_code, logger):
-                    logger.info(f"净值未达条件，跳过候选加仓：{fund_name}({fund_code})")
-                    continue
-
                 try:
                     asset = get_fund_asset_detail(user, sub_account_no, fund_code)
                     if asset is None:
@@ -94,11 +89,6 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 except Exception as e:
                     logger.error(f"获取资产详情失败: {e}")
                     continue
-
-                current_profit_rate = _safe_float(getattr(asset, 'constant_profit_rate', None), 0.0)
-                estimated_change = _safe_float(getattr(fund_info, 'estimated_change', None), 0.0)
-                estimated_profit_rate = current_profit_rate + estimated_change
-
                 # 使用“昨日净值日(nav_date)+今天”的守卫：任一天存在非撤的买入/定投则跳过
                 from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
                 import datetime
@@ -113,7 +103,10 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 if prev_trade_pre is not None or today_trade_pre is not None:
                     logger.info(f"跳过 {fund_name}({fund_code}): 昨日(nav_date)或今日存在买入/定投提交（非撤）")
                     continue
-                
+
+                current_profit_rate = _safe_float(getattr(asset, 'constant_profit_rate', None), 0.0)
+                estimated_change = _safe_float(getattr(fund_info, 'estimated_change', None), 0.0)
+                estimated_profit_rate = current_profit_rate + estimated_change
                 safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
                 times = round(safe_asset_value / float(fund_amount), 2)
                 if times < 0.98 and times > 0.0:
@@ -128,7 +121,11 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                     else:
                         logger.info(f"限购加仓失败{fund_name}({fund_code})")
                     continue
-
+                
+                # 提前进行五日均值过滤（候选阶段）
+                if not nav5_gate(fund_info, fund_name, fund_code, logger):
+                    logger.info(f"净值未达条件，跳过候选加仓：{fund_name}({fund_code})")
+                    continue
 
                 # 回撤不足直接跳过（阈值：-1%）
                 if estimated_profit_rate >= -1.0:

@@ -90,17 +90,17 @@ def has_buy_submission_on_dates(user: User, sub_account_no: str, fund_code: str,
         logger.info(f"守卫查询: fund={fund_code}, scope={'子账户' if sub_account_no else '全账户'}, 记录数={len(trades)}")
 
         # 打印最近两个交易的所有信息（按日期倒序）
-        try:
-            sorted_trades = sorted(
-                trades,
-                key=lambda x: (_get_trade_date(x) or datetime.date.min),
-                reverse=True
-            )
-            for i, tt in enumerate(sorted_trades[:2], start=1):
-                d = _get_trade_date(tt)
-                _log_trade_full(tt, title=f"最近交易#{i} (date={d})")
-        except Exception as e:
-            logger.warning(f"打印最近交易失败: {e}")
+        # try:
+        #     sorted_trades = sorted(
+        #         trades,
+        #         key=lambda x: (_get_trade_date(x) or datetime.date.min),
+        #         reverse=True
+        #     )
+        #     for i, tt in enumerate(sorted_trades[:2], start=1):
+        #         d = _get_trade_date(tt)
+        #         _log_trade_full(tt, title=f"最近交易#{i} (date={d})")
+        # except Exception as e:
+        #     logger.warning(f"打印最近交易失败: {e}")
     except Exception as e:
         logger.warning(f"查询基金 {fund_code} 交易记录失败（不连续守卫跳过）：{e}")
         return None
@@ -109,7 +109,7 @@ def has_buy_submission_on_dates(user: User, sub_account_no: str, fund_code: str,
         if not _is_buy_trade(t):
             continue
         if _is_canceled_trade(t):
-            logger.info(f"忽略已撤单记录: {getattr(t, 'product_name','') or ''}({fund_code}) 状态={getattr(t, 'app_state_text', None) or getattr(t, 'status', None)}")
+            # logger.info(f"忽略已撤单记录: {getattr(t, 'product_name','') or ''}({fund_code}) 状态={getattr(t, 'app_state_text', None) or getattr(t, 'status', None)}")
             continue
         d = _get_trade_date(t)
         if d and d in dates:

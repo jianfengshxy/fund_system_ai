@@ -44,8 +44,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)    
 
-# 加仓算法实现
 def increase(user: User, plan_detail: FundPlanDetail) -> bool:
+    # 加仓算法实现
     logger.info(f"========== 开始执行加仓算法 ==========")
     customer_name=user.customer_name
     logger.info(f"用户: {customer_name}")
@@ -155,12 +155,21 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         logger.info(f"{customer_name}的组合{sub_account_name}{fund_name}的周延期交易{day_of_week_number + 1},撤回所有交易。")
         return True
         
-    # 使用昨日净值日成功交易数替代“在途交易数”判断
-    prev_day_success_count = count_success_trades_on_prev_nav_day(user, fund_code, sub_account_no)
-    # 检查是否有在途交易(在途交易个数大于0,昨天的成功交易个数大于0)
-    logger.info(f"在途交易检查 - 组合{sub_account_no}的{fund_name}{fund_code}昨天有在途交易{prev_day_success_count}个")
-    if prev_day_success_count > 0:
-        logger.info(f"在途交易过多 - 组合{sub_account_no}的{fund_name}{fund_code}昨天有在途交易，不进行加仓操作并回撤定投。Skip..........")
+    # 使用“昨日净值日(nav_date)+今天”的守卫：任一天存在非撤的买入/定投则回撤并跳过
+    from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
+    nav_date_str = getattr(fund_info, "nav_date", None)
+    try:
+        prev_trade_day = datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
+    except Exception:
+        prev_trade_day = None
+    today = datetime.now().date()
+
+    prev_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {d for d in [prev_trade_day] if d})
+    today_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {today})
+    logger.info(f"同基金不连续守卫 - 昨日(nav_date)提交:{prev_trade_pre is not None}, 今日提交:{today_trade_pre is not None}")
+
+    if prev_trade_pre is not None or today_trade_pre is not None:
+        logger.info(f"同基金不连续守卫触发 - 组合{sub_account_no}的{fund_name}{fund_code}昨日或今日存在买入/定投提交（非撤），执行回撤并跳过加仓")
         # 撤回交易
         for i, trade in enumerate(trades):
             logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
@@ -172,20 +181,10 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         return True
         
 
-    logger.info(f"在途/近日日成交检查 - 组合{sub_account_no}的{fund_name}{fund_code} 昨日或今日成交成功 {prev_day_success_count} 笔（替代在途交易判断，原在途计数={on_way_transaction_count}）")
-    if prev_day_success_count > 0:
-        logger.info(f"近日日成交存在 - 组合{sub_account_no}的{fund_name}{fund_code} 昨日或今日有成交成功，不进行加仓操作并回撤定投。Skip..........")
-        # 撤回交易
-        for i, trade in enumerate(trades):
-            logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
-            try:
-                revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
-                logger.info(f"交易回撤成功")
-            except Exception as e:
-                logger.error(f"交易回撤失败: {e}")
-        return True
-
-    logger.info(f"计划{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}当前收益率:{current_profit_rate},估值增长率:{estimated_change},预估收益率:{estimated_profit_rate},昨日成交笔数:{prev_day_success_count}.")
+    logger.info(
+        f"计划{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}"
+        f"当前收益率:{current_profit_rate},估值增长率:{estimated_change},预估收益率:{estimated_profit_rate}."
+    )
     
     if estimated_profit_rate > -1.0 :
         logger.info(f"预估收益率检查 - {customer_name}的组合{sub_account_name}{fund_name}的预估收益率{estimated_profit_rate} > -1.0,执行回撤")

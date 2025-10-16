@@ -106,14 +106,23 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
         estimated_change = _safe_float(getattr(fi, "estimated_change", 0.0), 0.0)
         estimated_profit_rate = current_profit_rate + estimated_change
 
-        # 公共前置过滤：跌幅不深、在途订单等直接跳过
+        # 公共前置过滤：跌幅不深直接跳过
         if estimated_profit_rate >= -1.0:
             logger.info(f"跳过 {fi.fund_name}({fund_code}): 回撤不达标 estimated_profit_rate={estimated_profit_rate:.2f}% ，阈值<-1.00%（current={current_profit_rate:.2f}%, change={estimated_change:.2f}%）")
             continue
-        # 使用昨日净值日成功交易数作为“在途/已成交”的判断依据
-        prev_day_success_count = count_success_trades_on_prev_nav_day(user, fund_code, sub_account_no)
-        if prev_day_success_count > 0:
-            logger.info(f"跳过 {fi.fund_name}({fund_code}): 昨日或今日成交成功 {prev_day_success_count} 笔（按昨日净值日统计，替代在途交易判断）")
+
+        # 使用“昨日净值日(nav_date)+今天”的守卫：任一天存在非撤的买入/定投则跳过
+        from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
+        nav_date_str = getattr(fi, "nav_date", None)
+        try:
+            prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
+        except Exception:
+            prev_trade_day = None
+        today = datetime.date.today()
+        prev_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {d for d in [prev_trade_day] if d})
+        today_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {today})
+        if prev_trade_pre is not None or today_trade_pre is not None:
+            logger.info(f"跳过 {fi.fund_name}({fund_code}): 昨日(nav_date)或今日存在买入/定投提交（非撤）")
             continue
 
         in_wind_vane = (fi.fund_type != '000' and fund_code in wind_vane_codes) or (fi.fund_type == '000' and fi.index_code in wind_vane_indices)

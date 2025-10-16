@@ -273,8 +273,13 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             fund_name = getattr(fund_info, "fund_name", fund_code)
             try:
                 shares = get_bank_shares(user, sub_account_no, fund_code)
-                logger.info(f"{user.customer_name} 第二轮特殊止盈：赎回0费率份额 {fund_name}({fund_code}) 预估收益={est_profit:.2f}%")
-                redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
+                # 基金名称含“C”则赎回0费率份额；否则赎回低费率份额
+                if "C" in str(fund_name):
+                    logger.info(f"{user.customer_name} 第二轮特殊止盈：C类基金优先赎回0费率份额 {fund_name}({fund_code}) 预估收益={est_profit:.2f}%")
+                    redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
+                else:
+                    logger.info(f"{user.customer_name} 第二轮特殊止盈：非C类基金优先赎回低费率份额 {fund_name}({fund_code}) 预估收益={est_profit:.2f}%")
+                    redeem_ok = bool(sell_low_fee_shares(user, sub_account_no, fund_code, shares))
                 if redeem_ok:
                     success_count += 1  # 仅统计真正成功的赎回
                 else:
@@ -289,8 +294,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
 if __name__ == "__main__":
     try:
-        redeem_funds(DEFAULT_USER, "马丁格尔plus", 1000000.0)
-        # redeem_funds(DEFAULT_USER, "Martin Geggs", 1000000.0)
+        redeem_funds(DEFAULT_USER, "Martin Geggs", 1000000.0)
         logging.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

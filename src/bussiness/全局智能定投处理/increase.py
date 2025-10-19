@@ -36,6 +36,7 @@ from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.API.交易管理.trade import get_trades_list, get_bank_shares
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
+from src.service.公共服务.nav_gate_service import nav5_gate
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -45,7 +46,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)    
 
 def increase(user: User, plan_detail: FundPlanDetail) -> bool:
-    # 加仓算法实现
+    # 顶部导入片段
+    import logging
     logger.info(f"========== 开始执行加仓算法 ==========")
     customer_name=user.customer_name
     logger.info(f"用户: {customer_name}")
@@ -136,10 +138,21 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         return  True
                   
     logger.info(f"当前计划:{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}的周期类型{period_type},period_type:{period_value},当前月的值:{day_of_month},当前资产:{plan_assets},计划类型:{plan_type}")
-    if times <= 1.0 and times > 0.0:
-            logger.info(f"首次定投判定：资产价值为{plan_assets}，定投金额为{fund_amount}，满足首次定投条件，跳过本次操作。")
-            logger.info(f"组合{sub_account_no}，基金{fund_name}({fund_code})资产{plan_assets}，首次定投已处理，跳过。")
-            return True    
+    if times == 1.0:
+            if nav5_gate(fund_info, fund_name, fund_code, logger):
+                logger.info(f"首次定投判定：资产价值为{plan_assets}，定投金额为{fund_amount}，且净值大于5日均值，跳过本次操作。")
+                logger.info(f"组合{sub_account_no}，基金{fund_name}({fund_code})资产{plan_assets}，首次定投已处理，跳过。")
+                return True
+            else:
+                logger.info(f"首次定投判定：资产价值为{plan_assets}，定投金额为{fund_amount}，但净值未达5日均值（或缺少对比数据），撤回当天定投交易。")
+                for i, trade in enumerate(trades):
+                    logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+                    try:
+                        revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
+                        logger.info(f"交易回撤成功")
+                    except Exception as e:
+                        logger.error(f"交易回撤失败: {e}")
+                return True
 
     #判断是否是周定投延期交易
     if period_type == 1 and  period_value != day_of_week_number + 1:

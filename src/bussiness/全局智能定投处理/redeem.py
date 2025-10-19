@@ -149,12 +149,12 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             stop_rate = 5.0
             
         #指数基金排名在90以上的时候，大于1%即止盈
-        if fund_type == '000' and estimated_profit_rate > 1.0 and rank_100 > 90 and fund_info.estimated_change != 0.0:
-            logger.info(f"{customer_name}的止盈操作开始：指数基金{fund_name}{fund_code}预估收益{estimated_profit_rate},100日排名:{rank_100},实际止盈点:1.0")
-            sell_low_fee_shares(user,sub_account_no,fund_code,shares)
-            return True
-        else:
-            logger.info(f"指数基金条件检查：基金类型{fund_type}，预估收益{estimated_profit_rate}，排名{rank_100}，估值变化{fund_info.estimated_change}")
+        # if fund_type == '000' and estimated_profit_rate > 1.0 and rank_100 > 90 and fund_info.estimated_change != 0.0:
+        #     logger.info(f"{customer_name}的止盈操作开始：指数基金{fund_name}{fund_code}预估收益{estimated_profit_rate},100日排名:{rank_100},实际止盈点:{stop_rate}")    
+        #     sell_low_fee_shares(user,sub_account_no,fund_code,shares)
+        #     return True
+        # else:
+        #     logger.info(f"指数基金条件检查：基金类型{fund_type}，预估收益{estimated_profit_rate}，排名{rank_100}，估值变化{fund_info.estimated_change}")
             
         #股票型基金
         # if fund_type == '001' and estimated_profit_rate > 1.0 and rank_100 > 90 :

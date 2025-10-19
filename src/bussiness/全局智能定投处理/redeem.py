@@ -169,7 +169,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         else:
             logger.info(f"QDII基金条件检查：资产基金类型{asset_detail.fund_type}，预估收益{estimated_profit_rate}")
 
-        if estimated_profit_rate > stop_rate:
+        if estimated_profit_rate > stop_rate and estimated_profit_rate > 1.0:
             logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},实际止盈点:{stop_rate}")
             sell_low_fee_shares(user,sub_account_no,fund_code,shares)
             return True

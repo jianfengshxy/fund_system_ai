@@ -20,6 +20,7 @@ from src.common.constant import DEFAULT_USER
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.service.交易管理.赎回基金 import sell_low_fee_shares, sell_0_fee_shares, sell_usable_non_zero_fee_shares
+from src.service.公共服务.nav_gate_service import nav5_gate
 
 logging.basicConfig(
     level=logging.INFO,
@@ -122,6 +123,10 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             # 指数基金
             if in_wind_vane:
                 if estimated_profit_rate > 5.0 and zero_fee_shares > 0.0:
+                    # 净值门槛：低于5日均值则不止盈
+                    if not nav5_gate(fund_info, fund_name, fund_code, logger):
+                        logger.info(f"后选跳过（指数/风向标中）：{fund_name}({fund_code}) 净值未达5日均值，暂不止盈")
+                        continue
                     post_selection_candidates.append((asset, fund_info, estimated_profit_rate))
                     logger.info(f"后选加入（指数/风向标中，阈值5.0）：{fund_name}({fund_code}) 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
                 else:
@@ -135,6 +140,10 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                     logger.info(f"后选跳过（指数/风向标中）：{fund_name}({fund_code}) 原因={','.join(reasons)} 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
             else:
                 if estimated_profit_rate > 3.0 and zero_fee_shares > 0.0:
+                    # 净值门槛：低于5日均值则不止盈
+                    if not nav5_gate(fund_info, fund_name, fund_code, logger):
+                        logger.info(f"后选跳过（指数/非风向标）：{fund_name}({fund_code}) 净值未达5日均值，暂不止盈")
+                        continue
                     post_selection_candidates.append((asset, fund_info, estimated_profit_rate))
                     logger.info(f"后选加入（指数/非风向标，阈值3.0）：{fund_name}({fund_code}) 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
                 else:
@@ -155,6 +164,10 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             
             # 严格条件
             if estimated_profit_rate > 5.0 and zero_fee_shares > 0.0:
+                # 净值门槛：低于5日均值则不止盈
+                if not nav5_gate(fund_info, fund_name, fund_code, logger):
+                    logger.info(f"非指数后选检查：{fund_name}({fund_code}) 净值未达5日均值，跳过")
+                    continue
                 week_growth_rate = _safe_float(getattr(fund_info, "week_return", None), 0.0)
                 if week_growth_rate <= 0.0:
                     skip_stats["non_index_week_return_non_positive"] += 1
@@ -233,7 +246,6 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     if eligible_for_special_take_profit:
         logger.info("满足特殊止盈触发条件，执行第二轮在风向标内的非指数基金中的择优止盈")
         best_candidate = None  # (asset, fund_info, est_profit)
-        
         for asset in user_assets:
             fund_code = asset.fund_code
             fund_info = get_all_fund_info(user, fund_code)
@@ -257,6 +269,11 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             zero_fee_shares = _safe_float(get_0_fee_shares(user, fund_code), 0.0)
             
             if estimated_profit_rate > 5.0 and zero_fee_shares > 0.0:
+                # 净值门槛：低于5日均值则不止盈
+                _name = getattr(fund_info, "fund_name", fund_code)
+                if not nav5_gate(fund_info, _name, fund_code, logger):
+                    logger.info(f"第二轮跳过候选：{_name}({fund_code}) 净值未达5日均值")
+                    continue
                 if best_candidate is None or estimated_profit_rate > best_candidate[2]:
                     best_candidate = (asset, fund_info, estimated_profit_rate)
             else:

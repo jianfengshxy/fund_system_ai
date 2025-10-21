@@ -436,10 +436,10 @@ if __name__ == "__main__":
     # redeem_custom(event, None)
     # 根据需要调用 redeem 或 increase 函数
     # sync_fund_investment_indicators(None, None)
-    increase_all_fund_plans(None, None)
+    # increase_all_fund_plans(None, None)
     # redeem_all_fund_plans(None, None)
     # increase(None, None)
-    # redeem(None, None)
+    redeem(None, None)
     # create_period_smart_investment(None, None)
     # dissolve_period_smart_investment(None, None)
     # create_period_smart_investment(None, None)

@@ -189,13 +189,6 @@ resources:
           enable: ${vars.common.props.triggerConfig.enable}
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
-        triggerName: "add_new_13974549306_optimal_take_profit"
-        triggerConfig:
-          payload: '{"account": "13974549306","password": "huigengsi937367","sub_account_name": "最优止盈","total_budget": 50000.0,"fund_type": "all"}'
-          cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
-          enable: ${vars.common.props.triggerConfig.enable}
-      - qualifier: ${vars.common.props.triggerConfig.qualifier}
-        triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "add_new_13977796363_optimal_take_profit"
         triggerConfig:
           payload: '{"account": "13977796363","password": "tang6363","sub_account_name": "最优止盈","total_budget": 400000.0,"fund_type": "all"}'
@@ -346,14 +339,6 @@ resources:
         triggerName: "increase_13910680799_optimal_take_profit"
         triggerConfig:
           payload: '{"account": "13910680799","password": "fuliang223147","sub_account_name": "最优止盈","total_budget": 40000.0,"fund_type": "all"}'
-          cronExpression: "CRON_TZ=Asia/Shanghai 4 53 14 * * 1-5"
-          enable: ${vars.common.props.triggerConfig.enable}
-
-      - qualifier: ${vars.common.props.triggerConfig.qualifier}
-        triggerType: ${vars.common.props.triggerConfig.triggerType}
-        triggerName: "increase_13974549306_optimal_take_profit"
-        triggerConfig:
-          payload: '{"account": "13974549306","password": "huigengsi937367","sub_account_name": "最优止盈","total_budget": 50000.0,"fund_type": "all"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 53 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
@@ -520,14 +505,6 @@ resources:
         triggerName: "redeem_13910680799_optimal_take_profit"
         triggerConfig:
           payload: '{"account": "13910680799","password": "fuliang223147","sub_account_name": "最优止盈","total_budget": 40000.0}'
-          cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
-          enable: ${vars.common.props.triggerConfig.enable}
-
-      - qualifier: ${vars.common.props.triggerConfig.qualifier}
-        triggerType: ${vars.common.props.triggerConfig.triggerType}
-        triggerName: "redeem_13974549306_optimal_take_profit"
-        triggerConfig:
-          payload: '{"account": "13974549306","password": "huigengsi937367","sub_account_name": "最优止盈","total_budget": 50000.0}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 

@@ -181,7 +181,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     today_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {today})
     logger.info(f"同基金不连续守卫 - 昨日(nav_date)提交:{prev_trade_pre is not None}, 今日提交:{today_trade_pre is not None}")
 
-    if prev_trade_pre is not None or today_trade_pre is not None:
+    if prev_trade_pre is not None:
         logger.info(f"同基金不连续守卫触发 - 组合{sub_account_no}的{fund_name}{fund_code}昨日或今日存在买入/定投提交（非撤），执行回撤并跳过加仓")
         # 撤回交易
         for i, trade in enumerate(trades):

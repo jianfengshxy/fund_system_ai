@@ -42,10 +42,10 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
     - spread_days: 预算摊薄天数（默认20），仅在未传入amount时生效
     - 若余额不足，动态下调 buy_amount（至少10元）
     """
-    logger.info(f"参数: fund_num={fund_num}, spread_days={spread_days}")
+    logger.info(f"[加仓参数] 用户={getattr(user,'customer_name','N/A')} | 组合={sub_account_name} | fund_num={fund_num} | spread_days={spread_days}")
     # 计算基础单笔金额
     base_amount = float(amount) if amount is not None else round(total_budget / max(fund_num, 1) / max(spread_days, 1), 2) * 2
-    logger.info(f"单只基金基础买入金额: {base_amount}元(是新增金额的2倍)")
+    logger.info(f"[买入金额] 单只基础买入金额={base_amount} 元(是新增金额的2倍)")
     # 查询余额并动态下调
     try:
         asset_response = GetMyAssetMainPartAsync(user)
@@ -63,6 +63,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
         if cap < buy_amount:
             logger.warning(f"余额不足以覆盖计划下单{fund_num}笔（需{total_need}元），单笔金额下调为 {cap} 元")
             buy_amount = cap
+    logger.info(f"[余额检查] 可用余额={available_balance:.2f} | 计划总额={total_need:.2f} | 单笔金额={buy_amount:.2f}")
 
     # 获取子账户
     sub_account_no = getSubAccountNoByName(user, sub_account_name)
@@ -112,14 +113,8 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
 
         # 公共前置过滤：仅保留跌幅足够的标的
         if estimated_profit_rate >= -1.0:
-            logger.info(f"跳过 {fi.fund_name}({fund_code}): 回撤不达标 estimated_profit_rate={estimated_profit_rate:.2f}% ，阈值<-1.00%（current={current_profit_rate:.2f}%, change={estimated_change:.2f}%）")
+            logger.info(f"[跳过] {fi.fund_name}({fund_code}) | 原因: 回撤不达标 estimated_profit_rate={estimated_profit_rate:.2f}%（阈值<-1.00%，current={current_profit_rate:.2f}%, change={estimated_change:.2f}%）")
             continue
-
-        # 在途/昨日净值成功数判断后置到临下单前，这里不再调用
-        # prev_day_success_count = count_success_trades_on_prev_nav_day(user, fund_code, sub_account_no)
-        # if prev_day_success_count > 0:
-        #     logger.info(f"跳过 {fi.fund_name}({fund_code}): 昨日或今日成交成功 {prev_day_success_count} 笔（按昨日净值日统计，替代在途交易判断）")
-        #     continue
 
         in_wind_vane = (fi.fund_type != '000' and fund_code in wind_vane_codes) or (fi.fund_type == '000' and fi.index_code in wind_vane_indices)
         enriched.append((asset, fi, in_wind_vane, estimated_profit_rate))
@@ -129,30 +124,9 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
     logger.info("排序策略：风向标优先；组内按回撤深度（estimated_profit_rate 越小越优先）")
     # 风向标在前，非风向标在后
     enriched.sort(key=lambda t: (not t[2],))
-
     success_count = 0
     orders_made = 0
     logger.info("本次加仓处理顺序：风向标基金优先")
-
-    # 抽取：估算净值 > 5日均值 判定（复用于两条路径）
-    def _nav5_gate(fi, fund_name: str, fund_code: str, label: str = "") -> bool:
-        prefix = "风向标 " if label == "wind_vane" else ""
-        est_nav = getattr(fi, "estimated_value", None)
-        nav5 = getattr(fi, "nav_5day_avg", None)
-        try:
-            est_val = float(est_nav) if est_nav is not None else None
-            nav5_val = float(nav5) if nav5 is not None else None
-        except Exception:
-            est_val = None
-            nav5_val = None
-
-        if est_val is None or nav5_val is None:
-            logger.info(f"跳过{prefix}{fund_name}({fund_code}): 缺少估算净值或5日均值（estimated_value={est_nav}, nav_5day_avg={nav5}）")
-            return False
-        if not (est_val > nav5_val):
-            logger.info(f"跳过{prefix}{fund_name}({fund_code}): 估算净值 {est_val:.4f} <= 5日均值 {nav5_val:.4f}，暂不加仓")
-            return False
-        return True
 
     # 加仓流程中风向标路径的判定替换
     for asset, fi, in_wind_vane, estimated_profit_rate in enriched:
@@ -163,15 +137,21 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
         fund_code = asset.fund_code
         fund_name = fi.fund_name
 
+        # 统一使用公共服务的5日均值判定（覆盖风向标与非风向标）
+        prefixed_name = f"风向标 {fund_name}" if in_wind_vane else fund_name
+        logger.info(f"[处理开始] {prefixed_name}({fund_code}) | 标签={'风向标' if in_wind_vane else '非风向标'} | 预估回撤={estimated_profit_rate:.2f}% | 单笔金额={buy_amount:.2f}")
+        if not nav5_gate(fi, prefixed_name, fund_code, logger):
+            logger.info(f"[跳过] {prefixed_name}({fund_code}) | 原因: 5日均值判定未通过（详见公共服务日志）")
+            continue
+
         # 先尝试风向标路径（仅对风向标标的）
         if in_wind_vane:
             try:
                 safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
+                logger.info(f"[检查] {prefixed_name}({fund_code}) | 持仓资产={safe_asset_value:.2f} | 预算阈值={float(total_budget):.2f}")
                 if safe_asset_value < float(total_budget):
-                    # 5日均值判定
-                    if not _nav5_gate(fi, fund_name, fund_code, label="wind_vane"):
-                        continue
-
+                    # 删除原分支内的 5 日均值判定，避免重复
+                    # 原逻辑保持不变（不连续交易守卫、下单等）
                     # 基金级不连续交易守卫（上一个交易日(nav_date)+今天，排除撤单）
                     try:
                         nav_date_str = getattr(fi, "nav_date", None)
@@ -184,38 +164,32 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                     stay_trade = has_buy_submission_on_dates(user, sub_account_no, fund_code, date_set)
                     if stay_trade:
                         state = getattr(stay_trade, "app_state_text", None) or getattr(stay_trade, "status", None)
-                        logger.info(f"跳过 {fund_name}({fund_code}): 上一个交易日或今日已有买入/定投提交（状态={state}），遵循同基金不连续交易规则")
+                        logger.info(f"[跳过] {prefixed_name}({fund_code}) | 原因: 不连续交易守卫触发（状态={state}）")
                         continue
-
-                    # # 原有：昨日净值日成功数判断（避免同日重复）
-                    # prev_day_success_count = count_success_trades_on_prev_nav_day(user, fund_code, sub_account_no)
-                    # if prev_day_success_count > 0:
-                    #     logger.info(f"跳过 {fund_name}({fund_code}): 昨日或今日成交成功 {prev_day_success_count} 笔（按昨日净值日统计，替代在途交易判断）")
-                    #     continue
 
                     res = commit_order(user, sub_account_no, fund_code, buy_amount)
                     if res:
-                        logger.info(f"风向标加仓成功: {fund_name}({fund_code}) - 金额: {buy_amount} - 订单号: {res.busin_serial_no}")
+                        logger.info(f"[加仓成功] {prefixed_name}({fund_code}) | 金额: {buy_amount} | 订单号: {res.busin_serial_no}")
                         orders_made += 1
                         success_count += 1
                     if orders_made >= fund_num:
                         break
                 else:
-                    logger.info(f"跳过风向标 {fund_name}({fund_code}): 持仓资产 {safe_asset_value} >= 本次预算阈值 {total_budget}，不重复加仓")
+                    logger.info(f"[跳过] {prefixed_name}({fund_code}) | 原因: 持仓资产 {safe_asset_value} >= 本次预算阈值 {total_budget}（不重复加仓）")
                 continue
             except Exception as e:
                 logger.error(f"风向标加仓失败 {fund_name}({fund_code}): {e}")
                 continue
 
-        # 非风向标路径
+        # 非风向标路径（原分支内的 5 日均值判定已前置并统一）
         try:
             rank_100 = getattr(fi, "rank_100day", None)
             rank_30 = getattr(fi, "rank_30day", None)
             if not isinstance(rank_100, (int, float)) or not isinstance(rank_30, (int, float)):
-                logger.info(f"跳过 {fund_name}({fund_code}): 排名数据缺失（rank_100day={rank_100}, rank_30day={rank_30}）")
+                logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 排名数据缺失（rank_100day={rank_100}, rank_30day={rank_30}）")
                 continue
             if rank_100 < 20 or rank_100 > 90 or rank_30 < 5:
-                logger.info(f"跳过 {fund_name}({fund_code}): 排名条件不满足（期望 20 <= rank_100day <= 90 且 rank_30day >= 5），实际 rank_100day={rank_100}, rank_30day={rank_30}")
+                logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 排名条件不满足（期望 20<=rank_100day<=90 且 rank_30day>=5），实际 rank_100day={rank_100}, rank_30day={rank_30}")
                 continue
 
             season_growth_rate = _safe_float(getattr(fi, "three_month_return", None), 0.0)
@@ -224,7 +198,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             if (week_growth_rate < 0.0 and month_growth_rate < 0.0 and season_growth_rate < 0.0) or \
                (season_growth_rate < 0.0 and (month_growth_rate < 0.0 or week_growth_rate < 0.0)) or \
                (season_growth_rate > 0.0 and (month_growth_rate < 0.0 and week_growth_rate < 0.0)):
-                logger.info(f"跳过 {fund_name}({fund_code}): 趋势条件不满足 week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%, season={season_growth_rate:.2f}%")
+                logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 趋势条件不满足 week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%, season={season_growth_rate:.2f}%")
                 continue
 
             # 百分位排名数据
@@ -232,21 +206,22 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                 _, season_item_rank, season_item_sc = get_fund_growth_rate(fi, '3Y')
                 _, month_item_rank, month_item_sc = get_fund_growth_rate(fi, 'Y')
             except Exception as e:
-                logger.info(f"跳过 {fund_name}({fund_code}): 获取排名数据异常 {e}")
+                logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 获取百分位排名数据异常 {e}")
                 continue
             if not season_item_rank or not season_item_sc or season_item_sc == 0 \
                or not month_item_rank or not month_item_sc or month_item_sc == 0:
-                logger.info(f"跳过 {fund_name}({fund_code}): 百分位排名数据不可用（season: rank={season_item_rank}, sc={season_item_sc}; month: rank={month_item_rank}, sc={month_item_sc}）")
+                logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 百分位排名数据不可用（season: rank={season_item_rank}, sc={season_item_sc}; month: rank={month_item_rank}, sc={month_item_sc}）")
                 continue
 
             month_rank_rate = float(month_item_rank) / float(month_item_sc)
             season_rank_rate = float(season_item_rank) / float(season_item_sc)
             if month_rank_rate > 0.75 or season_rank_rate > 0.75:
-                logger.info(f"跳过 {fund_name}({fund_code}): 百分位排名过高 month_rank_rate={month_rank_rate:.2%}, season_rank_rate={season_rank_rate:.2%}（阈值<=75%）")
+                logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 百分位排名过高 month_rank_rate={month_rank_rate:.2%}, season_rank_rate={season_rank_rate:.2%}（阈值<=75%）")
                 continue
 
-            # 5 日均值判定
+            # 5 日均值判定（分支内若仍保留，补充原因日志）
             if not nav5_gate(fi, fund_name, fund_code, logger):
+                logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 5日均值判定未通过（详见公共服务日志）")
                 continue
 
             # 基金级不连续交易守卫（上一个交易日(nav_date)+今天，排除撤单）
@@ -261,19 +236,13 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             stay_trade = has_buy_submission_on_dates(user, sub_account_no, fund_code, date_set)
             if stay_trade:
                 state = getattr(stay_trade, "app_state_text", None) or getattr(stay_trade, "status", None)
-                logger.info(f"跳过 {fund_name}({fund_code}): 上一个交易日或今日已有买入/定投提交（状态={state}），遵循同基金不连续交易规则")
+                logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 不连续交易守卫触发（状态={state}）")
                 continue
-
-            # # 原有：昨日净值日成功数判断（避免同日重复）
-            # prev_day_success_count = count_success_trades_on_prev_nav_day(user, fund_code, sub_account_no)
-            # if prev_day_success_count > 0:
-            #     logger.info(f"跳过 {fund_name}({fund_code}): 昨日或今日成交成功 {prev_day_success_count} 笔（按昨日净值日统计，替代在途交易判断）")
-            #     continue
 
             # 基础加仓
             res1 = commit_order(user, sub_account_no, fund_code, buy_amount)
             if res1:
-                logger.info(f"基础加仓成功: {fund_name}({fund_code}) - 金额: {buy_amount} - 订单号: {res1.busin_serial_no}")
+                logger.info(f"[加仓成功] {fund_name}({fund_code}) | 金额: {buy_amount} | 订单号: {res1.busin_serial_no}")
                 orders_made += 1
                 success_count += 1
             if orders_made >= fund_num:
@@ -282,7 +251,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             if estimated_profit_rate < -5.0 and orders_made < fund_num:
                 res2 = commit_order(user, sub_account_no, fund_code, buy_amount)
                 if res2:
-                    logger.info(f"-5%额外加仓成功: {fund_name}({fund_code}) - 金额: {buy_amount} - 订单号: {res2.busin_serial_no}")
+                    logger.info(f"[加仓成功] {fund_name}({fund_code}) | -5%额外加仓 | 金额: {buy_amount} | 订单号: {res2.busin_serial_no}")
                     orders_made += 1
                     success_count += 1
         except Exception as e:
@@ -296,10 +265,10 @@ if __name__ == "__main__":
     # 测试单个用户的加仓流程
     try:
         # 使用默认用户进行测试，无需再获取
-        # user = DEFAULT_USER
-        user = get_user_all_info("13500819290","guojing1985")
+        user = DEFAULT_USER
+        # user = get_user_all_info("13500819290","guojing1985")
         # 执行加仓操作
-        increase_funds(user, "最优止盈", 200000.0, None, 'non_index')  # 使用 DEFAULT_USER，并假设参数合适
+        increase_funds(user, "飞龙在天", 200000.0, None, 'non_index')  # 使用 DEFAULT_USER，并假设参数合适
         logging.info(f"用户 {user.customer_name} 加仓操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

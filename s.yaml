@@ -709,7 +709,7 @@ resources:
           triggerName: "increase_all_fund_plans"
           triggerConfig:
             payload: ${vars.common.props.triggerConfig.payload}
-            cronExpression: "CRON_TZ=Asia/Shanghai 4 51 14 * * 1-5"
+            cronExpression: "CRON_TZ=Asia/Shanghai 4 41 14 * * 1-5"
             enable: ${vars.common.props.triggerConfig.enable}
 
   redeem_all_fund_plans:
@@ -734,5 +734,5 @@ resources:
           triggerName: "redeem_all_fund_plans"
           triggerConfig:
             payload: ${vars.common.props.triggerConfig.payload}
-            cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
+            cronExpression: "CRON_TZ=Asia/Shanghai 4 43 14 * * 1-5"
             enable: ${vars.common.props.triggerConfig.enable}

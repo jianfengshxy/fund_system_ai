@@ -251,8 +251,9 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             if estimated_profit_rate > 5.0 and zero_fee_shares > 0.0:
                 # 净值门槛：低于5日均值则不止盈
                 _name = getattr(fund_info, "fund_name", fund_code)
-                if not nav5_gate(fund_info, _name, fund_code, logger):
-                    logger.info(f"第二轮跳过候选：{_name}({fund_code}) 净值未达5日均值")
+                # 修正：只在“跌破5日均值”时作为候选（进入下降趋势才止盈）
+                if not nav5_fall_gate(fund_info, _name, fund_code, logger):
+                    logger.info(f"第二轮跳过候选：{_name}({fund_code}) 净值未跌破5日均值")
                     continue
                 if best_candidate is None or estimated_profit_rate > best_candidate[2]:
                     best_candidate = (asset, fund_info, estimated_profit_rate)
@@ -358,7 +359,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
 if __name__ == "__main__":
     try:
-        redeem_funds(DEFAULT_USER, "飞龙在天", 1000000.0)
+        redeem_funds(DEFAULT_USER, "马丁格尔plus", 1000000.0)
         logging.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

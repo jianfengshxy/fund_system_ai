@@ -245,18 +245,26 @@ def add_new_funds(
             buy_amount = base_per_fund
         
             # 判断是否可申购（若可获取）
+            info = None
             try:
                 info = get_all_fund_info(user, code)
                 if info and hasattr(info, 'can_purchase') and not info.can_purchase:
                     logger.warning(f"基金 {name}({code}) 当前不可申购，跳过")
                     continue
             except Exception as e:
-                logger.warning(f"获取基金 {code} 申购状态失败，继续尝试下单：{e}")
+                logger.warning(f"获取基金 {code} 申购状态失败，跳过该基金：{e}")
+                continue
+
+            if not info:
+                logger.info(f"无法获取基金信息，跳过新增：{name}({code})")
+                continue
         
             # 新增：估算净值（或上一交易日净值）> 5 日均值判定，不满足则跳过（公共方法）
             if not nav5_gate(info, name, code, logger):
-                logger.info(f"净值未达条件，跳过新增：{name}({code})")
+                logger.info(f"净值未达条件（未处于上升趋势），跳过新增：{name}({code})")
                 continue
+
+            logger.info(f"趋势判定通过：估算净值高于5日均值，准备下单 {name}({code}) 金额={buy_amount}元")
         
             try:
                 result = commit_order(user, sub_account_no, code, buy_amount)

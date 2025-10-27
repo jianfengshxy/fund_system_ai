@@ -288,9 +288,9 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         else:
             logger.info("第二轮未找到符合条件的非指数风向标内基金，跳过特殊止盈")
     
-    # 第三轮：前两轮均未止盈，基金数量≥20，仓位>80%，从不在风向标中且当前收益为负的基金中选择亏损比例最大的一个
+    # 第三轮：前两轮均止盈小于3个，基金数量≥20，仓位>80%，从不在风向标中且当前收益为负的基金中选择亏损比例最大的一个
     eligible_for_third_take_profit = (
-        success_count == 0
+        success_count < 3
         and fund_count >= 20
         and (total_budget is not None and total_budget > 0.0)
         and (sum(_safe_float(getattr(a, "asset_value", 0.0), 0.0) for a in user_assets) > total_budget * 0.8)

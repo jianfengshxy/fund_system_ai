@@ -124,7 +124,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 
                 # 提前进行五日均值过滤（候选阶段）
                 if not nav5_gate(fund_info, fund_name, fund_code, logger):
-                    logger.info(f"净值未达条件，跳过候选加仓：{fund_name}({fund_code})")
+                    logger.info(f"未处于上升趋势（估算净值≤5日均值），跳过候选加仓：{fund_name}({fund_code})")
                     continue
 
                 # 回撤不足直接跳过（阈值：-1%）
@@ -208,10 +208,10 @@ if __name__ == "__main__":
             "海外基金组合",
             fund_list=[
                 # {"fund_code": "016702", "fund_name": "银华海外数字经济量化选股混合发起式(QDII)C", "amount": 5000.0},
-                {"fund_code": "006105", "fund_name": "宏利印度股票(QDII)", "amount": 5000.0},
+                # {"fund_code": "006105", "fund_name": "宏利印度股票(QDII)", "amount": 5000.0},
                 # {"fund_code": "161226", "fund_name": "国投瑞银白银期货(LOF)A", "amount": 5000.0},
                 # {"fund_code": "017873", "fund_name": "汇添富香港优势精选混合(QDII)C", "amount": 5000.0},
-                {"fund_code": "019449", "fund_name": "摩根日本精选股票(QDII)C", "amount": 5000.0}
+                {"fund_code": "100055", "fund_name": "富国全球科技互联网股票(QDII)A", "amount": 5000.0}
             ]
         )
         logging.info(f"用户 {DEFAULT_USER.customer_name} 加仓操作完成")

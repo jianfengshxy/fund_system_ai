@@ -42,6 +42,7 @@ def nav5_gate(fi: Any, fund_name: str, fund_code: str, logger: logging.Logger) -
             f"跳过{fund_name}({fund_code}): 对比净值 {est_val:.4f} <= 5日均值 {nav5_val:.4f}"
         )
         return False
+    return True
 
 def nav5_fall_gate(fi: Any, fund_name: str, fund_code: str, logger: logging.Logger) -> bool:
     """

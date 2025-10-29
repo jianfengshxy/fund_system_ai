@@ -289,3 +289,9 @@ def add_new_funds(
         logger.error(f"异常堆栈: {traceback.format_exc()}")
         return False
         
+if __name__ == "__main__":
+    try:
+        add_new_funds(DEFAULT_USER, "飞龙在天", 1000000.0)
+        logging.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
+    except Exception as e:
+        logging.error(f"测试用户处理失败：{str(e)}")

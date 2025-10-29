@@ -291,7 +291,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     # 第三轮：前两轮均止盈小于3个，基金数量≥20，仓位>80%，从不在风向标中且当前收益为负的基金中选择亏损比例最大的一个
     eligible_for_third_take_profit = (
         success_count < 3
-        and fund_count >= 20
+        and fund_count >= 15
         and (total_budget is not None and total_budget > 0.0)
         and (sum(_safe_float(getattr(a, "asset_value", 0.0), 0.0) for a in user_assets) > total_budget * 0.8)
     )
@@ -366,7 +366,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
 if __name__ == "__main__":
     try:
-        redeem_funds(DEFAULT_USER, "Martin Garret plus", 1000000.0)
+        redeem_funds(DEFAULT_USER, "马丁格尔plus", 1000000.0)
         logging.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

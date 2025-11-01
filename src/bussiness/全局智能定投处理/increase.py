@@ -138,21 +138,20 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         return  True
                   
     logger.info(f"当前计划:{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}的周期类型{period_type},period_type:{period_value},当前月的值:{day_of_month},当前资产:{plan_assets},计划类型:{plan_type}")
-    if times == 1.0:
-            if nav5_gate(fund_info, fund_name, fund_code, logger):
-                logger.info(f"首次定投判定：资产价值为{plan_assets}，定投金额为{fund_amount}，且净值大于5日均值，跳过本次操作。")
-                logger.info(f"组合{sub_account_no}，基金{fund_name}({fund_code})资产{plan_assets}，首次定投已处理，跳过。")
-                return True
-            else:
-                logger.info(f"首次定投判定：资产价值为{plan_assets}，定投金额为{fund_amount}，但净值未达5日均值（或缺少对比数据），撤回当天定投交易。")
-                for i, trade in enumerate(trades):
-                    logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
-                    try:
-                        revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
-                        logger.info(f"交易回撤成功")
-                    except Exception as e:
-                        logger.error(f"交易回撤失败: {e}")
-                return True
+    # 5日均线守卫：对所有可回撤的买入/定投交易生效
+    gate_ok = bool(nav5_gate(fund_info, fund_name, fund_code, logger))
+    if not gate_ok:
+        logger.info(f"5日均线守卫未通过（估算净值≤5日均值）：撤回当天所有可回撤交易。资产={plan_assets} 定投金额={fund_amount}")
+        for i, trade in enumerate(trades):
+            logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+            try:
+                revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount)
+                logger.info("交易回撤成功")
+            except Exception as e:
+                logger.error(f"交易回撤失败: {e}")
+        return True
+    else:
+        logger.info(f"5日均线守卫通过（估算净值>5日均值）：继续执行后续判断。")
 
     #判断是否是周定投延期交易
     if period_type == 1 and  period_value != day_of_week_number + 1:

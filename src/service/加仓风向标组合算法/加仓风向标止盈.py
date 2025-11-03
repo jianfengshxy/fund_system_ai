@@ -233,9 +233,6 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             fund_name = getattr(fund_info, "fund_name", fund_code)
 
             fund_type = getattr(fund_info, "fund_type", None)
-            if fund_type == "000":
-                # 第二轮仅在非指数基金中选择
-                continue
             
             in_wind_vane = fund_code in wind_vane_codes
             if not in_wind_vane:
@@ -247,9 +244,8 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
             estimated_profit_rate = current_profit_rate + estimated_change
             zero_fee_shares = _safe_float(get_0_fee_shares(user, fund_code), 0.0)
-            
+      
             if estimated_profit_rate > 5.0 and zero_fee_shares > 0.0:
-                # 净值门槛：低于5日均值则不止盈
                 _name = getattr(fund_info, "fund_name", fund_code)
                 # 修正：只在“跌破5日均值”时作为候选（进入下降趋势才止盈）
                 if not nav5_fall_gate(fund_info, _name, fund_code, logger):

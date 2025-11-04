@@ -293,7 +293,8 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     )
     if eligible_for_third_take_profit:
         logger.info("满足第三轮触发条件，选择不在风向标内且当前收益为负的亏损最大基金进行处置")
-        worst_candidate = None  # (asset, fund_info, estimated_profit_rate)
+        # 修改：收集所有符合条件的候选，而非仅选“最差”
+        third_round_candidates = []  # [(asset, fund_info)]
         for asset in user_assets:
             fund_code = asset.fund_code
             fund_info = get_all_fund_info(user, fund_code)
@@ -302,7 +303,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                 continue
             fund_name = getattr(fund_info, "fund_name", fund_code)
             fund_type = getattr(fund_info, "fund_type", None)
-    
+
             # 是否在风向标内
             in_wind_vane = False
             if fund_type == "000":  # 指数
@@ -313,7 +314,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             if in_wind_vane:
                 logger.info(f"第三轮跳过：在风向标内 {fund_name}({fund_code})")
                 continue
-    
+
             # 使用“预估收益率=当前收益率 + 当天估值涨跌”进行筛选（门槛：≤ -10% 才入候选）
             current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
             estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
@@ -321,39 +322,39 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             if estimated_profit_rate > -10.0:
                 logger.info(f"第三轮跳过：当前预估收益率>-10.00% {fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%")
                 continue
-    
-            # 选择“预估收益率”最小（亏损比例最大）
-            if worst_candidate is None or estimated_profit_rate < worst_candidate[2]:
-                worst_candidate = (asset, fund_info, estimated_profit_rate)
+
+            # 修改：不再选择“最差”，而是加入所有满足条件的候选
+            third_round_candidates.append((asset, fund_info))
             logger.info(f"第三轮候选：{fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%")
-    
-        if worst_candidate is not None:
-            asset, fund_info, _ = worst_candidate  # 第三项不再直接用，处置时重算以确保一致
-            fund_code = asset.fund_code
-            fund_name = getattr(fund_info, "fund_name", fund_code)
-            try:
-                # 统一处置阶段的指标口径：当前/估值/预估
-                current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-                estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
-                estimated_profit_rate = current_profit_rate + estimated_change
 
-                shares = get_bank_shares(user, sub_account_no, fund_code)
-                from src.service.交易管理.费率查询 import get_0_fee_shares
-                zero_fee_shares = _safe_float(get_0_fee_shares(user, fund_code), 0.0)
+        # 逐一处置所有候选
+        if len(third_round_candidates) > 0:
+            for asset, fund_info in third_round_candidates:
+                fund_code = asset.fund_code
+                fund_name = getattr(fund_info, "fund_name", fund_code)
+                try:
+                    # 统一处置阶段的指标口径：当前/估值/预估
+                    current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
+                    estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
+                    estimated_profit_rate = current_profit_rate + estimated_change
 
-                if "C" in str(fund_name) and zero_fee_shares > 0.0:
-                    logger.info(f"{user.customer_name} 第三轮处置：C类基金赎回0费率份额 {fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%")
-                    redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
-                else:
-                    logger.info(f"{user.customer_name} 第三轮处置：优先赎回低费率份额 {fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%")
-                    redeem_ok = bool(sell_low_fee_shares(user, sub_account_no, fund_code, shares))
+                    shares = get_bank_shares(user, sub_account_no, fund_code)
+                    from src.service.交易管理.费率查询 import get_0_fee_shares
+                    zero_fee_shares = _safe_float(get_0_fee_shares(user, fund_code), 0.0)
 
-                if redeem_ok:
-                    success_count += 1
-                else:
-                    logger.info(f"{user.customer_name} 第三轮处置未成功或被跳过：{fund_name}({fund_code})")
-            except Exception as e:
-                logger.error(f"第三轮处置失败：{fund_name}({fund_code}) 异常={e}")
+                    if "C" in str(fund_name) and zero_fee_shares > 0.0:
+                        logger.info(f"{user.customer_name} 第三轮处置：C类基金赎回0费率份额 {fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%")
+                        redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
+                    else:
+                        logger.info(f"{user.customer_name} 第三轮处置：优先赎回低费率份额 {fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%")
+                        redeem_ok = bool(sell_low_fee_shares(user, sub_account_no, fund_code, shares))
+
+                    if redeem_ok:
+                        success_count += 1
+                    else:
+                        logger.info(f"{user.customer_name} 第三轮处置未成功或被跳过：{fund_name}({fund_code})")
+                except Exception as e:
+                    logger.error(f"第三轮处置失败：{fund_name}({fund_code}) 异常={e}")
         else:
             logger.info("第三轮未找到符合条件的亏损基金，跳过处置")
     
@@ -362,7 +363,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
 if __name__ == "__main__":
     try:
-        redeem_funds(DEFAULT_USER, "马丁格尔plus", 1000000.0)
+        redeem_funds(DEFAULT_USER, "飞龙在天", 1000000.0)
         logging.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

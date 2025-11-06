@@ -67,23 +67,11 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             except Exception as e:
                 logger.warning(f"获取指数风向标 index_code 异常: {f.fund_code}, {e}")
     
-    # 引入0费率份额查询（函数内导入以避免顶部变更）
-    from src.service.交易管理.费率查询 import get_0_fee_shares
+    # 引入费率份额查询（函数内导入，避免顶部改动）
+    from src.service.交易管理.费率查询 import get_0_fee_shares, get_low_fee_shares
     
-    # 第一轮：构建候选并执行赎回0费率份额
     success_count = 0
-    post_selection_candidates: List[Tuple] = []  # [(asset, fund_info, estimated_profit_rate)]
-    # 新增：跳过原因统计
-    skip_stats = {
-        "no_fund_info": 0,
-        "index_threshold_not_met": 0,
-        "index_zero_fee_none": 0,
-        "non_index_in_wind_vane_skipped": 0,
-        "non_index_threshold_not_met": 0,
-        "non_index_week_return_non_positive": 0,
-        "non_index_rank_checks_failed": 0,
-    }
-    
+
     def _safe_float(v, default=0.0):
         try:
             if v is None:
@@ -91,274 +79,153 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             return float(v)
         except Exception:
             return default
-    
-    # 第一轮遍历：根据规则加入候选
+
+    logger.info("采用新止盈策略：两轮按风向标内外，止盈点=max(波动率, 3.0)，最多成功3个")
+
+    # 第一轮：处理不在加仓风向标内的基金
     for asset in user_assets:
+        if success_count >= 3:
+            break
+
         fund_code = asset.fund_code
         fund_info = get_all_fund_info(user, fund_code)
         if not fund_info:
-            skip_stats["no_fund_info"] += 1
-            logger.info(f"后选跳过：无法获取基金信息 {fund_code}")
+            logger.info(f"第一轮跳过：无法获取基金信息 {fund_code}")
             continue
-        
+
         fund_name = getattr(fund_info, "fund_name", fund_code)
         fund_type = getattr(fund_info, "fund_type", None)
-        
-        # 判断是否在风向标中
+
+        # 判断是否在风向标中（指数用 index_code，非指数用 fund_code）
         in_wind_vane = False
-        if fund_type == "000":  # 指数
+        if fund_type == "000":
             idx_code = getattr(fund_info, "index_code", None)
             in_wind_vane = idx_code in wind_vane_indices if idx_code else False
         else:
             in_wind_vane = fund_code in wind_vane_codes
-        
-        # 预估收益率 = 当前收益率 + 估值涨跌
+
+        if in_wind_vane:
+            logger.info(f"第一轮跳过：在风向标内 {fund_name}({fund_code})")
+            continue
+
+        # 预估收益率与止盈点
         current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
         estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
         estimated_profit_rate = current_profit_rate + estimated_change
-        
-        # 0费率份额
-        zero_fee_shares = _safe_float(get_0_fee_shares(user, fund_code), 0.0)
-        
-        if fund_type == "000":
-            # 指数基金
-            if in_wind_vane:
-                fall_gate_ok = nav5_fall_gate(fund_info, fund_name, fund_code, logger)
-                if estimated_profit_rate > 5.0 and zero_fee_shares > 0.0 and fall_gate_ok:
-                    post_selection_candidates.append((asset, fund_info, estimated_profit_rate))
-                    logger.info(f"后选加入（指数/风向标中，阈值5.0，已跌破5日均值）：{fund_name}({fund_code}) 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
-                else:
-                    reasons = []
-                    if estimated_profit_rate <= 5.0:
-                        reasons.append("预估收益率<=5.0")
-                        skip_stats["index_threshold_not_met"] += 1
-                    if zero_fee_shares <= 0.0:
-                        reasons.append("0费率份额=0")
-                        skip_stats["index_zero_fee_none"] += 1
-                    if not fall_gate_ok:
-                        reasons.append("净值未跌破5日均值")
-                    logger.info(f"后选跳过（指数/风向标中）：{fund_name}({fund_code}) 原因={','.join(reasons)} 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
-            else:
-                fall_gate_ok = nav5_fall_gate(fund_info, fund_name, fund_code, logger)
-                if estimated_profit_rate > 3.0 and zero_fee_shares > 0.0 and fall_gate_ok:
-                    post_selection_candidates.append((asset, fund_info, estimated_profit_rate))
-                    logger.info(f"后选加入（指数/非风向标，阈值3.0，已跌破5日均值）：{fund_name}({fund_code}) 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
-                else:
-                    reasons = []
-                    if estimated_profit_rate <= 3.0:
-                        reasons.append("预估收益率<=3.0")
-                        skip_stats["index_threshold_not_met"] += 1
-                    if zero_fee_shares <= 0.0:
-                        reasons.append("0费率份额=0")
-                        skip_stats["index_zero_fee_none"] += 1
-                    if not fall_gate_ok:
-                        reasons.append("净值未跌破5日均值")
-                    logger.info(f"后选跳过（指数/非风向标）：{fund_name}({fund_code}) 原因={','.join(reasons)} 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
-        else:
-            # 非指数基金：在风向标中则跳过
-            if in_wind_vane:
-                skip_stats["non_index_in_wind_vane_skipped"] += 1
-                logger.info(f"非指数基金在加仓风向标中，按规则跳过：{fund_name}({fund_code})")
-                continue
-            
-            # 严格条件
-            if estimated_profit_rate > 5.0 and zero_fee_shares > 0.0:
-                # 净值门槛：未跌破5日均值则不止盈
-                if not nav5_fall_gate(fund_info, fund_name, fund_code, logger):
-                    logger.info(f"后选跳过（指数/风向标中）：{fund_name}({fund_code}) 净值未跌破5日均值，暂不止盈")
-                    continue
-                post_selection_candidates.append((asset, fund_info, estimated_profit_rate))
-                logger.info(f"后选加入（指数/风向标中，阈值5.0）：{fund_name}({fund_code}) 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
-            else:
-                skip_stats["non_index_threshold_not_met"] += 1
-                logger.info(f"后选跳过（非指数/阈值未达）：{fund_name}({fund_code}) 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
-    
-    # 新增：候选阶段跳过统计汇总
-    logger.info(
-        f"第一轮后选候选统计：候选={len(post_selection_candidates)}，跳过："
-        f"无信息={skip_stats['no_fund_info']}，指数阈值未过={skip_stats['index_threshold_not_met']}，指数0费率=0={skip_stats['index_zero_fee_none']}，"
-        f"非指数在风向标中跳过={skip_stats['non_index_in_wind_vane_skipped']}，非指数阈值未过={skip_stats['non_index_threshold_not_met']}，"
-        f"非指数周收益<=0={skip_stats['non_index_week_return_non_positive']}，非指数排名未达标={skip_stats['non_index_rank_checks_failed']}"
-    )
-    # 第一轮执行：对候选逐一赎回“0费率份额”（按预估收益率从高到低排序，最多3个）
-    if len(post_selection_candidates) > 0:
-        post_selection_candidates.sort(key=lambda x: x[2], reverse=True)
-        max_redeems = 3
-        selected_candidates = post_selection_candidates[:max_redeems]
-        logger.info(f"第一轮止盈候选共 {len(post_selection_candidates)} 个，按预估收益率排序后拟处理前 {len(selected_candidates)} 个")
-        for asset, fund_info, est_profit in selected_candidates:
-            fund_code = asset.fund_code
-            fund_name = getattr(fund_info, "fund_name", fund_code)
+        volatility = _safe_float(getattr(fund_info, "volatility", None), 0.0)
+        stop_rate = max(volatility, 3.0)
+
+        # C类与非C类分流处理
+        is_c = "C" in str(fund_name)
+        if estimated_profit_rate > stop_rate:
             try:
                 shares = get_bank_shares(user, sub_account_no, fund_code)
-                logger.info(f"{user.customer_name} 第一轮止盈：赎回0费率份额（按当天预估收益率降序） {fund_name}({fund_code}) 预估收益={est_profit:.2f}%")
-                redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
-                if redeem_ok:
-                    success_count += 1  # 仅统计真正成功的赎回
+                if is_c:
+                    zero_fee_shares = _safe_float(get_0_fee_shares(user, fund_code), 0.0)
+                    if zero_fee_shares > 10.0:
+                        logger.info(
+                            f"{user.customer_name} 第一轮止盈：不在风向标且预估收益>{stop_rate:.2f}%，C类赎回0费率份额 "
+                            f"{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% 波动率={volatility:.2f} 0费率份额={zero_fee_shares:.2f}"
+                        )
+                        redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
+                        if redeem_ok:
+                            success_count += 1
+                        else:
+                            logger.info(f"{user.customer_name} 第一轮止盈未成功或被跳过：{fund_name}({fund_code})")
+                    else:
+                        logger.info(f"第一轮跳过：{fund_name}({fund_code}) 0费率份额≤10 预估={estimated_profit_rate:.2f}% 止盈点={stop_rate:.2f}%")
                 else:
-                    logger.info(f"{user.customer_name} 第一轮止盈未成功或被跳过：{fund_name}({fund_code})")
+                    low_fee_shares = _safe_float(get_low_fee_shares(user, fund_code), 0.0)
+                    if low_fee_shares > 10.0:
+                        logger.info(
+                            f"{user.customer_name} 第一轮止盈：不在风向标且预估收益>{stop_rate:.2f}%，非C赎回低费率份额 "
+                            f"{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% 波动率={volatility:.2f} 低费率份额={low_fee_shares:.2f}"
+                        )
+                        redeem_ok = bool(sell_low_fee_shares(user, sub_account_no, fund_code, shares))
+                        if redeem_ok:
+                            success_count += 1
+                        else:
+                            logger.info(f"{user.customer_name} 第一轮止盈未成功或被跳过：{fund_name}({fund_code})")
+                    else:
+                        logger.info(f"第一轮跳过：{fund_name}({fund_code}) 低费率份额≤10 预估={estimated_profit_rate:.2f}% 止盈点={stop_rate:.2f}%")
             except Exception as e:
                 logger.error(f"第一轮止盈失败：{fund_name}({fund_code}) 异常={e}")
-    
-    # 组合资产总和与预算比例
-    total_asset_value = sum(_safe_float(getattr(a, "asset_value", 0.0), 0.0) for a in user_assets)
-    if total_budget:
-        asset_budget_ratio = (total_asset_value / total_budget) * 100.0
-        logger.info(f"组合资产总和: {total_asset_value:.2f} 占总预算比例: {asset_budget_ratio:.2f}%")
-    
-    # 第二轮（特殊止盈）触发条件：
-    # 1) 第一轮无候选
-    # 2) 组合基金数量 > 20
-    # 3) 当天累计止盈数量 < 3
-    # 4) 组合资产总和 > 预算的 80%
-    eligible_for_special_take_profit = (
-        len(post_selection_candidates) == 0
-        and fund_count > 15
-        and success_count < 3
-        and (total_budget is not None and total_budget > 0.0)
-        and total_asset_value > total_budget * 0.8
-    )
-    
-    if eligible_for_special_take_profit:
-        logger.info("满足特殊止盈触发条件，执行第二轮在风向标内的非指数基金中的择优止盈")
-        best_candidate = None  # (asset, fund_info, est_profit)
+        else:
+            logger.info(f"第一轮跳过：{fund_name}({fund_code}) 预估收益率≤止盈点({stop_rate:.2f}%) 预估={estimated_profit_rate:.2f}%")
+
+    # 第二轮：若第一轮成功数不足3，处理在加仓风向标内的基金
+    if success_count < 3:
+        logger.info(f"第一轮止盈成功 {success_count} 个，开始第二轮在风向标内的止盈（最多补足到3个）")
         for asset in user_assets:
+            if success_count >= 3:
+                break
+
             fund_code = asset.fund_code
             fund_info = get_all_fund_info(user, fund_code)
             if not fund_info:
                 logger.info(f"第二轮跳过：无法获取基金信息 {fund_code}")
                 continue
-            
-            # 新增：统一名称，后续日志全部输出“基金名称(基金代码)”
-            fund_name = getattr(fund_info, "fund_name", fund_code)
 
-            fund_type = getattr(fund_info, "fund_type", None)
-            
-            in_wind_vane = fund_code in wind_vane_codes
-            if not in_wind_vane:
-                # 修改：补充基金名称
-                logger.info(f"第二轮跳过：不在风向标内 {fund_name}({fund_code})")
-                continue
-            
-            current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-            estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
-            estimated_profit_rate = current_profit_rate + estimated_change
-            zero_fee_shares = _safe_float(get_0_fee_shares(user, fund_code), 0.0)
-      
-            if estimated_profit_rate > 5.0 and zero_fee_shares > 0.0:
-                _name = getattr(fund_info, "fund_name", fund_code)
-                # 修正：只在“跌破5日均值”时作为候选（进入下降趋势才止盈）
-                if not nav5_fall_gate(fund_info, _name, fund_code, logger):
-                    logger.info(f"第二轮跳过候选：{_name}({fund_code}) 净值未跌破5日均值")
-                    continue
-                if best_candidate is None or estimated_profit_rate > best_candidate[2]:
-                    best_candidate = (asset, fund_info, estimated_profit_rate)
-            else:
-                reasons = []
-                if estimated_profit_rate <= 5.0:
-                    reasons.append("预估收益率<=5.0")
-                if zero_fee_shares <= 0.0:
-                    reasons.append("0费率份额=0")
-                # 修改：补充基金名称
-                logger.info(f"第二轮跳过候选：{fund_name}({fund_code}) 原因={','.join(reasons)} 预估收益={estimated_profit_rate:.2f}% 0费率份额={zero_fee_shares:.2f}")
-        
-        if best_candidate is not None:
-            asset, fund_info, est_profit = best_candidate
-            fund_code = asset.fund_code
-            fund_name = getattr(fund_info, "fund_name", fund_code)
-            try:
-                shares = get_bank_shares(user, sub_account_no, fund_code)
-                # 基金名称含“C”则赎回0费率份额；否则赎回低费率份额
-                if "C" in str(fund_name):
-                    logger.info(f"{user.customer_name} 第二轮特殊止盈：C类基金优先赎回0费率份额 {fund_name}({fund_code}) 预估收益={est_profit:.2f}%")
-                    redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
-                else:
-                    logger.info(f"{user.customer_name} 第二轮特殊止盈：非C类基金优先赎回低费率份额 {fund_name}({fund_code}) 预估收益={est_profit:.2f}%")
-                    redeem_ok = bool(sell_low_fee_shares(user, sub_account_no, fund_code, shares))
-                if redeem_ok:
-                    success_count += 1  # 仅统计真正成功的赎回
-                else:
-                    logger.info(f"{user.customer_name} 第二轮特殊止盈未成功或被跳过：{fund_name}({fund_code})")
-            except Exception as e:
-                logger.error(f"第二轮止盈失败：{fund_name}({fund_code}) 异常={e}")
-        else:
-            logger.info("第二轮未找到符合条件的非指数风向标内基金，跳过特殊止盈")
-    
-    # 第三轮：前两轮均止盈小于3个，基金数量≥20，仓位>80%，从不在风向标中且当前收益为负的基金中选择亏损比例最大的一个
-    eligible_for_third_take_profit = (
-        success_count < 3
-        and fund_count >= 15
-        and (total_budget is not None and total_budget > 0.0)
-        and (sum(_safe_float(getattr(a, "asset_value", 0.0), 0.0) for a in user_assets) > total_budget * 0.8)
-    )
-    if eligible_for_third_take_profit:
-        logger.info("满足第三轮触发条件，选择不在风向标内且当前收益为负的亏损最大基金进行处置")
-        # 修改：收集所有符合条件的候选，而非仅选“最差”
-        third_round_candidates = []  # [(asset, fund_info)]
-        for asset in user_assets:
-            fund_code = asset.fund_code
-            fund_info = get_all_fund_info(user, fund_code)
-            if not fund_info:
-                logger.info(f"第三轮跳过：无法获取基金信息 {fund_code}")
-                continue
             fund_name = getattr(fund_info, "fund_name", fund_code)
             fund_type = getattr(fund_info, "fund_type", None)
 
             # 是否在风向标内
             in_wind_vane = False
-            if fund_type == "000":  # 指数
+            if fund_type == "000":
                 idx_code = getattr(fund_info, "index_code", None)
                 in_wind_vane = idx_code in wind_vane_indices if idx_code else False
             else:
                 in_wind_vane = fund_code in wind_vane_codes
-            if in_wind_vane:
-                logger.info(f"第三轮跳过：在风向标内 {fund_name}({fund_code})")
+            if not in_wind_vane:
+                logger.info(f"第二轮跳过：不在风向标内 {fund_name}({fund_code})")
                 continue
 
-            # 使用“预估收益率=当前收益率 + 当天估值涨跌”进行筛选（门槛：≤ -10% 才入候选）
+            # 预估收益率与止盈点
             current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
             estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
             estimated_profit_rate = current_profit_rate + estimated_change
-            if estimated_profit_rate > -10.0:
-                logger.info(f"第三轮跳过：当前预估收益率>-10.00% {fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%")
-                continue
+            volatility = _safe_float(getattr(fund_info, "volatility", None), 0.0)
+            stop_rate = max(volatility, 3.0)
 
-            # 修改：不再选择“最差”，而是加入所有满足条件的候选
-            third_round_candidates.append((asset, fund_info))
-            logger.info(f"第三轮候选：{fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%")
-
-        # 逐一处置所有候选
-        if len(third_round_candidates) > 0:
-            for asset, fund_info in third_round_candidates:
-                fund_code = asset.fund_code
-                fund_name = getattr(fund_info, "fund_name", fund_code)
+            # C类与非C类分流处理
+            is_c = "C" in str(fund_name)
+            if estimated_profit_rate > stop_rate:
                 try:
-                    # 统一处置阶段的指标口径：当前/估值/预估
-                    current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-                    estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
-                    estimated_profit_rate = current_profit_rate + estimated_change
-
                     shares = get_bank_shares(user, sub_account_no, fund_code)
-                    from src.service.交易管理.费率查询 import get_0_fee_shares
-                    zero_fee_shares = _safe_float(get_0_fee_shares(user, fund_code), 0.0)
-
-                    if "C" in str(fund_name) and zero_fee_shares > 0.0:
-                        logger.info(f"{user.customer_name} 第三轮处置：C类基金赎回0费率份额 {fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%")
-                        redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
+                    if is_c:
+                        zero_fee_shares = _safe_float(get_0_fee_shares(user, fund_code), 0.0)
+                        if zero_fee_shares > 10.0:
+                            logger.info(
+                                f"{user.customer_name} 第二轮止盈：在风向标且预估收益>{stop_rate:.2f}%，C类赎回0费率份额 "
+                                f"{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% 波动率={volatility:.2f} 0费率份额={zero_fee_shares:.2f}"
+                            )
+                            redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
+                            if redeem_ok:
+                                success_count += 1
+                            else:
+                                logger.info(f"{user.customer_name} 第二轮止盈未成功或被跳过：{fund_name}({fund_code})")
+                        else:
+                            logger.info(f"第二轮跳过：{fund_name}({fund_code}) 0费率份额≤10 预估={estimated_profit_rate:.2f}% 止盈点={stop_rate:.2f}%")
                     else:
-                        logger.info(f"{user.customer_name} 第三轮处置：优先赎回低费率份额 {fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%")
-                        redeem_ok = bool(sell_low_fee_shares(user, sub_account_no, fund_code, shares))
-
-                    if redeem_ok:
-                        success_count += 1
-                    else:
-                        logger.info(f"{user.customer_name} 第三轮处置未成功或被跳过：{fund_name}({fund_code})")
+                        low_fee_shares = _safe_float(get_low_fee_shares(user, fund_code), 0.0)
+                        if low_fee_shares > 10.0:
+                            logger.info(
+                                f"{user.customer_name} 第二轮止盈：在风向标且预估收益>{stop_rate:.2f}%，非C赎回低费率份额 "
+                                f"{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% 波动率={volatility:.2f} 低费率份额={low_fee_shares:.2f}"
+                            )
+                            redeem_ok = bool(sell_low_fee_shares(user, sub_account_no, fund_code, shares))
+                            if redeem_ok:
+                                success_count += 1
+                            else:
+                                logger.info(f"{user.customer_name} 第二轮止盈未成功或被跳过：{fund_name}({fund_code})")
+                        else:
+                            logger.info(f"第二轮跳过：{fund_name}({fund_code}) 低费率份额≤10 预估={estimated_profit_rate:.2f}% 止盈点={stop_rate:.2f}%")
                 except Exception as e:
-                    logger.error(f"第三轮处置失败：{fund_name}({fund_code}) 异常={e}")
-        else:
-            logger.info("第三轮未找到符合条件的亏损基金，跳过处置")
-    
-    logger.info(f"止盈完成：{user.customer_name} 成功执行 {success_count} 次赎回操作")
+                    logger.error(f"第二轮止盈失败：{fund_name}({fund_code}) 异常={e}")
+            else:
+                logger.info(f"第二轮跳过：{fund_name}({fund_code}) 预估收益率≤止盈点({stop_rate:.2f}%) 预估={estimated_profit_rate:.2f}%")
+
+    logger.info(f"止盈完成：{user.customer_name} 成功执行 {success_count} 次赎回操作（最多3个）")
     return True
 
 if __name__ == "__main__":

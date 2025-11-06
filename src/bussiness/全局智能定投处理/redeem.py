@@ -116,7 +116,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         
     on_way_transaction_count = asset_detail.on_way_transaction_count
     times = plan_assets // fund_amount
-    volatility = fund_info.volatility * 100
+    volatility = fund_info.volatility 
     
     # 获取当前收益率和估值增长率
     current_profit_rate = constant_profit_rate if constant_profit_rate is not None else 0.0

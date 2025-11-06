@@ -112,7 +112,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
         estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
         estimated_profit_rate = current_profit_rate + estimated_change
-        volatility = _safe_float(getattr(fund_info, "volatility", None), 0.0)
+        volatility = _safe_float(getattr(fund_info, "volatility", None), 0.0) 
         stop_rate = max(volatility, 3.0)
 
         # C类与非C类分流处理

@@ -91,7 +91,7 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
         volatility_result = get_fund_volatility_api(user, fund_info, 30)
         if volatility_result is not None:
             _, _, volatility = volatility_result
-            fund_info.volatility = volatility
+            fund_info.volatility = volatility * 100
             logger.debug(f"{fund_info.fund_name}成功获取基金30日波动率信息: {volatility}")
         else:
             logger.warning(f"{fund_info.fund_name}获取基金30日波动率信息失败: {fund_code}")
@@ -124,6 +124,6 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     return fund_info
 
 if __name__ == '__main__':
-    fund_info = get_all_fund_info(DEFAULT_USER, '110026')
+    fund_info = get_all_fund_info(DEFAULT_USER, '021740')
     # print(fund_info)
     pass

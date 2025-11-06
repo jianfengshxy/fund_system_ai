@@ -98,7 +98,7 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             except Exception:
                 logger.info(f"基金 {fund_name}{fund_code} 的 amount 解析失败，跳过")
                 continue
-            volatility = fund_info.volatility * 100
+            volatility = fund_info.volatility 
 
             # 收益率计算（与业务层一致）
             current_profit_rate = constant_profit_rate if constant_profit_rate is not None else 0.0

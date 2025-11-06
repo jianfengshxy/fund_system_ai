@@ -153,50 +153,15 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             logger.info(f"止盈趋势门槛检查：缺少用于对比的净值（estimated_value={est_nav}, prev_nav={prev_nav}, nav_5day_avg={nav5}），跳过止盈")
             return True
 
-        # 若净值不低于5日均值（>=），则跳过止盈；满足“低于”才继续后续逻辑
-        if not (est_val < nav5_val):
-            logger.info(f"止盈趋势门槛检查：{fund_name}({fund_code}) 当前对比净值 {est_val:.4f} ≥ 5日均值 {nav5_val:.4f}，不执行止盈")
-            return True
-
-        # 统一输出一次公共方法的对比日志（其True表示高于5日均值，此处仅用于日志）
-        _above_5day = nav5_gate(fund_info, fund_name, fund_code, logger)
-        if _above_5day:
-            logger.info(f"净值高于5日均值（公共方法判定）还在上升趋势，不执行止盈：{fund_name}({fund_code})")
-            return True
-
-        if fund_info.estimated_change != 0.0:
-            stop_rate = min(volatility, 5.0)   
-            logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}波动率{volatility},取两者小值stop_rate:{stop_rate}")
-        else:
-            stop_rate = 5.0
-            logger.info(f"估值变化为0，设置止盈点为5.0")
-            
-        if times > 15.0:
-            logger.info(f"{customer_name}计算止盈点：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},times:{times},实际止盈点:5.0")
-            stop_rate = 5.0
-            
-        #指数基金排名在90以上的时候，大于1%即止盈
-        # if fund_type == '000' and estimated_profit_rate > 1.0 and rank_100 > 90 and fund_info.estimated_change != 0.0:
-        #     logger.info(f"{customer_name}的止盈操作开始：指数基金{fund_name}{fund_code}预估收益{estimated_profit_rate},100日排名:{rank_100},实际止盈点:{stop_rate}")    
-        #     sell_low_fee_shares(user,sub_account_no,fund_code,shares)
-        #     return True
-        # else:
-        #     logger.info(f"指数基金条件检查：基金类型{fund_type}，预估收益{estimated_profit_rate}，排名{rank_100}，估值变化{fund_info.estimated_change}")
-            
-        #股票型基金
-        # if fund_type == '001' and estimated_profit_rate > 1.0 and rank_100 > 90 :
-        #     pass           
-        # #混合型基金
-        # if fund_type == '002' and estimated_profit_rate > 1.0 and rank_100 > 90 :
-        #     pass
-        #     return True       
+        # 更新：止盈点 = 波动率，但不低于 3.0（移除此前的 5% 上限与估值分支）
+        stop_rate = max(float(volatility), 3.0)
+        logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（不低于3.0）")
+ 
         if asset_detail.fund_type == 'a' and estimated_profit_rate > 3.0:
             logger.info(f"{customer_name}的止盈操作开始：QDII基金{fund_name}{fund_code}预估收益{estimated_profit_rate},赎回0费率份额,实际止盈点:3.0")
             sell_0_fee_shares(user,sub_account_no,fund_code,shares)
-        else:
-            logger.info(f"QDII基金条件检查：资产基金类型{asset_detail.fund_type}，预估收益{estimated_profit_rate}")
 
-        if estimated_profit_rate > stop_rate and estimated_profit_rate > 1.0:
+        if estimated_profit_rate > stop_rate:
             logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},实际止盈点:{stop_rate}")
             sell_low_fee_shares(user,sub_account_no,fund_code,shares)
             return True

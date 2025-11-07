@@ -108,6 +108,14 @@ def get_portfolio_details(portfolio_name):
 def handler(environ, start_response):
     return app(environ, start_response)
 
-if __name__ == "__main__":
-    # 监听所有网卡，在同一局域网内可用
-    app.run(host="0.0.0.0", port=9000, debug=True)
+
+if __name__ == '__main__':
+    # 为了本地测试，需要确保 templates 文件夹存在
+    if not os.path.exists('templates'):
+        os.makedirs('templates')
+    # 创建一个临时的 index.html 以便本地运行
+    if not os.path.exists('templates/index.html'):
+        with open('templates/index.html', 'w') as f:
+            f.write('<html><body><h1>请填充模板内容</h1></body></html>')
+            
+    app.run(debug=True, port=9000)

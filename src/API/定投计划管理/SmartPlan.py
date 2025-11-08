@@ -8,6 +8,7 @@ import hashlib
 import requests
 from urllib.parse import quote_plus
 from typing import Dict, Any, Optional, Union,List
+import uuid, secrets, time
 
 # 添加项目根目录到路径
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -813,7 +814,7 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
         "Password": md5_password,
         "amount": amount,
         "product": "EFund",
-        "orderNo": "",
+        "orderNo": f"ORD-{int(time.time()*1000)}-{secrets.token_hex(8)}",
         "lockDays": -1,
         "upgrade": True,
         "targetRetraceRate": "10%",
@@ -849,8 +850,8 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
         "Referer": "https://mpservice.com/fund46516ffab83642/release/pages/home/index",
         "gtoken": "ceaf-4a997831b1b3b90849f585f98ca6f30e",
         "clientInfo": "ttjj-ZTE 7534N-Android-11",
-        "traceparent": "00-0000000046aa4cae00000196719b333e-0000000000000000-01",
-        "tracestate": "pid=0xb01a105,taskid=0x651cc79",
+        "traceparent": f"00-{uuid.uuid4().hex}-{secrets.token_hex(8)}-01",
+        "tracestate": f"pid=0x{secrets.token_hex(4)},taskid=0x{secrets.token_hex(4)}",
         "Host": f'ibgapi{user.index}.1234567.com.cn',
         "User-Agent": "okhttp/3.12.13"
     }

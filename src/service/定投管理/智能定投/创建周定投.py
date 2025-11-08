@@ -100,7 +100,7 @@ def create_weekly_smart_investment_plans(
     days: Optional[List[int]] = None,
     sub_account_name: Optional[str] = None,
     strategy_type: int = 0,
-    throttle_sec: float = 2.0,   # 新增：相邻创建之间的节流秒数
+    throttle_sec: float = 5.0,   # 新增：相邻创建之间的节流秒数
     max_retries: int = 1         # 新增：遇到“重复提交”时的重试次数
 ) -> Dict[str, Any]:
     """

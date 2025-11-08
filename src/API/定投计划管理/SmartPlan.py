@@ -1077,25 +1077,197 @@ def updatePlanStatus(user, plan_id: str, buyStrategySwitch: bool):
         raise Exception(f'请求失败: {str(e)}')
 
 
+def updateRation(user, plan_id: str,
+                 amount: Optional[Union[str, float]] = None,
+                 period_type: Optional[int] = None,
+                 period_value: Optional[Union[str, int]] = None,
+                 pay_type: Optional[int] = None,
+                 targetRate: Optional[Union[str, float]] = None) -> ApiResponse[FundPlanDetail]:
+    """
+    更新定投计划信息（如金额、周期、扣款方式、止盈百分比）
+    - 在更新前必须获取计划详情；未填写的 amount/targetRate 用详情原值填充并下发
+    - 返回更新后的计划概要信息（Data.tips、amount、periodInfo、targetRate 等）
+    """
+    logger = logging.getLogger("SmartPlan")
 
-if __name__ == '__main__':
-    result = getFundPlanList("021490", DEFAULT_USER)
-    print(f"返回结果类型: {type(result)}")
-    print(f"返回结果长度: {len(result) if isinstance(result, list) else '非列表'}")
-    if result:
-        for i, plan in enumerate(result):
-            print(f"计划 {i+1}:")
-            print(f"  planId: {plan.planId}")
-            print(f"  fundCode: {plan.fundCode}")
-            print(f"  fundName: {plan.fundName}")
-            print(f"  planState: {plan.planState}")
-            print(f"  planType: {plan.planType}")
-            print(f"  amount: {plan.amount}")
-            print(f"  executedAmount: {plan.executedAmount}")
-            print(f"  executedTime: {plan.executedTime}")
-            print(f"  nextDeductDescription: {plan.nextDeductDescription}")
-            print(f"  subAccountNo: {plan.subAccountNo}")
-            print(f"  subAccountName: {plan.subAccountName}")
-            print("---")
-    else:
-        print("未找到任何计划数据")
+    # 先取当前计划详情，作为默认值来源
+    try:
+        detail_resp = getPlanDetailPro(plan_id, user)
+        if not getattr(detail_resp, "Success", False) or not getattr(detail_resp, "Data", None):
+            return ApiResponse(
+                Success=False,
+                ErrorCode="GET_PLAN_DETAIL_FAILED",
+                Data=None,
+                FirstError=getattr(detail_resp, "FirstError", "获取计划详情失败"),
+                DebugError=getattr(detail_resp, "DebugError", None),
+            )
+        rp = detail_resp.Data.rationPlan
+    except Exception as e:
+        return ApiResponse(
+            Success=False,
+            ErrorCode="GET_PLAN_DETAIL_EXCEPTION",
+            Data=None,
+            FirstError=str(e),
+            DebugError=None,
+        )
+
+    # 规范化格式化函数
+    def _fmt_amount_str(v: Optional[Union[str, float]]) -> Optional[str]:
+        if v is None:
+            return None
+        s = str(v).strip()
+        if s == "":
+            return None
+        if isinstance(v, (int, float)):
+            return f"{float(v):.2f}"
+        return f"{parse_amount(s):.2f}"
+
+    def _fmt_target_rate(v: Optional[Union[str, float]]) -> Optional[str]:
+        if v is None:
+            return None
+        s = str(v).strip()
+        if s == "":
+            return None
+        if isinstance(v, (int, float)):
+            return f"{float(v):g}%"
+        if s.endswith("%"):
+            return s
+        try:
+            num = float(s)
+            return f"{num:g}%"
+        except Exception:
+            return None
+
+    amount_provided = amount is not None and str(amount).strip() != ""
+    # 未提供 amount 时用详情原值（两位小数）填充
+    final_amount = _fmt_amount_str(amount) if amount_provided else f"{float(rp.amount):.2f}"
+
+    final_period_type = period_type if period_type is not None else parse_int(rp.periodType)
+    final_period_value = parse_int(period_value if period_value is not None else rp.periodValue)
+    final_pay_type = pay_type if pay_type is not None else parse_int(rp.payType)
+
+    # 未提供 targetRate 时用详情原值填充（若详情不存在则不下发）
+    final_target_rate = (
+        _fmt_target_rate(targetRate)
+        if (targetRate is not None and str(targetRate).strip() != "")
+        else (rp.targetRate if rp.targetRate else None)
+    )
+
+    url = f"https://ibgapi{user.index}.1234567.com.cn/ration/updateRation"
+    md5_password = hashlib.md5(user.password.encode("utf-8")).hexdigest()
+    body = {
+        "product": "EFund",
+        "ServerVersion": SERVER_VERSION,
+        "Password": md5_password,
+        "passportctoken": user.passport_ctoken,
+        "passportutoken": user.passport_utoken,
+        "deviceid": MOBILE_KEY,
+        "userid": user.customer_no,
+        "version": SERVER_VERSION,
+        "ctoken": user.c_token,
+        "uid": user.customer_no,
+        "PhoneType": PHONE_TYPE,
+        "MobileKey": MOBILE_KEY,
+        "UserId": user.customer_no,
+        "utoken": user.u_token,
+        "planId": plan_id,
+        "plat": "Android",
+        "UToken": user.u_token,
+        "passportid": user.passport_id,
+        "CToken": user.c_token,
+        "fundCode": rp.fundCode,
+        "periodType": final_period_type,
+        "periodValue": str(final_period_value),
+        "payType": final_pay_type,
+    }
+    # 始终携带 amount（用入参或原值）
+    body["amount"] = final_amount
+    # targetRate 若有入参或详情原值则携带
+    if final_target_rate is not None and str(final_target_rate).strip() != "":
+        body["targetRate"] = final_target_rate
+
+    headers = {
+        "Accept": "*/*",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json; charset=utf-8",
+        "Host": f"ibgapi{user.index}.1234567.com.cn",
+        "Referer": f"https://mpservice.com/fund46516ffab83642/release/pages/plan-detail/index?planId={plan_id}",
+        "User-Agent": "okhttp/3.12.13",
+        "clientInfo": "ttjj-ZTE 7534N-Android-11",
+        "gtoken": "ceaf-4a997831b1b3b90849f585f98ca6f30e",
+        "mp_instance_id": "14",
+    }
+
+    try:
+        resp = requests.post(url, json=body, headers=headers, verify=False)
+        resp.raise_for_status()
+        json_data = resp.json()
+        try:
+            data = json_data.get("Data")
+            if data is None:
+                if not json_data.get("Success", False):
+                    return ApiResponse(
+                        Success=json_data.get("Success", False),
+                        ErrorCode=json_data.get("ErrorCode"),
+                        Data=None,
+                        FirstError=json_data.get("FirstError"),
+                        DebugError=json_data.get("DebugError"),
+                    )
+                raise Exception("解析响应数据失败: Data字段为空")
+
+            amount_fallback = final_amount
+            plan = FundPlan(
+                planId=data.get("planId", plan_id),
+                fundCode=data.get("fundCode", rp.fundCode),
+                fundName=data.get("fundName", rp.fundName),
+                fundType="",
+                planState=str(data.get("planState", "1")),
+                planBusinessState=str(data.get("planBusinessState", "")),
+                pauseType=data.get("pauseType"),
+                planExtendStatus=str(data.get("planExtendStatus", "")),
+                planType=str(data.get("planConfigId", rp.planType)),
+                periodType=parse_int(data.get("periodType", final_period_type)),
+                periodValue=parse_int(data.get("periodValue", final_period_value)),
+                amount=parse_amount(str(data.get("amount", amount_fallback))),
+                bankAccountNo=data.get("bankAccountNo", rp.bankAccountNo or ""),
+                payType=parse_int(data.get("payType", final_pay_type)),
+                subAccountNo=data.get("subAccountNo", rp.subAccountNo or ""),
+                subAccountName=data.get("subAccountName", rp.subAccountName or ""),
+                currentDay=(data.get("applyTime", "") or "").split(" ")[0] if data.get("applyTime") else (rp.currentDay or ""),
+                buyStrategy=str(rp.buyStrategy or "1"),
+                redeemStrategy=str(rp.redeemStrategy or "1"),
+                planAssets=parse_amount(data.get("planAssets", rp.planAssets or 0)),
+                rationProfit=None,
+                totalProfit=None,
+                rationProfitRate=None,
+                totalProfitRate=None,
+                unitPrice=None,
+                targetRate=data.get("targetRate", final_target_rate),
+                retreatPercentage=None,
+                renewal=True,
+                redemptionWay=1,
+                planStrategyId="",
+                redeemLimit="1",
+            )
+
+            plan_detail = FundPlanDetail(
+                rationPlan=plan,
+                profitTrends=[],
+                couponDetail=data.get("couponInfo"),
+                shares=[],
+            )
+
+            return ApiResponse(
+                Success=json_data.get("Success", False),
+                ErrorCode=json_data.get("ErrorCode"),
+                Data=plan_detail,
+                FirstError=json_data.get("FirstError"),
+                DebugError=json_data.get("DebugError"),
+            )
+        except Exception as e:
+            logger.error(f"解析响应数据失败: {str(e)}")
+            raise Exception(f"解析响应数据失败: {str(e)}")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"请求失败: {str(e)}")
+        raise Exception(f"请求失败: {str(e)}")

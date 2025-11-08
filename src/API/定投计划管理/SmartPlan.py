@@ -1185,6 +1185,11 @@ def updateRation(user, plan_id: str,
     # targetRate 若有入参或详情原值则携带
     if final_target_rate is not None and str(final_target_rate).strip() != "":
         body["targetRate"] = final_target_rate
+        # 兼容：更新接口常用 targetProfitRate 字段
+        body["targetProfitRate"] = final_target_rate
+        # 补充回撤率（若详情存在），避免策略字段缺失导致止盈更新不生效
+        if rp.retreatPercentage:
+            body["targetRetraceRate"] = str(rp.retreatPercentage)
 
     headers = {
         "Accept": "*/*",

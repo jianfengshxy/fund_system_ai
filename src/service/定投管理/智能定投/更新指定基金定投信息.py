@@ -245,7 +245,9 @@ def update_smart_investment_info(
                             new_amount = vrp.amount
                             new_target_rate = vrp.targetRate
                             cond_amount = True if expected_amount is None else (abs((new_amount or 0.0) - expected_amount) < 1e-6)
-                            cond_target = True if expected_target is None else (str(new_target_rate or "").strip() == expected_target)
+                            # 归一化比较，避免 6% vs 6.0% 的格式差异
+                            norm_new_target = _normalize_target_rate(new_target_rate)
+                            cond_target = True if expected_target is None else (norm_new_target == expected_target)
                             verified = cond_amount and cond_target
                     except Exception as _ve:
                         logger.warning(f"[参数校验] 计划 {plan_id} 二次查询异常: {_ve}")
@@ -307,7 +309,7 @@ if __name__ == "__main__":
         fund_code="001595",
         buy_strategy_switch=False,
         amount="10000.0",            # 更新金额为 10000
-        profit_percent="10.0%",      # 更新目标止盈为 10%
+        profit_percent="6.0%",      # 更新目标止盈为 10%
         period_type_filter=3         # 仅更新月定投；传 None 则所有周期
     )
     logger.info(f"完成，共 {info['count']} 个匹配的定投计划（周期过滤={info.get('periodTypeFilter')}）")

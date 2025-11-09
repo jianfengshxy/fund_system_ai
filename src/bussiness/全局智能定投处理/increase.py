@@ -139,7 +139,8 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                   
     logger.info(f"当前计划:{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}的周期类型{period_type},period_type:{period_value},当前月的值:{day_of_month},当前资产:{plan_assets},计划类型:{plan_type}")
     # 5日均线守卫：对所有可回撤的买入/定投交易生效
-    gate_ok = bool(nav5_gate(fund_info, fund_name, fund_code, logger))
+    bypass_ma5 = (period_type != 3) and (0 < times <= 1)
+    gate_ok = True if bypass_ma5 else bool(nav5_gate(fund_info, fund_name, fund_code, logger))
     if not gate_ok:
         logger.info(f"5日均线守卫未通过（估算净值≤5日均值）：撤回当天所有可回撤交易。资产={plan_assets} 定投金额={fund_amount}")
         for i, trade in enumerate(trades):
@@ -151,7 +152,10 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                 logger.error(f"交易回撤失败: {e}")
         return True
     else:
-        logger.info(f"5日均线守卫通过（估算净值>5日均值）：继续执行后续判断。")
+        if bypass_ma5:
+            logger.info(f"触发口子：非月定投且 0<资产/定投金额≤1（{times}），跳过5日均线判断。")
+        else:
+            logger.info(f"5日均线守卫通过（估算净值>5日均值）：继续执行后续判断。")
 
     #判断是否是周定投延期交易
     if period_type == 1 and  period_value != day_of_week_number + 1:

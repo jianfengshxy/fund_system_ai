@@ -51,6 +51,7 @@ vars:
         EXTERNAL_HOST: ${vars.common.database.external_host}
         VPC_ID: ${vars.common.database.vpc_id}
         CIDR: ${vars.common.database.cidr}
+        BANK_BALANCE_THRESHOLD: "300000"
   # 自定义组合共享 payload（避免三处重复维护）
   custom_portfolio_payload: >
     {"account": "13918199137", "password": "sWX15706",
@@ -298,7 +299,7 @@ resources:
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "increase_13918199137_index_fund_portfolio"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "马丁格尔plus","total_budget": 1000000.0,"fund_type": "index"}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "Martin Garret plus","total_budget": 1000000.0,"fund_type": "index"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 53 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
@@ -663,7 +664,7 @@ resources:
         region: ${vars.common.props.region}
         timeout: ${vars.common.props.timeout}
         environmentVariables:
-          INDEX_FUNDS_SUB_ACCOUNT_NAME: "马丁格尔plus"
+          INDEX_FUNDS_SUB_ACCOUNT_NAME: "Martin Garret plus"
         triggers:
         - qualifier: ${vars.common.props.triggerConfig.qualifier}
           triggerType: ${vars.common.props.triggerConfig.triggerType}

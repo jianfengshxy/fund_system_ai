@@ -234,13 +234,13 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             logger.info(f"组合资产总和: {total_asset_value:.2f} 占总预算比例: {asset_budget_ratio:.2f}%")
         else:
             asset_budget_ratio = None
-            logger.info("未提供有效 total_budget，第三轮止损触发条件将跳过")
+            logger.info("未提供有效 total_budget，第三轮止盈触发条件将跳过")
     except Exception as e:
         asset_budget_ratio = None
-        logger.warning(f"计算持仓占比失败，第三轮止损触发条件跳过：异常={e}")
+        logger.warning(f"计算持仓占比失败，第三轮止盈触发条件跳过：异常={e}")
 
     if asset_budget_ratio is not None and asset_budget_ratio > 80.0:
-        logger.info("满足第三轮触发条件：持仓比率>80%，不在风向标且预估收益率<-10%的基金执行止损")
+        logger.info("满足第三轮触发条件：持仓比率>80%，指数止盈点3%，非指数5%（分别赎回C类0费率与非C低费率份额）")
         for asset in user_assets:
             fund_code = asset.fund_code
             fund_info = get_all_fund_info(user, fund_code)
@@ -251,50 +251,40 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             fund_name = getattr(fund_info, "fund_name", fund_code)
             fund_type = getattr(fund_info, "fund_type", None)
 
-            # 是否在风向标内（指数用 index_code，非指数用 fund_code）
-            in_wind_vane = False
-            if fund_type == "000":
-                idx_code = getattr(fund_info, "index_code", None)
-                in_wind_vane = idx_code in wind_vane_indices if idx_code else False
-            else:
-                in_wind_vane = fund_code in wind_vane_codes
-
-            if in_wind_vane:
-                logger.info(f"第三轮跳过：在风向标内 {fund_name}({fund_code})")
-                continue
-
             current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
             estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
             estimated_profit_rate = current_profit_rate + estimated_change
 
-            # 仅止损预估收益率<-10%的基金
-            if estimated_profit_rate >= -10.0:
-                logger.info(f"第三轮跳过：预估收益率≥-10.00% {fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%")
-                continue
+            # 指数基金3%，非指数5%
+            threshold = 3.0 if fund_type == "000" else 5.0
 
-            # C类与非C类分流：C赎回0费率；非C赎回低费率（第三轮不强制 >10 阈值，赎回函数会在份额为0时跳过）
             is_c = "C" in str(fund_name)
-            try:
-                shares = get_bank_shares(user, sub_account_no, fund_code)
-                if is_c:
-                    logger.info(
-                        f"{user.customer_name} 第三轮止损：不在风向标且预估收益<-10%，C类赎回0费率份额 "
-                        f"{fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%"
-                    )
-                    redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
-                else:
-                    logger.info(
-                        f"{user.customer_name} 第三轮止损：不在风向标且预估收益<-10%，非C赎回低费率份额 "
-                        f"{fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%"
-                    )
-                    redeem_ok = bool(sell_low_fee_shares(user, sub_account_no, fund_code, shares))
+            if estimated_profit_rate > threshold:
+                try:
+                    shares = get_bank_shares(user, sub_account_no, fund_code)
+                    if is_c:
+                        logger.info(
+                            f"{user.customer_name} 第三轮止盈：重仓且预估收益>{threshold:.2f}%，C类赎回0费率份额 "
+                            f"{fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%"
+                        )
+                        redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
+                    else:
+                        logger.info(
+                            f"{user.customer_name} 第三轮止盈：重仓且预估收益>{threshold:.2f}%，非C赎回低费率份额 "
+                            f"{fund_name}({fund_code}) 当前={current_profit_rate:.2f}% 估值={estimated_change:.2f}% 预估={estimated_profit_rate:.2f}%"
+                        )
+                        redeem_ok = bool(sell_low_fee_shares(user, sub_account_no, fund_code, shares))
 
-                if redeem_ok:
-                    success_count += 1
-                else:
-                    logger.info(f"{user.customer_name} 第三轮止损未成功或被跳过：{fund_name}({fund_code})")
-            except Exception as e:
-                logger.error(f"第三轮止损失败：{fund_name}({fund_code}) 异常={e}")
+                    if redeem_ok:
+                        success_count += 1
+                    else:
+                        logger.info(f"{user.customer_name} 第三轮止盈未成功或被跳过：{fund_name}({fund_code})")
+                except Exception as e:
+                    logger.error(f"第三轮止盈失败：{fund_name}({fund_code}) 异常={e}")
+            else:
+                logger.info(
+                    f"第三轮跳过：{fund_name}({fund_code}) 预估收益率≤止盈点({threshold:.2f}%) 预估={estimated_profit_rate:.2f}%"
+                )
     else:
         logger.info("第三轮未触发：持仓比率≤80% 或预算未设置")
 

@@ -281,6 +281,37 @@ user_data = {
 DEFAULT_USER = User.from_dict(user_data)
 DEFAULT_USER.max_hqb_bank = DEFAULT_HQB_BANK
 
+# 获取用户对象
+class _LazyConst:
+    def __init__(self, loader):
+        self._loader = loader
+        self._value = None
+        self._loaded = False
+
+    def value(self):
+        if not self._loaded:
+            self._value = self._loader()
+            self._loaded = True
+        return self._value
+
+    def __getattr__(self, name):
+        return getattr(self.value(), name)
+
+    def __repr__(self):
+        return repr(self.value())
+
+    def __str__(self):
+        return str(self.value())
+
+def _load_qiu_xiaoyu():
+    from src.service.用户管理.用户信息 import get_user_all_info
+    return get_user_all_info("13918797997", "Zj951103")
+
+# 模块级“常量”：惰性加载，使用/打印时才真正获取用户信息
+QIU_XIAOYU = _LazyConst(_load_qiu_xiaoyu)
+
 if __name__ == '__main__':
+    # 运行脚本时打印常量的实际值
+    print(QIU_XIAOYU)
     print(DEFAULT_USER)
-    print(DEFAULT_FUND_PLAN_DETAIL)
+    # print(DEFAULT_FUND_PLAN_DETAIL)

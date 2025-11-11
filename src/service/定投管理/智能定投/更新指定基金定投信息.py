@@ -307,7 +307,7 @@ if __name__ == "__main__":
     info = update_smart_investment_info(
         user=DEFAULT_USER,
         fund_code="001595",
-        buy_strategy_switch=False,
+        buy_strategy_switch=True,
         amount="10000.0",            # 更新金额为 10000
         profit_percent="6.0%",      # 更新目标止盈为 10%
         period_type_filter=3         # 仅更新月定投；传 None 则所有周期

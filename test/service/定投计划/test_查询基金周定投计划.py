@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO)
 
 def test_get_existing_weekly_day_map():
     user = DEFAULT_USER
-    fund_code = "001595"  # 示例：天弘中证银行ETF联接C
+    fund_code = "011707"  # 示例：天弘中证银行ETF联接C
     plan_list = getFundPlanList(fund_code, user) or []
     print(f"基金 {fund_code} 计划列表数量: {len(plan_list)}")
 

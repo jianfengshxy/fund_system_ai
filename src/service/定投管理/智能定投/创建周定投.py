@@ -230,8 +230,8 @@ if __name__ == "__main__":
     # 示例：为指定基金创建周一到周五的周定投，统一金额 1000.0
     info = create_weekly_smart_investment_plans(
         user=DEFAULT_USER,
-        fund_code="002112",
-        amount="1000.0",
+        fund_code="011707",
+        amount="10000.0",
         days=[1, 2, 3, 4, 5],
         sub_account_name=None,  # 可传如："目标止盈定投001595"
         strategy_type=0

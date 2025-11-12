@@ -95,14 +95,19 @@ def super_transfer(user: User, sub_account_no: str, fund_code: str, fund_amount:
             if data is not None:
                 if "JumpParams" in data:
                     jump_params = data["JumpParams"]
-                    busin_serial_no = jump_params.get("BusinSerialNo")
-                    business_type = jump_params.get("BusinessType")
+                    # 修复：JumpParams 可能为 None，做字典类型检查
+                    if isinstance(jump_params, dict):
+                        busin_serial_no = jump_params.get("BusinSerialNo")
+                        business_type = jump_params.get("BusinessType")
+                    else:
+                        busin_serial_no = None
+                        business_type = None
                 apply_workday = data.get("ApplyWorkDay", "")
                 amount = data.get("ApplyAmount", "")
                 status = data.get("Status", "")
                 show_com_prop = data.get("ShowComProp", "")
         
-        result = TradeResult(busin_serial_no, business_type, apply_workday, amount, status, show_com_prop, fund_code)
+        result = TradeResult(busin_serial_no, business_type, apply_workday, amount, status, show_com_prop, fund_code, raw=response_data)
         logger.info(f"super_transfer的结果: {result}")
         return result
     except requests.exceptions.RequestException as e:
@@ -187,37 +192,39 @@ def hqbMakeRedemption(user: User, sub_account_no: str, fund_code: str, fund_amou
         if response_data is not None and "Data" in response_data:
             data = response_data["Data"]
             if data is not None:
-                # 解析响应内容
+                # 解析响应内容（失败场景字段可能为 None）
                 pred_info = data.get("PredInfo", "")
                 apply_workday = data.get("ApplyWorkDay", "")
                 amount = data.get("ApplyAmount", "")
-                status = data.get("Status", "")
+                status = data.get("Status", 0)
                 busin_serial_no = None
                 business_type = None
                 show_com_prop = None
                 
-                if "JumpParams" in data:
-                    jump_params = data["JumpParams"]
+                jump_params = data.get("JumpParams")
+                # 修复：JumpParams 可能为 None
+                if isinstance(jump_params, dict):
                     busin_serial_no = jump_params.get("BusinSerialNo")
                     business_type = jump_params.get("BusinessType")
                 
-                result = TradeResult(busin_serial_no, business_type, apply_workday, amount, status, show_com_prop, fund_code)
+                result = TradeResult(
+                    busin_serial_no, business_type, apply_workday, amount, status, show_com_prop, fund_code,
+                    raw=response_data
+                )
                 logger.info(f"货币基金赎回结果: {result}")
                 return result
             else:
-                # 处理响应中未返回Data的情况
                 logger.error("赎回响应中未返回Data")
-                return TradeResult(None, None, None, None, None, None, fund_code)
+                return TradeResult(None, None, None, None, 0, None, fund_code, raw=response_data)
         else:
-            # 处理响应数据不完整的情况
             logger.error("赎回响应数据不完整")
-            return TradeResult(None, None, None, None, None, None, fund_code)
+            return TradeResult(None, None, None, None, 0, None, fund_code, raw=response_data)
     except requests.exceptions.RequestException as e:
         logger.error(f"请求失败: {str(e)}")
-        return TradeResult(None, None, None, None, None, None, fund_code)
+        return TradeResult(None, None, None, None, 0, None, fund_code)
     except Exception as e:
         logger.error(f"货币基金赎回失败: {str(e)}")
-        return TradeResult(None, None, None, None, None, None, fund_code)
+        return TradeResult(None, None, None, None, 0, None, fund_code)
 
 
 def SFT1Transfer(user: User, sub_account_no: str, fund_code: str, fund_amount: float, share_id: str) -> Optional[TradeResult]:
@@ -295,35 +302,37 @@ def SFT1Transfer(user: User, sub_account_no: str, fund_code: str, fund_amount: f
         if response_data is not None and "Data" in response_data:
             data = response_data["Data"]
             if data is not None:
-                # 解析响应内容
+                # 解析响应内容（失败场景字段可能为 None）
                 apply_workday = data.get("ApplyWorkDay", "")
                 amount = data.get("ApplyAmount", "")
-                status = data.get("Status", "")
+                status = data.get("Status", 0)
                 busin_serial_no = None
                 business_type = None
                 show_com_prop = None
                 
-                if "JumpParams" in data:
-                    jump_params = data["JumpParams"]
+                jump_params = data.get("JumpParams")
+                # 修复：JumpParams 可能为 None
+                if isinstance(jump_params, dict):
                     busin_serial_no = jump_params.get("BusinSerialNo")
                     business_type = jump_params.get("BusinessType")
                 
-                result = TradeResult(busin_serial_no, business_type, apply_workday, amount, status, show_com_prop, fund_code)
+                result = TradeResult(
+                    busin_serial_no, business_type, apply_workday, amount, status, show_com_prop, fund_code,
+                    raw=response_data
+                )
                 logger.info(f"SFT1转换L2结果: {result}")
                 return result
             else:
-                # 处理响应中未返回Data的情况
                 logger.error("SFT1转换L2响应中未返回Data")
-                return TradeResult(None, None, None, None, None, None, fund_code)
+                return TradeResult(None, None, None, None, 0, None, fund_code, raw=response_data)
         else:
-            # 处理响应数据不完整的情况
             logger.error("SFT1转换L2响应数据不完整")
-            return TradeResult(None, None, None, None, None, None, fund_code)
+            return TradeResult(None, None, None, None, 0, None, fund_code, raw=response_data)
     except requests.exceptions.RequestException as e:
         logger.error(f"请求失败: {str(e)}")
-        return TradeResult(None, None, None, None, None, None, fund_code)
+        return TradeResult(None, None, None, None, 0, None, fund_code)
     except Exception as e:
         logger.error(f"SFT1转换L2失败: {str(e)}")
-        return TradeResult(None, None, None, None, None, None, fund_code)
+        return TradeResult(None, None, None, None, 0, None, fund_code)
 
 

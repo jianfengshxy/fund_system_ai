@@ -741,7 +741,8 @@ def operateRation(user, plan_id: str, operation: str) -> ApiResponse[FundPlanDet
 
 
 def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int = 4, 
-                 period_value: str = "1",sub_account_name = None,strategy_type: int = 0) -> ApiResponse[FundPlan]:
+                 period_value: str = "1", sub_account_name = None, strategy_type: int = 0,
+                 target_profit_rate: Optional[Union[str, float, int]] = None) -> ApiResponse[FundPlan]:
     """
     创建基金定投计划V3版本
     Args:
@@ -752,6 +753,7 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
         period_value: 定投周期值
         strategy_type: 策略类型 (0: 目标止盈定投)
         sub_account_name: 子账户名称，可选参数
+        target_profit_rate: 目标止盈百分比，支持 0.1/10/'10%'/None 等格式，None 默认 10%
     Returns:
         ApiResponse[FundPlan]: 定投计划创建结果
     """
@@ -791,6 +793,26 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
     if sub_account_name is not None:
         sub_account_no = getSubAccountNoByName(user, sub_account_name)
 
+    # 规范化目标止盈率
+    def _fmt_target_rate(v: Optional[Union[str, float, int]]) -> str:
+        try:
+            if v is None:
+                return "10%"
+            if isinstance(v, (int, float)):
+                val = float(v)
+                val = val * 100 if val <= 1 else val
+                return f"{val:g}%"
+            s = str(v).strip()
+            if s.endswith("%"):
+                return s
+            num = float(s)
+            num = num * 100 if num <= 1 else num
+            return f"{num:g}%"
+        except Exception:
+            return "10%"
+
+    target_profit_rate_str = _fmt_target_rate(target_profit_rate)
+
     # 构建请求体，添加安全检查
     bank_acct_no = user.max_hqb_bank.AccountNo if hasattr(user.max_hqb_bank, 'AccountNo') else 'Not Available'
     body = {
@@ -808,7 +830,7 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
         "MobileKey": "15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me",
         "utoken": user.u_token,
         "isCurWorkdayEffect": False,
-        "targetProfitRate": "5%",
+        "targetProfitRate": target_profit_rate_str,
         "plat": "Android",
         "CToken": user.c_token,
         "Password": md5_password,
@@ -922,7 +944,7 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
             renewal=True,
             redemptionWay=1,
             planStrategyId='',
-         
+            
             redeemLimit='1'
         )
         

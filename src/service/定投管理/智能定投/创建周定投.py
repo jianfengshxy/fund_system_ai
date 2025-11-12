@@ -2,7 +2,7 @@
 import os
 import sys
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 import time
 
 # 动态注入项目根目录，避免 ModuleNotFoundError: No module named 'src'
@@ -100,6 +100,7 @@ def create_weekly_smart_investment_plans(
     days: Optional[List[int]] = None,
     sub_account_name: Optional[str] = None,
     strategy_type: int = 0,
+    target_profit_rate: Optional[Union[str, float, int]] = None,
     throttle_sec: float = 5.0,   # 新增：相邻创建之间的节流秒数
     max_retries: int = 1         # 新增：遇到“重复提交”时的重试次数
 ) -> Dict[str, Any]:
@@ -158,7 +159,8 @@ def create_weekly_smart_investment_plans(
                     period_type=1,
                     period_value=str(day),
                     sub_account_name=sub_account_name,
-                    strategy_type=strategy_type
+                    strategy_type=strategy_type,
+                    target_profit_rate=target_profit_rate
                 )
                 ok = getattr(resp, "Success", False)
                 plan_id = getattr(resp.Data, "planId", None) if ok and getattr(resp, "Data", None) else None
@@ -227,14 +229,14 @@ def create_weekly_smart_investment_plans(
 
 
 if __name__ == "__main__":
-    # 示例：为指定基金创建周一到周五的周定投，统一金额 1000.0
     info = create_weekly_smart_investment_plans(
         user=DEFAULT_USER,
-        fund_code="002112",
-        amount="1000.0",
+        fund_code="011707",
+        amount="10000.0",
         days=[1, 2, 3, 4, 5],
-        sub_account_name=None,  # 可传如："目标止盈定投001595"
-        strategy_type=0
+        sub_account_name=None,
+        strategy_type=0,
+        target_profit_rate="10%"
     )
     print(f"基金 {info['fundCode']} 周定投创建结果：")
     for r in info["results"]:

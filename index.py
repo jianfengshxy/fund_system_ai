@@ -23,7 +23,7 @@ from src.bussiness.全局智能定投处理.add_plan import add_plan
 # 添加组合定投管理函数的导入
 from src.bussiness.组合定投.指数型组合定投管理 import create_plan_by_group_for_index_funds,dissolve_plan_by_group_for_index_funds
 from src.domain.user.User import User
-from src.common.constant import DEFAULT_USER, DEFAULT_FUND_PLAN_DETAIL
+from src.common.constant import DEFAULT_USER, DEFAULT_FUND_PLAN_DETAIL, QIU_XIAOYU
 
 # 在现有导入语句后添加
 from src.bussiness.组合定投.主动型组合定投管理 import create_plan_by_group, dissolve_plan_by_group
@@ -235,11 +235,13 @@ def increase_jianlong(event, context):
 def increase_all_fund_plans(event, context):
     """为所有基金定投计划执行加仓"""
     increase_all_fund_plans_biz(DEFAULT_USER)
+    increase_all_fund_plans_biz(QIU_XIAOYU)
     pass
 
 def redeem_all_fund_plans(event, context):
     """为所有基金定投计划执行止盈"""
     redeem_all_fund_plans_biz(DEFAULT_USER)
+    redeem_all_fund_plans_biz(QIU_XIAOYU)
     pass
 
 def sync_fund_investment_indicators(event, context):
@@ -437,9 +439,9 @@ if __name__ == "__main__":
     # 根据需要调用 redeem 或 increase 函数
     # sync_fund_investment_indicators(None, None)
     # increase_all_fund_plans(None, None)
-    # redeem_all_fund_plans(None, None)
+    redeem_all_fund_plans(None, None)
     # increase(None, None)
-    redeem(None, None)
+    # redeem(None, None)
     # create_period_smart_investment(None, None)
     # dissolve_period_smart_investment(None, None)
     # create_period_smart_investment(None, None)

@@ -1,5 +1,7 @@
 import requests
 import logging
+from src.common.logger import get_logger
+from src.common.errors import RetriableError, ValidationError
 from src.common.constant import MOBILE_KEY, C_TOKEN, U_TOKEN, USER_ID, SERVER_VERSION
 
 def getFee(user, fund_code: str):
@@ -12,7 +14,10 @@ def getFee(user, fund_code: str):
     Returns:
         dict: 手续费相关信息，失败返回None
     """
-    logger = logging.getLogger("FeeMrg")
+    logger = get_logger("FeeMrg")
+    extra = {"account": getattr(user, "mobile_phone", None) or getattr(user, "account", None),
+             "action": "get_fee",
+             "fund_code": fund_code}
     url = f"https://tradeapilvs{user.index}.95021.com/Business/Rate/GetShareAndRedeemRateList"
     headers = {
         "Connection": "keep-alive",
@@ -40,10 +45,10 @@ def getFee(user, fund_code: str):
         if result.get("Success") and "Data" in result:
             return result["Data"]
         else:
-            logger.error(f"手续费查询失败: {result.get('FirstError') or result.get('ErrorMessage')}")
-            return None
+            logger.error(f"手续费查询失败: {result.get('FirstError') or result.get('ErrorMessage')}", extra=extra)
+            raise ValidationError(result.get('FirstError') or result.get('ErrorMessage') or 'API_FAIL')
     except Exception as e:
-        logger.error(f"手续费查询异常: {str(e)}")
-        return None
-
-
+        logger.error(f"手续费查询异常: {str(e)}", extra=extra)
+        if isinstance(e, requests.exceptions.RequestException):
+            raise RetriableError(str(e))
+        raise ValidationError(str(e))

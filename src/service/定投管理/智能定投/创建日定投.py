@@ -7,6 +7,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 import logging
+from src.common.logger import get_logger
 from typing import Optional, Union, List
 
 from src.domain.user.User import User
@@ -19,8 +20,7 @@ from src.API.定投计划管理.SmartPlan import (
 from src.common.constant import DEFAULT_USER
 
 
-logger = logging.getLogger("CreateDailyRation")
-logger.setLevel(logging.INFO)
+logger = get_logger("CreateDailyRation")
 
 
 def find_existing_daily_plans(user: User, fund_code: str) -> List[FundPlan]:
@@ -73,7 +73,7 @@ def create_daily_smart_investment(
     # 查重复：是否已存在日定投
     existing_daily = find_existing_daily_plans(user, fund_code)
     if existing_daily and not allow_duplicate:
-        logger.info(f"基金 {fund_code} 已存在日定投计划数: {len(existing_daily)}，跳过创建")
+        logger.info(f"基金 {fund_code} 已存在日定投计划数: {len(existing_daily)}，跳过创建", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "create_daily", "fund_code": fund_code})
         # 返回一个失败响应，表达“已存在”
         return ApiResponse(
             Success=False,
@@ -102,19 +102,16 @@ def create_daily_smart_investment(
         logger.info(
             f"创建成功: 计划ID={plan.planId}, 基金={plan.fundCode}-{plan.fundName}, "
             f"金额={plan.amount}, 周期={plan.periodType}({plan.periodValue}), 子账户={plan.subAccountName or ''}"
-        )
+        , extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "create_daily", "fund_code": fund_code})
     else:
-        logger.error(f"创建失败: ErrorCode={getattr(resp, 'ErrorCode', '')}, FirstError={getattr(resp, 'FirstError', '')}")
+        logger.error(f"创建失败: ErrorCode={getattr(resp, 'ErrorCode', '')}, FirstError={getattr(resp, 'FirstError', '')}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "create_daily", "fund_code": fund_code})
 
     return resp
 
 
 if __name__ == "__main__":
     # 控制台日志输出
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-    if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
-        logger.addHandler(console_handler)
+    pass
 
     # 示例调用：按需替换 fund_code/amount/sub_account_name
     result = create_daily_smart_investment(

@@ -1,6 +1,7 @@
 import sys
 import os
 import logging
+from src.common.logger import get_logger
 import urllib.parse
 import urllib3
 import warnings
@@ -58,7 +59,8 @@ def getCashBagAvailableShareV2(user) -> List[HqbBank]:
         'CToken': user.c_token
     }
     
-    logger = logging.getLogger("CashBag")
+    logger = get_logger("CashBag")
+    extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "getCashBagAvailableShareV2"}
     try:
         response = requests.post(url, data=data, headers=headers, verify=False)
         response.raise_for_status()
@@ -66,12 +68,12 @@ def getCashBagAvailableShareV2(user) -> List[HqbBank]:
         # logger.info(f"响应数据: {json_data}")
         
         if not json_data.get('Success', False):
-            logger.error(f"请求失败 for user {user.customer_no}: {json_data.get('FirstError')} Full response: {json_data}")
+            logger.error(f"请求失败 for user {user.customer_no}: {json_data.get('FirstError')} Full response: {json_data}", extra=extra)
             return []
 
         data = json_data.get('Data')
         if data is None:
-            logger.error(f'解析响应数据失败: Data字段为空 for user {user.customer_no} Full response: {json_data}')
+            logger.error(f'解析响应数据失败: Data字段为空 for user {user.customer_no} Full response: {json_data}', extra=extra)
             return []
 
         hqb_banks = []
@@ -80,7 +82,7 @@ def getCashBagAvailableShareV2(user) -> List[HqbBank]:
                 hqb_bank = HqbBank.from_dict(bank_data)
                 hqb_banks.append(hqb_bank)
             except Exception as e:
-                logger.error(f"解析银行卡数据失败 for user {user.customer_no}: {str(e)}, 数据: {bank_data}")
+                logger.error(f"解析银行卡数据失败 for user {user.customer_no}: {str(e)}, 数据: {bank_data}", extra=extra)
                 continue
         
         # 按照余额从高到低排序
@@ -90,8 +92,8 @@ def getCashBagAvailableShareV2(user) -> List[HqbBank]:
         return hqb_banks
             
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败 for user {user.customer_no}: {str(e)}")
+        logger.error(f"请求失败 for user {user.customer_no}: {str(e)}", extra=extra)
         return []
     except Exception as e:
-        logger.error(f"处理响应数据失败 for user {user.customer_no}: {str(e)}")
+        logger.error(f"处理响应数据失败 for user {user.customer_no}: {str(e)}", extra=extra)
         return []

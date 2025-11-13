@@ -11,8 +11,9 @@ if PROJECT_ROOT not in sys.path:
 
 from src.API.交易管理.trade import get_trades_list
 from src.domain.user.User import User
+from src.common.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def _parse_dt(s: Optional[str]) -> Optional[datetime.datetime]:
     if not s:

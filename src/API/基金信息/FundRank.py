@@ -1,5 +1,7 @@
 from typing import Optional, Tuple
 import logging
+from src.common.logger import get_logger
+from src.common.errors import RetriableError, ValidationError
 import requests
 import urllib3
 import numpy as np
@@ -57,7 +59,8 @@ def get_nav_rank(user, fund_info: FundInfo, N: int, nav: Optional[float] = None)
         'version': SERVER_VERSION
     }
     
-    logger = logging.getLogger("FundRank")
+    logger = get_logger("FundRank")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_nav_rank", "fund_code": fund_info.fund_code}
     try:
         response = requests.post(url, headers=headers, data=data, verify=False, timeout=10)
         response.raise_for_status()
@@ -67,19 +70,19 @@ def get_nav_rank(user, fund_info: FundInfo, N: int, nav: Optional[float] = None)
         
         if not json_data.get('Success', False):
             error_msg = json_data.get('ErrMsg', '未知错误')
-            logger.error(f"获取基金净值历史数据失败: {error_msg}")
-            return None
+            logger.error(f"获取基金净值历史数据失败: {error_msg}", extra=extra)
+            raise ValidationError(error_msg)
             
         datas = json_data.get('Datas', [])
         if not datas:
-            logger.error("未找到基金净值历史数据")
-            return None
+            logger.error("未找到基金净值历史数据", extra=extra)
+            raise ValidationError("DATA_EMPTY")
             
         try:
             # 如果未提供nav，使用最新一天的净值
             if nav is None:
                 nav = float(datas[0].get('DWJZ', 0))
-                logger.debug(f"基金{fund_info.fund_code}{fund_info.fund_name}，使用最新净值：{nav}")
+                logger.debug(f"基金{fund_info.fund_code}{fund_info.fund_name}，使用最新净值：{nav}", extra=extra)
             
             # 获取所有净值并排序
             sorted_navs = [float(data.get('DWJZ', 0)) for data in datas if data.get('DWJZ') is not None]
@@ -93,15 +96,15 @@ def get_nav_rank(user, fund_info: FundInfo, N: int, nav: Optional[float] = None)
             return rank
             
         except (ValueError, TypeError, IndexError) as e:
-            logger.error(f"解析净值数据失败: {str(e)}")
-            return None
+            logger.error(f"解析净值数据失败: {str(e)}", extra=extra)
+            raise ValidationError(str(e))
             
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}")
-        return None
+        logger.error(f"请求失败: {str(e)}", extra=extra)
+        raise RetriableError(str(e))
     except Exception as e:
-        logger.error(f"处理过程发生异常: {str(e)}")
-        return None
+        logger.error(f"处理过程发生异常: {str(e)}", extra=extra)
+        raise ValidationError(str(e))
 
 
 def get_fund_volatility(user, fund_info: FundInfo, N: int) -> Optional[Tuple[float, float, float]]:
@@ -151,7 +154,8 @@ def get_fund_volatility(user, fund_info: FundInfo, N: int) -> Optional[Tuple[flo
         'version': SERVER_VERSION
     }
     
-    logger = logging.getLogger("FundRank")
+    logger = get_logger("FundRank")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_volatility", "fund_code": fund_info.fund_code}
     try:
         response = requests.post(url, headers=headers, data=data, verify=False, timeout=10)
         response.raise_for_status()
@@ -161,13 +165,13 @@ def get_fund_volatility(user, fund_info: FundInfo, N: int) -> Optional[Tuple[flo
         
         if not json_data.get('Success', False):
             error_msg = json_data.get('ErrMsg', '未知错误')
-            logger.error(f"获取基金净值历史数据失败: {error_msg}")
-            return None
+            logger.error(f"获取基金净值历史数据失败: {error_msg}", extra=extra)
+            raise ValidationError(error_msg)
             
         datas = json_data.get('Datas', [])
         if not datas:
-            logger.error("未找到基金净值历史数据")
-            return None
+            logger.error("未找到基金净值历史数据", extra=extra)
+            raise ValidationError("DATA_EMPTY")
             
         try:
             # 获取所有净值
@@ -186,23 +190,22 @@ def get_fund_volatility(user, fund_info: FundInfo, N: int) -> Optional[Tuple[flo
                 else:
                     # 计算波动率（标准差）
                     volatility = np.sqrt(variance)
-                    logger.debug(f"基金{fund_info.fund_code}{fund_info.fund_name}，"
-                              f"平均净值：{mean:.4f}，方差：{variance:.4f}，波动率：{volatility:.4f}")
+                    logger.debug(f"基金{fund_info.fund_code}{fund_info.fund_name}，平均净值：{mean:.4f}，方差：{variance:.4f}，波动率：{volatility:.4f}", extra=extra)
                     return mean, variance, volatility
             else:
-                logger.error("数据不足，无法计算波动率")
-                return None
+                logger.error("数据不足，无法计算波动率", extra=extra)
+                raise ValidationError("DATA_INSUFFICIENT")
                 
         except (ValueError, TypeError, IndexError) as e:
-            logger.error(f"解析净值数据失败: {str(e)}")
-            return None
+            logger.error(f"解析净值数据失败: {str(e)}", extra=extra)
+            raise ValidationError(str(e))
             
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}")
-        return None
+        logger.error(f"请求失败: {str(e)}", extra=extra)
+        raise RetriableError(str(e))
     except Exception as e:
-        logger.error(f"处理过程发生异常: {str(e)}")
-        return None
+        logger.error(f"处理过程发生异常: {str(e)}", extra=extra)
+        raise ValidationError(str(e))
 
 
 def get_fund_growth_rate(fund_info: FundInfo, period_type: str) -> tuple[float, int, int]:
@@ -220,7 +223,7 @@ def get_fund_growth_rate(fund_info: FundInfo, period_type: str) -> tuple[float, 
     """
     fund_code = fund_info.fund_code
     gszzl = fund_info.estimated_change
-    logger = logging.getLogger("FundRank")
+    logger = get_logger("FundRank")
  
     def safe_float(value, default=0.0) -> float:
         """安全地将值转换为浮点数"""

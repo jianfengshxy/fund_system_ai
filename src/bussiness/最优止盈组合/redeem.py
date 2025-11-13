@@ -1,4 +1,5 @@
 import logging
+from src.common.logger import get_logger
 from random import vonmisesvariate
 import re
 from typing import Optional
@@ -53,12 +54,7 @@ from src.common.constant import DEFAULT_USER
 from src.service.定投管理.组合定投.组合定投管理 import dissolve_period_investment_by_group
 from src.service.用户管理.用户信息 import get_user_all_info
 
-logging.basicConfig(
-    stream=sys.stdout,  # 添加此行
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 #第一列：手机号 account
 # 第二列：密码 password
@@ -97,13 +93,13 @@ def redeem(user: User, sub_account_name: str, total_budget: Optional[float] = No
     - 统一参数处理（含 total_budget 的缺省处理）
     - 委托 service 层算法实现（完整版：风向标跳过 + 多触发条件 + 余额兜底）
     """
-    logger.info(f"业务层止盈调用：用户={getattr(user, 'customer_name', 'unknown')}, 组合={sub_account_name}")
-    logger.info("将使用服务层风向标止盈策略（完整版）")
+    logger.info(f"业务层止盈调用：用户={getattr(user, 'customer_name', 'unknown')}, 组合={sub_account_name}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_redeem"})
+    logger.info("将使用服务层风向标止盈策略（完整版）", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_redeem"})
     try:
         from src.service.加仓风向标组合算法.加仓风向标止盈 import redeem_funds as service_redeem_funds
         return service_redeem_funds(user, sub_account_name, total_budget)
     except Exception as e:
-        logger.error(f"业务层止盈委托失败: {e}")
+        logger.error(f"业务层止盈委托失败: {e}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_redeem"})
         return False
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import logging
+from src.common.logger import get_logger
 from typing import Dict, List, Optional, Set
 
 # 将项目根目录加入 sys.path，支持直接运行此脚本
@@ -15,8 +16,7 @@ from src.API.定投计划管理.SmartPlan import getFundPlanList, getPlanDetailP
 from src.domain.fund_plan.fund_plan import FundPlan
 from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
 
-logger = logging.getLogger("BatchMonthlyDissolve")
-logging.basicConfig(level=logging.INFO)
+logger = get_logger("BatchMonthlyDissolve")
 
 
 def get_existing_monthly_day_map(user: User, fund_code: str, sleep_sec: float = 0.15) -> Dict[int, FundPlan]:

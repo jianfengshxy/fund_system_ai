@@ -1,6 +1,7 @@
 import requests
 import json
 import logging
+from src.common.logger import get_logger
 import sys
 import os
 
@@ -18,6 +19,9 @@ from src.common.constant import DEFAULT_USER, MOBILE_KEY
 from src.API.交易管理.trade import get_trades_list
 from typing import Optional
 from src.API.交易管理.feeMrg import getFee
+from src.common.errors import RetriableError, ValidationError
+
+logger = get_logger(__name__)
 
 def get_0_fee_shares(user: User, fund_code: str) -> Optional[float]:
     """
@@ -26,14 +30,24 @@ def get_0_fee_shares(user: User, fund_code: str) -> Optional[float]:
     :param fund_code: 基金代码
     :return: 0费率份额，如果不存在则返回None
     """
-    result = getFee(user, fund_code)
+    try:
+        result = getFee(user, fund_code)
+    except RetriableError as e:
+        logger.warning(f"费率查询可重试: {e}", extra={"account": getattr(user, 'mobile_phone', None), "action": "get_0_fee", "fund_code": fund_code})
+        return 0.0
+    except ValidationError as e:
+        logger.error(f"费率查询解析错误: {e}", extra={"account": getattr(user, 'mobile_phone', None), "action": "get_0_fee", "fund_code": fund_code})
+        return 0.0
     if result is None or "RedeemShareAndRateList" not in result:
+        logger.warning("费率数据为空或无赎回列表", extra={"account": getattr(user, 'mobile_phone', None), "action": "get_0_fee", "fund_code": fund_code})
         return 0.0
 
     redeem_share_and_rate_list = result["RedeemShareAndRateList"]
     for item in redeem_share_and_rate_list:
         if item["Rate"] == 0.0:
-            return item["AvailableVol"]
+            v = item["AvailableVol"]
+            logger.info("查询到0费率份额", extra={"account": getattr(user, 'mobile_phone', None), "action": "get_0_fee", "fund_code": fund_code, "shares": v})
+            return v
     return 0.0
 
 def get_low_fee_shares(user: User, fund_code: str) -> Optional[float]:
@@ -43,7 +57,14 @@ def get_low_fee_shares(user: User, fund_code: str) -> Optional[float]:
     :param fund_code: 基金代码
     :return: 低费率份额，item["Rate"] != 1.5只和就是低费率份额
     """
-    result = getFee(user, fund_code)
+    try:
+        result = getFee(user, fund_code)
+    except RetriableError as e:
+        logger.warning(f"费率查询可重试: {e}", extra={"account": getattr(user, 'mobile_phone', None), "action": "get_low_fee", "fund_code": fund_code})
+        return 0.0
+    except ValidationError as e:
+        logger.error(f"费率查询解析错误: {e}", extra={"account": getattr(user, 'mobile_phone', None), "action": "get_low_fee", "fund_code": fund_code})
+        return 0.0
     if result is None or "RedeemShareAndRateList" not in result:
         return 0.0
     redeem_share_and_rate_list = result["RedeemShareAndRateList"]
@@ -51,6 +72,7 @@ def get_low_fee_shares(user: User, fund_code: str) -> Optional[float]:
     for item in redeem_share_and_rate_list:
         if item["Rate"] != 1.5:
             total += item["AvailableVol"]
+    logger.info("低费率份额汇总", extra={"account": getattr(user, 'mobile_phone', None), "action": "get_low_fee", "fund_code": fund_code, "shares": total})
     return total
 
 def get_usable_non_zero_fee_shares(user: User, fund_code: str) -> Optional[float]:
@@ -60,7 +82,14 @@ def get_usable_non_zero_fee_shares(user: User, fund_code: str) -> Optional[float
     :param fund_code: 基金代码
     :return: 可用非零费率份额
     """
-    result = getFee(user, fund_code)
+    try:
+        result = getFee(user, fund_code)
+    except RetriableError as e:
+        logger.warning(f"费率查询可重试: {e}", extra={"account": getattr(user, 'mobile_phone', None), "action": "get_non_zero_fee", "fund_code": fund_code})
+        return 0.0
+    except ValidationError as e:
+        logger.error(f"费率查询解析错误: {e}", extra={"account": getattr(user, 'mobile_phone', None), "action": "get_non_zero_fee", "fund_code": fund_code})
+        return 0.0
     if result is None or "RedeemShareAndRateList" not in result:
         return 0.0
 
@@ -79,5 +108,7 @@ def get_usable_non_zero_fee_shares(user: User, fund_code: str) -> Optional[float
     low_fee_shares = get_low_fee_shares(user, fund_code)
 
     # 返回最小值
-    return min(non_zero_fee_shares, zero_fee_shares)
+    usable = min(non_zero_fee_shares, zero_fee_shares)
+    logger.info("可用非零费率份额计算", extra={"account": getattr(user, 'mobile_phone', None), "action": "get_non_zero_fee", "fund_code": fund_code, "shares": usable})
+    return usable
   

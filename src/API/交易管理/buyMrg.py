@@ -11,6 +11,7 @@ if root_dir not in sys.path:
 import requests
 import json
 import logging
+from src.common.logger import get_logger
 import hashlib
 import random
 import time
@@ -21,6 +22,7 @@ from typing import List, Optional, Dict, Any
 from src.common.constant import MOBILE_KEY
 from src.API.工具.utils import get_fund_system_time_trade
 from src.common.errors import TradePasswordError  # 新增：密码错误异常
+from src.common.errors import RetriableError, ValidationError
 
 def _is_password_error_message(msg: str) -> bool:
     """根据返回文案判断是否为密码相关错误（保守匹配，避免误伤）。"""
@@ -41,13 +43,14 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
     Returns:
         Optional[TradeResult]: 交易结果，如果失败则返回None
     """
-    logger = logging.getLogger("BuyMrg")
+    logger = get_logger("BuyMrg")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "buy", "fund_code": fund_code, "sub_account_no": sub_account_no}
 
     # 获取交易ID（API前置依赖）
     trace_id = get_trace_id(user)
     if not trace_id:
-        logger.error("获取交易ID失败")
-        return None
+        logger.error("获取交易ID失败", extra=extra)
+        raise ValidationError("TRACE_ID_EMPTY")
 
     # 获取银行卡账号（请求必填字段）
     try:
@@ -56,7 +59,7 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
         logger.error(f"提交订单失败: 银行卡信息未设置。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}")
         return None
     bank_account_no = bank_card_info.AccountNo
-    logger.info(f"提交订单(API)，用户：{user.account}，基金代码：{fund_code}，购买金额：{amount}，银行账号：{bank_account_no}")
+    logger.info(f"提交订单(API)，用户：{user.account}，基金代码：{fund_code}，购买金额：{amount}，银行账号：{bank_account_no}", extra=extra)
 
     # 构建请求URL
     url = f"https://tradeapilvs{user.index}.1234567.com.cn/Trade/FundTrade/CommitOrder"
@@ -121,29 +124,29 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
                 None,   # show_com_prop
                 fund_code
             )
-            logger.info(f"提交订单成功: {trade_result}")
+            logger.info(f"提交订单成功: {trade_result}", extra=extra)
             time.sleep(1)
             return trade_result
         elif 'FirstError' in result:
             first_error = result.get('FirstError') or result.get('Message') or ""
             if _is_password_error_message(first_error):
-                logger.error(f"提交订单失败(疑似密码错误): {first_error}，立即终止流程")
+                logger.error(f"提交订单失败(疑似密码错误): {first_error}，立即终止流程", extra=extra)
                 raise TradePasswordError(first_error)
-            logger.error(f"提交订单失败: {first_error}")
-            return None
+            logger.error(f"提交订单失败: {first_error}", extra=extra)
+            raise ValidationError(first_error)
         else:
-            logger.error("提交订单失败: 未知错误")
-            return None
+            logger.error("提交订单失败: 未知错误", extra=extra)
+            raise ValidationError("UNKNOWN_ERROR")
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}")
-        return None
+        logger.error(f"请求失败: {str(e)}。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}", extra=extra)
+        raise RetriableError(str(e))
     except TradePasswordError as e:
         # 重要：不要吞掉密码错误，让上层立刻中止流程
-        logger.error(f"提交订单失败(密码错误)：{e}，向上抛出")
+        logger.error(f"提交订单失败(密码错误)：{e}，向上抛出", extra=extra)
         raise
     except Exception as e:
-        logger.error(f"提交订单失败: {str(e)}。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}")
-        return None
+        logger.error(f"提交订单失败: {str(e)}。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}", extra=extra)
+        raise ValidationError(str(e))
 
 
 def get_trace_id(user: User) -> Optional[str]:
@@ -154,7 +157,8 @@ def get_trace_id(user: User) -> Optional[str]:
     Returns:
         Optional[str]: 交易ID，如果失败则返回None
     """
-    logger = logging.getLogger("BuyMrg")
+    logger = get_logger("BuyMrg")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_trace_id"}
     
     url = f"https://tradeapilvs{user.index}.1234567.com.cn/Business/home/NoticeStayTrace"
     if not user.index:
@@ -189,11 +193,11 @@ def get_trace_id(user: User) -> Optional[str]:
             # logger.info(f"获取交易ID成功: {trace_id}")
             return trace_id
         else:
-            logger.error("获取交易ID失败")
-            return None
+            logger.error("获取交易ID失败", extra=extra)
+            raise ValidationError("TRACE_ID_EMPTY")
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}")
-        return None
+        logger.error(f"请求失败: {str(e)}", extra=extra)
+        raise RetriableError(str(e))
     except Exception as e:
-        logger.error(f"获取交易ID失败: {str(e)}")
-        return None
+        logger.error(f"获取交易ID失败: {str(e)}", extra=extra)
+        raise ValidationError(str(e))

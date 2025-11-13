@@ -1,6 +1,7 @@
 import sys
 import os
 import logging
+from src.common.logger import get_logger
 from time import sleep
 import urllib.parse
 import urllib3
@@ -31,12 +32,7 @@ from src.common.constant import (
 )
 
 # 配置logger
-logger = logging.getLogger("SmartPlan")
-logger.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+logger = get_logger("SmartPlan")
 
 
 def create_period_investment_by_group(user: User, sub_account_name: str, fund_code: str, amount: int, period_type: int = 4, period_value: int = 1):
@@ -63,7 +59,7 @@ def create_period_investment_by_group(user: User, sub_account_name: str, fund_co
         for plan in existing_plans:  # 直接遍历FundPlan对象列表
             if plan.subAccountName == sub_account_name:
                 # 如果已存在相同子账户名称的定投计划，返回错误信息
-                logger.info(f"基金 {plan.fundName} 在子账户 '{sub_account_name}' 中已存在定投计划")
+                logger.info(f"基金 {plan.fundName} 在子账户 '{sub_account_name}' 中已存在定投计划", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "fund_code": plan.fundCode, "action": "create_combo_plan"})
                 return None
     
     
@@ -101,13 +97,13 @@ def dissolve_period_investment_by_group(user: User, sub_account_name: str, fund_
                 target_plan = plan
                 break
     if target_plan is None:
-        logger.info(f"基金 {fund_code} 在子账户 '{sub_account_name}' 中未找到定投计划")
+        logger.info(f"基金 {fund_code} 在子账户 '{sub_account_name}' 中未找到定投计划", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "fund_code": fund_code, "action": "dissolve_combo_plan"})
         return None
     plan_assets = target_plan.planAssets
     if plan_assets is not None and plan_assets != 0.0:
-        logger.info(f"基金 {fund_code} 在子账户 '{sub_account_name}'资产不为空:{plan_assets}")
+        logger.info(f"基金 {fund_code} 在子账户 '{sub_account_name}'资产不为空:{plan_assets}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "fund_code": fund_code, "action": "dissolve_combo_plan"})
         return None
-    logger.info(f"基金 {target_plan.fundName} 在子账户 '{sub_account_name}'解散定投")
+    logger.info(f"基金 {target_plan.fundName} 在子账户 '{sub_account_name}'解散定投", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "fund_code": target_plan.fundCode, "action": "dissolve_combo_plan"})
     # 调用operateRation函数，硬编码operation="2"（解散）
     return operateRation(
         user=user,

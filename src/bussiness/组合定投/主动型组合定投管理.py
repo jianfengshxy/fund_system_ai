@@ -12,6 +12,7 @@
 
 import sys
 import os
+from src.common.logger import get_logger
 from time import sleep
 from typing import List, Optional
 
@@ -44,6 +45,10 @@ user_list = [
 
 
 def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float = 1000000.0,investment_amount:float = 10000.0):
+    logger = get_logger("ActivePortfolioPlan")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "sub_account_name": sub_account_name, "action": "active_portfolio"}
+    logger.info(f"开始处理用户 {user.customer_name or user.account} 的组合 '{sub_account_name}' 定投管理", extra=extra)
+    logger.info(f"预算金额: {budget:,.2f} 元", extra=extra)
     """
     主动型组合定投管理函数
     
@@ -104,6 +109,7 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
                 if target_group:
                     current_asset_value = float(target_group.total_amount or 0)
                     print(f"组合 '{sub_account_name}' 当前资产价值: {current_asset_value:,.2f} 元")
+                    logger.info(f"组合 '{sub_account_name}' 当前资产价值: {current_asset_value:,.2f} 元", extra=extra)
                     
                     try:
                         total_profit = float(target_group.total_profit or 0)
@@ -165,6 +171,7 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
         
         # 调用加仓风向标函数，获取推荐基金
         print("获取加仓风向标数据...")
+        logger.info("获取加仓风向标数据...", extra=extra)
         indicators_response = get_fund_investment_indicators()
         if not indicators_response:
             print("❌ 获取加仓风向标数据失败")
@@ -178,6 +185,7 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
             indicators_data = indicators_response
         
         print(f"获取到 {len(indicators_data)} 个加仓风向标基金")
+        logger.info(f"获取到 {len(indicators_data)} 个加仓风向标基金", extra=extra)
         
         # 过滤出基金类型非'000'的基金（非指数基金）
         non_index_funds = []
@@ -197,9 +205,11 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
             return
         
         print(f"筛选出 {len(non_index_funds)} 个非指数基金")
+        logger.info(f"筛选出 {len(non_index_funds)} 个非指数基金", extra=extra)
         
         # 检查这些基金是否已经有定投计划
         print("检查基金是否已有定投计划...")
+        logger.info("检查基金是否已有定投计划...", extra=extra)
         recommended_funds = []
         
         for indicator in non_index_funds:
@@ -321,6 +331,7 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
     
 
         print(f"\n✅ 组合 '{sub_account_name}' 定投管理分析完成")
+        logger.info(f"组合 '{sub_account_name}' 定投管理分析完成", extra=extra)
         
     except Exception as e:
         print(f"❌ 处理组合定投管理时发生错误: {str(e)}")

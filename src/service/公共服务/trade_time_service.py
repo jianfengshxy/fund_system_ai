@@ -1,4 +1,5 @@
 import logging
+from src.common.logger import get_logger
 from typing import Optional
 
 from src.common.constant import DEFAULT_USER
@@ -18,19 +19,19 @@ def is_trading_time(user: Optional[object] = None) -> bool:
     Returns:
         bool: True 表示交易时间，False 表示非交易时间或调用失败
     """
-    logger = logging.getLogger("TradeTimeService")
+    logger = get_logger("TradeTimeService")
     if user is None:
         user = DEFAULT_USER
 
     try:
         resp = get_fund_system_time_trade(user)
         if not resp.Success or not isinstance(resp.Data, dict):
-            logger.warning(f"FundSystemTimeTrade 调用失败或返回数据异常: Success={resp.Success}, FirstError={resp.FirstError}")
+            logger.warning(f"FundSystemTimeTrade 调用失败或返回数据异常: Success={resp.Success}, FirstError={resp.FirstError}", extra={"account": getattr(user, 'mobile_phone', None), "action": "is_trading_time"})
             return False
 
         is_trade = resp.Data.get("IsTrade", False)
         # 部分接口可能返回字符串/数字，做一次布尔归一化
         return bool(is_trade)
     except Exception as e:
-        logger.error(f"is_trading_time 调用异常: {e}")
+        logger.error(f"is_trading_time 调用异常: {e}", extra={"account": getattr(user, 'mobile_phone', None), "action": "is_trading_time"})
         return False

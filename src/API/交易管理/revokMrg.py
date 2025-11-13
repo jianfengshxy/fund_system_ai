@@ -3,6 +3,7 @@ import os
 import requests
 import json
 import logging
+from src.common.logger import get_logger
 import hashlib
 
 # 获取项目根目录路径
@@ -77,7 +78,12 @@ def revoke_order(user: User, busin_serial_no: str, business_type: str, fund_code
         "BusinType": business_type
     }
 
-    logger = logging.getLogger("RevokeMrg")
+    logger = get_logger("RevokeMrg")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None),
+             "action": "revoke_order",
+             "fund_code": fund_code,
+             "sub_account_no": sub_account_no,
+             "busin_serial_no": busin_serial_no}
     try:
         response = requests.post(url, headers=headers, data=data, verify=False)
         response.raise_for_status()
@@ -91,16 +97,16 @@ def revoke_order(user: User, busin_serial_no: str, business_type: str, fund_code
         }
         
         if success:
-            logger.info(f"{user.customer_name}的基金{fund_code}撤回交易成功. 业务流水号: {busin_serial_no}")
+            logger.info(f"{user.customer_name}的基金{fund_code}撤回交易成功. 业务流水号: {busin_serial_no}", extra=extra)
         else:
-            logger.error(f"撤回交易失败: {result['Message']}")
+            logger.error(f"撤回交易失败: {result['Message']}", extra=extra)
         
         return result
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}")
+        logger.error(f"请求失败: {str(e)}", extra=extra)
         return {"Success": False, "Message": f"请求失败: {str(e)}"}
     except Exception as e:
-        logger.error(f"撤回交易失败: {str(e)}")
+        logger.error(f"撤回交易失败: {str(e)}", extra=extra)
         return {"Success": False, "Message": f"撤回交易失败: {str(e)}"}
 
 
@@ -118,11 +124,10 @@ if __name__ == "__main__":
     
     # 导入常量
     from src.common.constant import DEFAULT_USER
-    from src.serice.交易管理.交易查询 import get_withdrawable_trades
+    from src.service.交易管理.交易查询 import get_withdrawable_trades
     
     # 配置日志
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger("RevokeMrg")
+    logger = get_logger("RevokeMrg")
     
     # 获取可撤单交易列表
     logger.info("开始获取可撤单交易列表")

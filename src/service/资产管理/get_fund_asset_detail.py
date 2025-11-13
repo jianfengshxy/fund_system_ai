@@ -1,6 +1,7 @@
 import requests
 import json
 import logging
+from src.common.logger import get_logger
 import sys
 import os
 
@@ -20,6 +21,7 @@ from typing import List, Optional
 from src.common.constant import DEFAULT_USER, MOBILE_KEY
 from src.API.交易管理.trade import get_trades_list
 from src.service.基金信息.基金信息 import get_all_fund_info
+from src.common.errors import RetriableError, ValidationError
 
 def get_fund_asset_detail(user: User, sub_account_no: str,fund_code: str) -> Optional[AssetDetails]:
     """
@@ -55,28 +57,36 @@ def get_sub_account_asset_by_name(user: User, sub_account_name: str) -> Optional
     """
     #根据组合名称获取组合账号
     sub_account_no = getSubAccountNoByName(user, sub_account_name)    
-    logging.info(f"组合名称 {sub_account_name} 对应的组合账号为 {sub_account_no}")      
+    logger = get_logger("AssetService")
+    logger.info(f"组合名称 {sub_account_name} 对应的组合账号为 {sub_account_no}", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "sub_account_name": sub_account_name, "action": "get_assets"})      
     # 如果未找到组合账号，则返回None
     if not sub_account_no:
-        logging.error(f"未找到组合名称 {sub_account_name} 对应的组合账号")
+        logger.error(f"未找到组合名称 {sub_account_name} 对应的组合账号", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "sub_account_name": sub_account_name, "action": "get_assets"})
         return None
     
     # 获取资产列表并添加详细日志
     asset_details_list = get_asset_list_of_sub(user, sub_account_no)
     
     if asset_details_list:
-        logging.info(f"获取到组合 {sub_account_name} 的资产详情:")
+        logger.info(f"获取到组合 {sub_account_name} 的资产详情:", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "sub_account_name": sub_account_name, "action": "get_assets"})
         for asset in asset_details_list:
-            fund_info = get_all_fund_info(user, asset.fund_code)
+            try:
+                fund_info = get_all_fund_info(user, asset.fund_code)
+            except RetriableError as e:
+                logger.warning(f"基金信息可重试: {e}", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "sub_account_name": sub_account_name, "fund_code": asset.fund_code, "action": "get_assets"})
+                fund_info = None
+            except ValidationError as e:
+                logger.error(f"基金信息解析错误: {e}", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "sub_account_name": sub_account_name, "fund_code": asset.fund_code, "action": "get_assets"})
+                fund_info = None
             estimated_change = fund_info.estimated_change if fund_info else 0.0
             estimated_profit_rate = (asset.constant_profit_rate or asset.hold_profit_rate or 0.0) + estimated_change
-            logging.info(f"  基金 {asset.fund_name}({asset.fund_code}): "
+            logger.info(f"  基金 {asset.fund_name}({asset.fund_code}): "
                        f"资产值={asset.asset_value}, "
                        f"可用份额={asset.available_vol}, "
                        f"收益率={asset.constant_profit_rate or asset.hold_profit_rate}, "
-                       f"预估收益率={estimated_profit_rate}")
+                       f"预估收益率={estimated_profit_rate}", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "sub_account_name": sub_account_name, "fund_code": asset.fund_code, "action": "get_assets"})
     else:
-        logging.warning(f"组合 {sub_account_name} 没有资产详情")
+        logger.warning(f"组合 {sub_account_name} 没有资产详情", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "sub_account_name": sub_account_name, "action": "get_assets"})
     
     return asset_details_list
     

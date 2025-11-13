@@ -1,6 +1,7 @@
 import sys
 import os
 import logging
+from src.common.logger import get_logger
 import urllib.parse
 import urllib3
 import warnings
@@ -52,8 +53,15 @@ def get_asset_list_of_sub(user, sub_account_no):
         "utoken": user.u_token,
         "version": SERVER_VERSION
     }
-    response = requests.post(url, headers=headers, data=data)
-    response_data = response.json()
+    logger = get_logger("AssetAPI")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_asset_list", "sub_account_no": sub_account_no}
+    try:
+        response = requests.post(url, headers=headers, data=data, verify=False)
+        response.raise_for_status()
+        response_data = response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"资产列表请求失败: {str(e)}", extra=extra)
+        return []
     asset_details_list = []
     for asset in response_data.get("Data", {}).get("AssetDetails", []):
         asset_detail = AssetDetails()
@@ -97,9 +105,9 @@ def get_asset_list_of_sub(user, sub_account_no):
         asset_detail.available_vol = asset.get("AvailableVol", 0)
         asset_detail.on_way_transaction_count = asset.get("OnWayTransactionCount", 0)
         asset_details_list.append(asset_detail)
+    logger.info(f"资产明细条数: {len(asset_details_list)}", extra=extra)
     return asset_details_list
    
-
 
 
 

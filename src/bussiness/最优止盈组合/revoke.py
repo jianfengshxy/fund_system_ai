@@ -104,12 +104,12 @@ def revoke(user: User, sub_account_name: str = "最优止盈") -> bool:
                 sub_account_no=sub_account_no
             )
             if result['Success']:
-                logger.info(f"成功撤回交易: {trade.busin_serial_no} (基金: {trade.fund_code})")
+                logger.info(f"成功撤回交易: {trade.busin_serial_no} (基金: {trade.fund_code})", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_revoke", "busin_serial_no": trade.busin_serial_no, "fund_code": trade.fund_code})
             else:
-                logger.error(f"撤回交易 {trade.busin_serial_no} 失败: {result['Message']}")
+                logger.error(f"撤回交易 {trade.busin_serial_no} 失败: {result['Message']}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_revoke", "busin_serial_no": trade.busin_serial_no, "fund_code": trade.fund_code})
                 success = False
         except Exception as e:
-            logger.error(f"撤回交易 {trade.busin_serial_no} 时异常: {str(e)}")
+            logger.error(f"撤回交易 {trade.busin_serial_no} 时异常: {str(e)}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_revoke", "busin_serial_no": trade.busin_serial_no, "fund_code": trade.fund_code})
             success = False
     
     return success

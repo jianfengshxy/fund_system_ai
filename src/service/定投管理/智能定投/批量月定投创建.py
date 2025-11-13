@@ -1,5 +1,6 @@
 # 顶部导入处
 import logging
+from src.common.logger import get_logger
 import time
 import datetime
 from typing import Any, Dict, List, Optional, Union
@@ -24,7 +25,7 @@ from src.API.定投计划管理.SmartPlan import createPlanV3, getFundPlanList, 
 from src.domain.fund_plan import FundPlan, ApiResponse
 
 # 在 logger 定义后新增独立函数
-logger = logging.getLogger("MonthlyPlanService")
+logger = get_logger("MonthlyPlanService")
 
 
 def _normalize_amount(amount: Union[str, float, int]) -> str:

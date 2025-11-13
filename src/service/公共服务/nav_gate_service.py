@@ -1,4 +1,5 @@
 import logging
+from src.common.logger import get_logger
 from typing import Any
 
 
@@ -24,22 +25,26 @@ def nav5_gate(fi: Any, fund_name: str, fund_code: str, logger: logging.Logger) -
 
     if est_val is None or nav5_val is None:
         logger.info(
-            f"跳过{fund_name}({fund_code}): 缺少用于对比的净值（estimated_value={est_nav}, prev_nav={nav_prev}, nav_5day_avg={nav5}）"
+            f"跳过{fund_name}({fund_code}): 缺少用于对比的净值（estimated_value={est_nav}, prev_nav={nav_prev}, nav_5day_avg={nav5}）",
+            extra={"fund_code": fund_code, "action": "nav5_gate"}
         )
         return False
 
     if used_prev:
         logger.info(
-            f"{fund_name}({fund_code})缺少估值，使用上一交易日净值 {est_val:.4f} 与5日均值 {nav5_val:.4f} 进行对比"
+            f"{fund_name}({fund_code})缺少估值，使用上一交易日净值 {est_val:.4f} 与5日均值 {nav5_val:.4f} 进行对比",
+            extra={"fund_code": fund_code, "action": "nav5_gate"}
         )
     else:
         logger.info(
-            f"{fund_name}({fund_code})使用估算净值 {est_val:.4f} 与5日均值 {nav5_val:.4f} 进行对比"
+            f"{fund_name}({fund_code})使用估算净值 {est_val:.4f} 与5日均值 {nav5_val:.4f} 进行对比",
+            extra={"fund_code": fund_code, "action": "nav5_gate"}
         )
 
     if not (est_val > nav5_val):
         logger.info(
-            f"跳过{fund_name}({fund_code}): 对比净值 {est_val:.4f} <= 5日均值 {nav5_val:.4f}"
+            f"跳过{fund_name}({fund_code}): 对比净值 {est_val:.4f} <= 5日均值 {nav5_val:.4f}",
+            extra={"fund_code": fund_code, "action": "nav5_gate"}
         )
         return False
     return True
@@ -66,22 +71,26 @@ def nav5_fall_gate(fi: Any, fund_name: str, fund_code: str, logger: logging.Logg
 
     if est_val is None or nav5_val is None:
         logger.info(
-            f"跳过{fund_name}({fund_code}): 缺少用于对比的净值（estimated_value={est_nav}, prev_nav={nav_prev}, nav_5day_avg={nav5}）"
+            f"跳过{fund_name}({fund_code}): 缺少用于对比的净值（estimated_value={est_nav}, prev_nav={nav_prev}, nav_5day_avg={nav5}）",
+            extra={"fund_code": fund_code, "action": "nav5_fall_gate"}
         )
         return False
 
     if used_prev:
         logger.info(
-            f"{fund_name}({fund_code})缺少估值，使用上一交易日净值 {est_val:.4f} 与5日均值 {nav5_val:.4f} 进行对比"
+            f"{fund_name}({fund_code})缺少估值，使用上一交易日净值 {est_val:.4f} 与5日均值 {nav5_val:.4f} 进行对比",
+            extra={"fund_code": fund_code, "action": "nav5_fall_gate"}
         )
     else:
         logger.info(
-            f"{fund_name}({fund_code})使用估算净值 {est_val:.4f} 与5日均值 {nav5_val:.4f} 进行对比"
+            f"{fund_name}({fund_code})使用估算净值 {est_val:.4f} 与5日均值 {nav5_val:.4f} 进行对比",
+            extra={"fund_code": fund_code, "action": "nav5_fall_gate"}
         )
 
     if not (est_val < nav5_val):
         logger.info(
-            f"跳过{fund_name}({fund_code}): 当前对比净值 {est_val:.4f} ≥ 5日均值 {nav5_val:.4f}，未进入下跌态（不止盈）"
+            f"跳过{fund_name}({fund_code}): 当前对比净值 {est_val:.4f} ≥ 5日均值 {nav5_val:.4f}，未进入下跌态（不止盈）",
+            extra={"fund_code": fund_code, "action": "nav5_fall_gate"}
         )
         return False
     return True

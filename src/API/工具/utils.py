@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+from src.common.logger import get_logger
 from typing import Any, Dict, Optional
 
 import requests
@@ -59,7 +60,8 @@ def get_fund_system_time_trade(user) -> ApiResponse[Dict[str, Any]]:
         "version": SERVER_VERSION,
     }
 
-    logger = logging.getLogger("FundSystemTimeTrade")
+    logger = get_logger("FundSystemTimeTrade")
+    extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "fund_system_time_trade"}
     try:
         response = requests.post(url, headers=headers, data=data, verify=False, timeout=10)
         response.raise_for_status()
@@ -91,7 +93,7 @@ def get_fund_system_time_trade(user) -> ApiResponse[Dict[str, Any]]:
             DebugError=None,
         )
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}")
+        logger.error(f"请求失败: {str(e)}", extra=extra)
         return ApiResponse(
             Success=False,
             ErrorCode="REQUEST_ERROR",
@@ -100,7 +102,7 @@ def get_fund_system_time_trade(user) -> ApiResponse[Dict[str, Any]]:
             DebugError=None,
         )
     except Exception as e:
-        logger.error(f"调用异常: {str(e)}")
+        logger.error(f"调用异常: {str(e)}", extra=extra)
         return ApiResponse(
             Success=False,
             ErrorCode="UNKNOWN_ERROR",

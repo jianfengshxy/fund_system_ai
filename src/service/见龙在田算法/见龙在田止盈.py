@@ -1,4 +1,5 @@
 import logging
+from src.common.logger import get_logger
 import os
 import sys
 from typing import Optional, List, Tuple
@@ -21,16 +22,12 @@ from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.service.交易管理.赎回基金 import sell_low_fee_shares, sell_0_fee_shares, sell_usable_non_zero_fee_shares
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float] = None, profit_threshold: Optional[float] = 20.0) -> bool:
     # 统一日志前缀与风格（保持原有）
     customer_name = user.customer_name
-    logger.info(f"开始为用户 {customer_name} 执行止盈操作，组合: {sub_account_name}")
+    logger.info(f"开始为用户 {customer_name} 执行止盈操作，组合: {sub_account_name}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "jianlong_redeem"})
     
     # 获取组合账号
     sub_account_no = getSubAccountNoByName(user, sub_account_name)

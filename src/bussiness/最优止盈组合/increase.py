@@ -1,4 +1,5 @@
 import logging
+from src.common.logger import get_logger
 from random import vonmisesvariate
 import re
 from typing import Optional
@@ -56,12 +57,7 @@ from src.service.定投管理.定投查询.定投查询 import get_portfolio_pla
 from src.service.加仓风向标组合算法.加仓风向标加仓 import increase_funds as service_increase_funds
 from src.common.constant import DEFAULT_USER
 
-logging.basicConfig(
-    stream=sys.stdout,
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 #第一列：手机号 account
 # 第二列：密码 password
@@ -111,11 +107,11 @@ def increase_all_users():
                 logger.error(f"获取用户 {name} 信息失败")
                 continue
             user.budget = budget
-            logger.info(f"开始加仓用户：{user.customer_name}")
+            logger.info(f"开始加仓用户：{user.customer_name}", extra={"account": account, "action": "optimal_increase"})
             # 执行加仓操作
             increase(user, sub_account_name)
-            logger.info(f"用户：{user.customer_name} 加仓完成")
-            logger.info(f"用户：{user.customer_name} 开始对定投处理")
+            logger.info(f"用户：{user.customer_name} 加仓完成", extra={"account": account, "action": "optimal_increase"})
+            logger.info(f"用户：{user.customer_name} 开始对定投处理", extra={"account": account, "action": "optimal_increase"})
             # 调整：获取指定组合下的所有定投计划详情并执行全局 increase
             from src.bussiness.全局智能定投处理.increase import increase as global_increase  # 导入全局 increase 函数并起别名
             
@@ -127,12 +123,12 @@ def increase_all_users():
             if plan_details:
                 for plan_detail in plan_details:
                     global_increase(user, plan_detail)  # 调用全局的 increase 函数
-                logger.info(f"用户：{user.customer_name} 全局智能定投加仓处理完成")
+                logger.info(f"用户：{user.customer_name} 全局智能定投加仓处理完成", extra={"account": account, "action": "optimal_increase"})
             else:
-                logger.warning(f"用户：{user.customer_name} 无定投计划详情")
-            logger.info(f"用户：{user.customer_name} 定投处理完成")
+                logger.warning(f"用户：{user.customer_name} 无定投计划详情", extra={"account": account, "action": "optimal_increase"})
+            logger.info(f"用户：{user.customer_name} 定投处理完成", extra={"account": account, "action": "optimal_increase"})
         except Exception as e:
-            logger.error(f"处理用户 {name} 失败，错误信息：{str(e)}")
+            logger.error(f"处理用户 {name} 失败，错误信息：{str(e)}", extra={"account": account, "action": "optimal_increase"})
 
 # 加仓算法实现
 
@@ -157,12 +153,12 @@ def increase(user: User, sub_account_name: str, total_budget: Optional[float] = 
         if not total_budget or total_budget <= 0:
             total_budget = 100000.0
 
-    logger.info(f"开始为用户 {user.customer_name} 执行加仓（委托 Service），组合: {sub_account_name}，预算: {total_budget}，amount: {amount}，fund_type: {fund_type}")
+    logger.info(f"开始为用户 {user.customer_name} 执行加仓（委托 Service），组合: {sub_account_name}，预算: {total_budget}，amount: {amount}，fund_type: {fund_type}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_increase"})
     success = service_increase_funds(user, sub_account_name, total_budget, amount, fund_type)
     if success:
-        logger.info(f"用户 {user.customer_name} 委托加仓成功")
+        logger.info(f"用户 {user.customer_name} 委托加仓成功", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_increase"})
     else:
-        logger.error(f"用户 {user.customer_name} 委托加仓失败")
+        logger.error(f"用户 {user.customer_name} 委托加仓失败", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_increase"})
     return success
 
 def increase(user: User, sub_account_name: str, total_budget: Optional[float] = None, amount: Optional[float] = None, fund_type: str = 'all', fund_num: int = 5, spread_days: int = 20) -> bool:
@@ -179,12 +175,12 @@ def increase(user: User, sub_account_name: str, total_budget: Optional[float] = 
         if not total_budget or total_budget <= 0:
             total_budget = 100000.0
 
-    logger.info(f"开始为用户 {user.customer_name} 执行加仓（最小落地），组合: {sub_account_name}，预算: {total_budget}，amount: {amount}，fund_type: {fund_type}，fund_num={fund_num}，spread_days={spread_days}")
+    logger.info(f"开始为用户 {user.customer_name} 执行加仓（最小落地），组合: {sub_account_name}，预算: {total_budget}，amount: {amount}，fund_type: {fund_type}，fund_num={fund_num}，spread_days={spread_days}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_increase"})
     success = service_increase_funds(user, sub_account_name, total_budget, amount, fund_type, fund_num, spread_days)
     if success:
-        logger.info(f"用户 {user.customer_name} 委托加仓成功")
+        logger.info(f"用户 {user.customer_name} 委托加仓成功", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_increase"})
     else:
-        logger.error(f"用户 {user.customer_name} 委托加仓失败")
+        logger.error(f"用户 {user.customer_name} 委托加仓失败", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_increase"})
     return success
 
 if __name__ == "__main__":

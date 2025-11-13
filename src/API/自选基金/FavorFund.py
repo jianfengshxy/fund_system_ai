@@ -1,4 +1,5 @@
 import logging
+from common.logger import get_logger
 import time
 import urllib.parse
 from typing import Any, Dict, Optional
@@ -99,7 +100,8 @@ def add_to_favorites(
     full_url = f"{url}?{query}"
 
     headers = _build_headers()
-    logger = logging.getLogger("FavorFund.add")
+    logger = get_logger("FavorFund.add")
+    extra = {"account": getattr(u, 'mobile_phone', None) or getattr(u, 'account', None), "action": "favor_add", "fund_code": fund_code}
 
     try:
         resp = requests.get(full_url, headers=headers, verify=False, timeout=10)
@@ -125,10 +127,10 @@ def add_to_favorites(
             DebugError=json_data.get("hasWrongToken"),
         )
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}")
+        logger.error(f"请求失败: {str(e)}", extra=extra)
         return ApiResponse(False, "REQUEST_ERROR", None, f"请求失败: {str(e)}", None)
     except Exception as e:
-        logger.error(f"解析失败: {str(e)}")
+        logger.error(f"解析失败: {str(e)}", extra=extra)
         return ApiResponse(False, "UNKNOWN_ERROR", None, f"未知错误: {str(e)}", None)
 
 
@@ -222,7 +224,8 @@ def get_favor_group(
         "version": SERVER_VERSION,
     }
 
-    logger = logging.getLogger("FavorFund.getgroup")
+    logger = get_logger("FavorFund.getgroup")
+    extra = {"account": getattr(u, 'mobile_phone', None) or getattr(u, 'account', None), "action": "favor_getgroup"}
     try:
         resp = requests.post(url, headers=headers, data=form, verify=False, timeout=10)
         resp.raise_for_status()
@@ -254,10 +257,10 @@ def get_favor_group(
 
         return ApiResponse(bool(success), error_code, data, first_error, json_data.get("hasWrongToken"))
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}")
+        logger.error(f"请求失败: {str(e)}", extra=extra)
         return ApiResponse(False, "REQUEST_ERROR", None, f"请求失败: {str(e)}", None)
     except Exception as e:
-        logger.error(f"解析失败: {str(e)}")
+        logger.error(f"解析失败: {str(e)}", extra=extra)
         return ApiResponse(False, "UNKNOWN_ERROR", None, f"未知错误: {str(e)}", None)
 
 

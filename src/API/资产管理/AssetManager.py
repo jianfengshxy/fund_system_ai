@@ -1,6 +1,8 @@
 import sys
 import os
 import logging
+from src.common.logger import get_logger
+from src.common.errors import RetriableError, ValidationError
 import urllib.parse
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) ))
 
@@ -44,7 +46,8 @@ def GetMyAssetMainPartAsync(user) -> ApiResponse:
         'traceparent': '00-0000000046aa4cae00000196718a6d24-0000000000000000-01',
         'tracestate': 'pid=0x186caf0,taskid=0x11a8e41'
     }
-    logger = logging.getLogger("AssetManager")
+    logger = get_logger("AssetManager")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "GetMyAssetMainPartAsync"}
     try:
         response = requests.post(url, json=data, headers=headers, verify=False)
         response.raise_for_status()
@@ -71,11 +74,11 @@ def GetMyAssetMainPartAsync(user) -> ApiResponse:
             )
             return api_response
         except Exception as e:
-            logger.error(f'解析响应数据失败: {str(e)}')
-            raise Exception(f'解析响应数据失败: {str(e)}')
+            logger.error(f'解析响应数据失败: {str(e)}', extra=extra)
+            raise ValidationError(str(e))
     except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}')
-        raise Exception(f'请求失败: {str(e)}')
+        logger.error(f'请求失败: {str(e)}', extra=extra)
+        raise RetriableError(str(e))
 
 
 if __name__ == "__main__":

@@ -1,7 +1,8 @@
 import logging
+from src.common.logger import get_logger
 from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2  # 替换为实际导入路径
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def getMaxhqbBank(user):
     """
@@ -11,15 +12,15 @@ def getMaxhqbBank(user):
     Returns:
         user: 增加max_hqb_bank属性的用户对象
     """
-    logger.info("开始获取最大活期宝银行卡信息...")
+    logger.info("开始获取最大活期宝银行卡信息...", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_max_hqb"})
     bank_cards = getCashBagAvailableShareV2(user)
     if not bank_cards:
-        logger.error("获取银行卡信息失败：没有可用的银行卡")
+        logger.error("获取银行卡信息失败：没有可用的银行卡", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_max_hqb"})
         user.max_hqb_bank = None
         return user
     # 使用第一个银行卡（余额最高的）
     user.max_hqb_bank = bank_cards[0]
     if user.max_hqb_bank.AccountNo:
         user.max_hqb_bank.AccountNo = user.max_hqb_bank.AccountNo.split('#')[0]
-    logger.info(f"{user.customer_name}的账号：{user.max_hqb_bank.AccountNo}")
+    logger.info(f"{user.customer_name}的账号：{user.max_hqb_bank.AccountNo}", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_max_hqb"})
     return user

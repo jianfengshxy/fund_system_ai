@@ -1,4 +1,5 @@
 import logging
+from src.common.logger import get_logger
 import sys
 import os
 import logging
@@ -30,11 +31,7 @@ from src.service.大数据.加仓风向标服务 import get_fund_investment_indi
 from src.service.加仓风向标组合算法.加仓风向标新增 import add_new_funds as service_add_new_funds
 from src.common.constant import DEFAULT_USER  # 添加导入，如果需要
 # 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 #第一列：手机号 account
 # 第二列：密码 password
@@ -70,15 +67,16 @@ def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budg
     """
     新增基金算法：调用服务层实现
     """
-    logger.info(f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{total_budget}元")
+    extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_add_new"}
+    logger.info(f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{total_budget}元", extra=extra)
 
     # 调用服务层函数
     success = service_add_new_funds(user, sub_account_name, total_budget, amount, fund_type)  # 修改为调用服务层函数
     
     if success:
-        logger.info(f"用户 {user.customer_name} 新增基金操作成功")
+        logger.info(f"用户 {user.customer_name} 新增基金操作成功", extra=extra)
     else:
-        logger.error(f"用户 {user.customer_name} 新增基金操作失败")
+        logger.error(f"用户 {user.customer_name} 新增基金操作失败", extra=extra)
     
     return success
 
@@ -88,15 +86,16 @@ def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budg
     - fund_num: 本次最多买入的基金只数（默认1）
     - spread_days: 将total_budget按交易天数摊薄（默认20），仅在未显式传入amount时生效
     """
-    logger.info(f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{total_budget}元，fund_num={fund_num}, spread_days={spread_days}")
+    extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_add_new", "fund_num": fund_num, "spread_days": spread_days}
+    logger.info(f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{total_budget}元，fund_num={fund_num}, spread_days={spread_days}", extra=extra)
 
     # 透传参数到服务层
     success = service_add_new_funds(user, sub_account_name, total_budget, amount, fund_type, fund_num, spread_days)
 
     if success:
-        logger.info(f"用户 {user.customer_name} 新增基金操作成功")
+        logger.info(f"用户 {user.customer_name} 新增基金操作成功", extra=extra)
     else:
-        logger.error(f"用户 {user.customer_name} 新增基金操作失败")
+        logger.error(f"用户 {user.customer_name} 新增基金操作失败", extra=extra)
     return success
 
 if __name__ == "__main__":

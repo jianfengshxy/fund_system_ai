@@ -1,4 +1,5 @@
 import logging
+from src.common.logger import get_logger
 import sys
 import os
 from typing import List, Optional, Set
@@ -18,11 +19,7 @@ from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.service.大数据.低位加仓风向标筛选 import select_low_position_indicators
 
 # 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _get_max_funds_threshold() -> int:
@@ -78,7 +75,8 @@ def add_new_funds(
 
     logger.info(
         f"[见龙在田] 开始为用户 {user.customer_name} 执行新增基金，总预算：{total_budget}元，基金类型：{fund_type}，"
-        f"fund_num={fund_num}，spread_days={spread_days}"
+        f"fund_num={fund_num}，spread_days={spread_days}",
+        extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "jianlong_add_new"}
     )
 
     # 读取最大基金数阈值（本地/云端统一）
@@ -89,10 +87,10 @@ def add_new_funds(
         base_per_fund = round(total_budget / max(MAX_FUNDS_THRESHOLD, 1) / max(spread_days, 1), 2)
     else:
         base_per_fund = float(amount)
-    logger.info(f"[见龙在田] 单只基金基础买入金额: {base_per_fund}元")
+    logger.info(f"[见龙在田] 单只基金基础买入金额: {base_per_fund}元", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "jianlong_add_new"})
 
-    logger.info("========== 开始执行见龙在田新增基金算法 ===========")
-    logger.info(f"用户: {user.customer_name}，组合名称: {sub_account_name}")
+    logger.info("========== 开始执行见龙在田新增基金算法 ===========", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "jianlong_add_new"})
+    logger.info(f"用户: {user.customer_name}，组合名称: {sub_account_name}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "jianlong_add_new"})
 
     try:
         # 1) 获取组合资产与持仓

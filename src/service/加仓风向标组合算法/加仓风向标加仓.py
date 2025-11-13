@@ -1,5 +1,6 @@
 # 顶部导入片段
 import logging
+from src.common.logger import get_logger
 import os
 import sys
 import math
@@ -21,11 +22,19 @@ from src.service.交易管理.购买基金 import commit_order
 from src.service.大数据.加仓风向标服务 import get_fund_investment_indicators
 from src.common.constant import DEFAULT_USER
 from src.API.基金信息.FundRank import get_fund_growth_rate
-from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
 from src.service.公共服务.nav_gate_service import nav5_gate
 # 新增导入 get_user_all_info
 from src.service.用户管理.用户信息 import get_user_all_info
+def _get_max_funds_threshold():
+    env_val = os.environ.get('MAX_FUNDS_THRESHOLD')
+    if env_val is None or env_val == "":
+        return 20
+    try:
+        return int(env_val)
+    except ValueError:
+        logger.warning(f"环境变量 MAX_FUNDS_THRESHOLD 非法值: {env_val}，回退为默认 20")
+        return 20
 
 import datetime
 
@@ -33,7 +42,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def increase_funds(user: User, sub_account_name: str, total_budget: float, amount: Optional[float] = None, fund_type: str = 'all', fund_num: int = 5, spread_days: int = 5) -> bool:
     """
@@ -43,27 +52,14 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
     - 若余额不足，动态下调 buy_amount（至少10元）
     """
     logger.info(f"[加仓参数] 用户={getattr(user,'customer_name','N/A')} | 组合={sub_account_name} | fund_num={fund_num} | spread_days={spread_days}")
-    # 计算基础单笔金额
-    base_amount = float(amount) if amount is not None else round(total_budget / max(fund_num, 1) / max(spread_days, 1), 2) * 2
+    # 计算基础单笔金额（与新增金额保持一致，再乘2）
+    if amount is not None:
+        base_amount = float(amount)
+    else:
+        MAX_FUNDS_THRESHOLD = _get_max_funds_threshold()
+        base_amount = round(total_budget / max(MAX_FUNDS_THRESHOLD, 1) / max(spread_days, 1), 2) * 2
     logger.info(f"[买入金额] 单只基础买入金额={base_amount} 元(是新增金额的2倍)")
-    # 查询余额并动态下调
-    try:
-        asset_response = GetMyAssetMainPartAsync(user)
-        if not (asset_response.Success and asset_response.Data):
-            raise Exception("资产API调用失败")
-        available_balance = float(asset_response.Data.get('HqbValue', 0.0))
-    except Exception as e:
-        logger.error(f"获取用户资产失败: {e}")
-        return False
-
     buy_amount = base_amount
-    total_need = round(buy_amount * fund_num, 2)
-    if available_balance < total_need:
-        cap = max(10.0, round((available_balance * 0.9) / max(fund_num, 1), 2))
-        if cap < buy_amount:
-            logger.warning(f"余额不足以覆盖计划下单{fund_num}笔（需{total_need}元），单笔金额下调为 {cap} 元")
-            buy_amount = cap
-    logger.info(f"[余额检查] 可用余额={available_balance:.2f} | 计划总额={total_need:.2f} | 单笔金额={buy_amount:.2f}")
 
     # 获取子账户
     sub_account_no = getSubAccountNoByName(user, sub_account_name)
@@ -268,7 +264,7 @@ if __name__ == "__main__":
         user = DEFAULT_USER
         # user = get_user_all_info("13500819290","guojing1985")
         # 执行加仓操作
-        increase_funds(user, "飞龙在天", 200000.0, None, 'non_index')  # 使用 DEFAULT_USER，并假设参数合适
+        increase_funds(user, "飞龙在天",1000000.0, None, 'non_index')  # 使用 DEFAULT_USER，并假设参数合适
         logging.info(f"用户 {user.customer_name} 加仓操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

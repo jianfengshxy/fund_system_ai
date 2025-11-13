@@ -1,6 +1,7 @@
 import sys
 import os
 import logging
+from src.common.logger import get_logger
 import urllib.parse
 import urllib3
 import warnings
@@ -74,7 +75,7 @@ def create_period_smart_investment(user: User,fund_code: str, amount: int, perio
                 print(f"获取计划 {plan.planId} 详情失败: {str(e)}")
             if  plan.planType == '1' and detail_response.Data.rationPlan.periodType == 4:
                 # 如果计划类型为1（目标定投）且周期类型为4（按日）
-                logger.info(f"基金 {plan.fundName}已存在智能定投每日定投计划")
+                get_logger("SmartPlan").info(f"基金 {plan.fundName}已存在智能定投每日定投计划", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "fund_code": fund_code, "action": "create_period_smart_investment"})
                 return None           
     # 调用现有的createPlanV3函数，硬编码strategy_type=3（组合定投）
     return createPlanV3(
@@ -90,12 +91,7 @@ def create_period_smart_investment(user: User,fund_code: str, amount: int, perio
 
 if __name__ == '__main__':
     # 配置logger
-    logger = logging.getLogger("SmartPlan")
-    logger.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
+    logger = get_logger("SmartPlan")
     
     response = create_period_smart_investment(
         user=DEFAULT_USER,

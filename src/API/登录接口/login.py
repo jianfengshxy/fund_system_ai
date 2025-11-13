@@ -1,6 +1,7 @@
 import hashlib
 import requests
 import logging
+from src.common.logger import get_logger
 import sys
 import os
 
@@ -52,7 +53,8 @@ def login(account: str, password: str) -> User:
         'DeviceName': 'ZTE'
     }
     
-    logger = logging.getLogger("Login")
+    logger = get_logger("Login")
+    extra = {"account": account, "action": "login"}
     try:
         response = requests.post(url, json=data, headers=headers, verify=False)
         response.raise_for_status()
@@ -60,12 +62,12 @@ def login(account: str, password: str) -> User:
         # logger.info(f"登录响应数据: {json_data}")
         
         if not json_data.get('Success', False):
-            logger.error("登录失败，接口返回Success=False")
+            logger.error("登录失败，接口返回Success=False", extra=extra)
             return None
             
         data = json_data.get('Data')
         if not data:
-            logger.error("登录失败，接口返回Data为空")
+            logger.error("登录失败，接口返回Data为空", extra=extra)
             return None
             
         try:
@@ -86,14 +88,14 @@ def login(account: str, password: str) -> User:
             return user
             
         except TypeError as e:
-            logger.error(f"创建User对象失败: {str(e)}")
+            logger.error(f"创建User对象失败: {str(e)}", extra=extra)
             return None
             
     except requests.exceptions.RequestException as e:
-        logger.error(f'登录请求失败: {str(e)}')
+        logger.error(f'登录请求失败: {str(e)}', extra=extra)
         return None
     except Exception as e:
-        logger.error(f'登录数据解析失败: {str(e)}')
+        logger.error(f'登录数据解析失败: {str(e)}', extra=extra)
         return None
 
 def login_passport(user: User) -> User:
@@ -134,20 +136,21 @@ def login_passport(user: User) -> User:
         'utoken': user.u_token
     }
 
-    logger = logging.getLogger("Login")
+    logger = get_logger("Login")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "login_passport"}
     try:
         response = requests.post(url, data=data, headers=headers, verify=False)  # 注意这里使用data而不是json
         response.raise_for_status()
         json_data = response.json()
-        logger.info(f"Passport登录响应数据: {json_data}")
+        logger.info(f"Passport登录响应数据: {json_data}", extra=extra)
         
         if not json_data.get('Success', False):
-            logger.error("Passport登录失败，接口返回Success=False")
+            logger.error("Passport登录失败，接口返回Success=False", extra=extra)
             return None
             
         data = json_data.get('Data')
         if not data:
-            logger.error("Passport登录失败，接口返回Data为空")
+            logger.error("Passport登录失败，接口返回Data为空", extra=extra)
             return None
             
         try:
@@ -159,14 +162,14 @@ def login_passport(user: User) -> User:
             return user
             
         except TypeError as e:
-            logger.error(f"更新User对象的Passport信息失败: {str(e)}")
+            logger.error(f"更新User对象的Passport信息失败: {str(e)}", extra=extra)
             return None
             
     except requests.exceptions.RequestException as e:
-        logger.error(f'Passport登录请求失败: {str(e)}')
+        logger.error(f'Passport登录请求失败: {str(e)}', extra=extra)
         return None
     except Exception as e:
-        logger.error(f'Passport登录数据解析失败: {str(e)}')
+        logger.error(f'Passport登录数据解析失败: {str(e)}', extra=extra)
         return None
 
 def inference_passport_for_bind(user: User) -> User:
@@ -208,7 +211,8 @@ def inference_passport_for_bind(user: User) -> User:
         'GTOKEN': 'ceaf-5ec1aeaf313a267434fbe314a1575707'
     }
 
-    logger = logging.getLogger("Login")
+    logger = get_logger("Login")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "inference_passport"}
     try:
         response = requests.post(url, json=data, headers=headers, verify=False)
         response.raise_for_status()
@@ -216,12 +220,12 @@ def inference_passport_for_bind(user: User) -> User:
         # logger.info(f"Passport绑定信息响应数据: {json_data}")
         
         if not json_data.get('Success', False):
-            logger.error("获取Passport绑定信息失败，接口返回Success=False")
+            logger.error("获取Passport绑定信息失败，接口返回Success=False", extra=extra)
             return None
             
         data = json_data.get('Data', {}).get('Passport')
         if not data:
-            logger.error("获取Passport绑定信息失败，接口返回Data为空")
+            logger.error("获取Passport绑定信息失败，接口返回Data为空", extra=extra)
             return None
             
         try:
@@ -234,16 +238,15 @@ def inference_passport_for_bind(user: User) -> User:
             return user
             
         except TypeError as e:
-            logger.error(f"更新User对象的Passport绑定信息失败: {str(e)}")
+            logger.error(f"更新User对象的Passport绑定信息失败: {str(e)}", extra=extra)
             return None
             
     except requests.exceptions.RequestException as e:
-        logger.error(f'Passport绑定信息请求失败: {str(e)}')
+        logger.error(f'Passport绑定信息请求失败: {str(e)}', extra=extra)
         return None
     except Exception as e:
-        logger.error(f'Passport绑定信息数据解析失败: {str(e)}')
+        logger.error(f'Passport绑定信息数据解析失败: {str(e)}', extra=extra)
         return None
-
 
 
 

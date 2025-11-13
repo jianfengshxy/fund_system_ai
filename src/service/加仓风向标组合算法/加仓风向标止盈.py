@@ -1,5 +1,6 @@
 # 顶部导入片段
 import logging
+from src.common.logger import get_logger
 import os
 import sys
 from typing import Optional, List, Tuple
@@ -23,11 +24,7 @@ from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.service.交易管理.赎回基金 import sell_low_fee_shares, sell_0_fee_shares, sell_usable_non_zero_fee_shares
 from src.service.公共服务.nav_gate_service import nav5_gate, nav5_fall_gate
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float] = None) -> bool:
     customer_name = user.customer_name

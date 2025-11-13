@@ -3,6 +3,8 @@ import os
 import requests
 import json
 import logging
+from src.common.logger import get_logger
+from src.common.errors import RetriableError, ValidationError
 import hashlib
 import time
 
@@ -31,8 +33,8 @@ def super_transfer(user: User, sub_account_no: str, fund_code: str, fund_amount:
         Optional[TradeResult]: 交易结果，如果失败则返回None
     """
     if abs(fund_amount) < 0.000001:  # 使用绝对值和小阈值来判断接近零的值
-        logger = logging.getLogger("SellMrg")
-        logger.info("卖出的份额参数为0")
+        logger = get_logger("SellMrg")
+        logger.info("卖出的份额参数为0", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "super_transfer", "fund_code": fund_code, "sub_account_no": sub_account_no})
         return None
     
     url = f"https://tradeapilvs{user.index}.1234567.com.cn/Business/home/SFTransfer"
@@ -76,12 +78,12 @@ def super_transfer(user: User, sub_account_no: str, fund_code: str, fund_amount:
         "version": SERVER_VERSION
     }
     
-    logger = logging.getLogger("SellMrg")
+    logger = get_logger("SellMrg")
     try:
         response = requests.post(url, headers=headers, data=data, verify=False)
         response.raise_for_status()
         response_data = response.json()
-        logger.info(f"响应数据: {response_data}")
+        logger.info(f"响应数据: {response_data}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "super_transfer", "fund_code": fund_code, "sub_account_no": sub_account_no})
         
         busin_serial_no = None
         business_type = None
@@ -108,14 +110,14 @@ def super_transfer(user: User, sub_account_no: str, fund_code: str, fund_amount:
                 show_com_prop = data.get("ShowComProp", "")
         
         result = TradeResult(busin_serial_no, business_type, apply_workday, amount, status, show_com_prop, fund_code, raw=response_data)
-        logger.info(f"super_transfer的结果: {result}")
+        logger.info(f"super_transfer的结果: {result}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "super_transfer", "fund_code": fund_code, "sub_account_no": sub_account_no})
         return result
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}")
-        return None
+        logger.error(f"请求失败: {str(e)}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "super_transfer", "fund_code": fund_code, "sub_account_no": sub_account_no})
+        raise RetriableError(str(e))
     except Exception as e:
-        logger.error(f"基金转换失败: {str(e)}")
-        return None
+        logger.error(f"基金转换失败: {str(e)}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "super_transfer", "fund_code": fund_code, "sub_account_no": sub_account_no})
+        raise ValidationError(str(e))
 
 
 def hqbMakeRedemption(user: User, sub_account_no: str, fund_code: str, fund_amount: float, share_id: str) -> Optional[TradeResult]:
@@ -131,8 +133,8 @@ def hqbMakeRedemption(user: User, sub_account_no: str, fund_code: str, fund_amou
         Optional[TradeResult]: 交易结果，如果失败则返回None
     """
     if fund_amount == 0.00:
-        logger = logging.getLogger("SellMrg")
-        logger.info("赎回的份额不能为0")
+        logger = get_logger("SellMrg")
+        logger.info("赎回的份额不能为0", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "hqbMakeRedemption", "fund_code": fund_code, "sub_account_no": sub_account_no})
         return None
     
     url = f"https://tradeapilvs{user.index}.1234567.com.cn/Business/hqb/MakeRedemption"
@@ -182,12 +184,12 @@ def hqbMakeRedemption(user: User, sub_account_no: str, fund_code: str, fund_amou
         "Password": password_hash
     }
     
-    logger = logging.getLogger("SellMrg")
+    logger = get_logger("SellMrg")
     try:
         response = requests.post(url, headers=headers, data=json.dumps(payload), verify=False)
         response.raise_for_status()
         response_data = response.json()
-        logger.info(f"赎回的响应: {response_data}")
+        logger.info(f"赎回的响应: {response_data}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "hqbMakeRedemption", "fund_code": fund_code, "sub_account_no": sub_account_no})
         
         if response_data is not None and "Data" in response_data:
             data = response_data["Data"]
@@ -211,20 +213,20 @@ def hqbMakeRedemption(user: User, sub_account_no: str, fund_code: str, fund_amou
                     busin_serial_no, business_type, apply_workday, amount, status, show_com_prop, fund_code,
                     raw=response_data
                 )
-                logger.info(f"货币基金赎回结果: {result}")
+                logger.info(f"货币基金赎回结果: {result}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "hqbMakeRedemption", "fund_code": fund_code, "sub_account_no": sub_account_no})
                 return result
             else:
-                logger.error("赎回响应中未返回Data")
+                logger.error("赎回响应中未返回Data", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "hqbMakeRedemption", "fund_code": fund_code, "sub_account_no": sub_account_no})
                 return TradeResult(None, None, None, None, 0, None, fund_code, raw=response_data)
         else:
-            logger.error("赎回响应数据不完整")
+            logger.error("赎回响应数据不完整", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "hqbMakeRedemption", "fund_code": fund_code, "sub_account_no": sub_account_no})
             return TradeResult(None, None, None, None, 0, None, fund_code, raw=response_data)
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}")
-        return TradeResult(None, None, None, None, 0, None, fund_code)
+        logger.error(f"请求失败: {str(e)}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "hqbMakeRedemption", "fund_code": fund_code, "sub_account_no": sub_account_no})
+        raise RetriableError(str(e))
     except Exception as e:
-        logger.error(f"货币基金赎回失败: {str(e)}")
-        return TradeResult(None, None, None, None, 0, None, fund_code)
+        logger.error(f"货币基金赎回失败: {str(e)}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "hqbMakeRedemption", "fund_code": fund_code, "sub_account_no": sub_account_no})
+        raise ValidationError(str(e))
 
 
 def SFT1Transfer(user: User, sub_account_no: str, fund_code: str, fund_amount: float, share_id: str) -> Optional[TradeResult]:
@@ -242,8 +244,8 @@ def SFT1Transfer(user: User, sub_account_no: str, fund_code: str, fund_amount: f
         Optional[TradeResult]: 交易结果，如果失败则返回None
     """
     if fund_amount == 0.00:
-        logger = logging.getLogger("SellMrg")
-        logger.info("转换的份额不能为0")
+        logger = get_logger("SellMrg")
+        logger.info("转换的份额不能为0", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "SFT1Transfer", "fund_code": fund_code, "sub_account_no": sub_account_no})
         return None
     
     url = f"https://tradeapilvs{user.index}.1234567.com.cn/Trade/FundTrade/SFT1TransferL2"
@@ -292,12 +294,12 @@ def SFT1Transfer(user: User, sub_account_no: str, fund_code: str, fund_amount: f
         "CToken": user.c_token
     }
     
-    logger = logging.getLogger("SellMrg")
+    logger = get_logger("SellMrg")
     try:
         response = requests.post(url, headers=headers, data=json.dumps(payload), verify=False)
         response.raise_for_status()
         response_data = response.json()
-        logger.info(f"SFT1转换L2的响应: {response_data}")
+        logger.info(f"SFT1转换L2的响应: {response_data}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "SFT1Transfer", "fund_code": fund_code, "sub_account_no": sub_account_no})
         
         if response_data is not None and "Data" in response_data:
             data = response_data["Data"]
@@ -320,19 +322,17 @@ def SFT1Transfer(user: User, sub_account_no: str, fund_code: str, fund_amount: f
                     busin_serial_no, business_type, apply_workday, amount, status, show_com_prop, fund_code,
                     raw=response_data
                 )
-                logger.info(f"SFT1转换L2结果: {result}")
+                logger.info(f"SFT1转换L2结果: {result}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "SFT1Transfer", "fund_code": fund_code, "sub_account_no": sub_account_no})
                 return result
             else:
-                logger.error("SFT1转换L2响应中未返回Data")
+                logger.error("SFT1转换L2响应中未返回Data", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "SFT1Transfer", "fund_code": fund_code, "sub_account_no": sub_account_no})
                 return TradeResult(None, None, None, None, 0, None, fund_code, raw=response_data)
         else:
-            logger.error("SFT1转换L2响应数据不完整")
+            logger.error("SFT1转换L2响应数据不完整", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "SFT1Transfer", "fund_code": fund_code, "sub_account_no": sub_account_no})
             return TradeResult(None, None, None, None, 0, None, fund_code, raw=response_data)
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}")
-        return TradeResult(None, None, None, None, 0, None, fund_code)
+        logger.error(f"请求失败: {str(e)}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "SFT1Transfer", "fund_code": fund_code, "sub_account_no": sub_account_no})
+        raise RetriableError(str(e))
     except Exception as e:
-        logger.error(f"SFT1转换L2失败: {str(e)}")
-        return TradeResult(None, None, None, None, 0, None, fund_code)
-
-
+        logger.error(f"SFT1转换L2失败: {str(e)}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "SFT1Transfer", "fund_code": fund_code, "sub_account_no": sub_account_no})
+        raise ValidationError(str(e))

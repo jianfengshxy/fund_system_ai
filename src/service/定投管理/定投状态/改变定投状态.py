@@ -10,9 +10,10 @@ from src.API.定投计划管理.SmartPlan import getFundPlanList, updatePlanStat
 from src.domain.user.User import User
 from src.domain.fund_plan.fund_plan import FundPlan
 import logging
+from src.common.logger import get_logger
 from src.common.constant import DEFAULT_USER
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def batch_update_fund_plan_status(user: User, fund_code: str, buy_strategy_switch: bool) -> List[dict]:
     """
@@ -28,14 +29,14 @@ def batch_update_fund_plan_status(user: User, fund_code: str, buy_strategy_switc
     """
     try:
         # 获取指定基金的定投计划列表
-        logger.info(f"开始获取基金 {fund_code} 的定投计划列表")
+        logger.info(f"开始获取基金 {fund_code} 的定投计划列表", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "fund_code": fund_code, "action": "update_plan_status"})
         existing_plans = getFundPlanList(fund_code, user)
         
         if not existing_plans:
-            logger.info(f"基金 {fund_code} 没有找到任何定投计划")
+            logger.info(f"基金 {fund_code} 没有找到任何定投计划", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "fund_code": fund_code, "action": "update_plan_status"})
             return []
         
-        logger.info(f"找到 {len(existing_plans)} 个定投计划，开始批量更新状态")
+        logger.info(f"找到 {len(existing_plans)} 个定投计划，开始批量更新状态", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "fund_code": fund_code, "action": "update_plan_status"})
         
         # 存储更新结果
         update_results = []
@@ -43,7 +44,7 @@ def batch_update_fund_plan_status(user: User, fund_code: str, buy_strategy_switc
         # 循环调用updatePlanStatus更新每个计划的状态
         for plan in existing_plans:
             try:
-                logger.info(f"正在更新计划ID: {plan.planId}, 基金: {plan.fundName}")
+                logger.info(f"正在更新计划ID: {plan.planId}, 基金: {plan.fundName}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "fund_code": fund_code, "action": "update_plan_status", "plan_id": plan.planId})
                 
                 # 调用updatePlanStatus更新计划状态
                 result = updatePlanStatus(user, plan.planId, buy_strategy_switch)
@@ -58,10 +59,10 @@ def batch_update_fund_plan_status(user: User, fund_code: str, buy_strategy_switc
                     'buyStrategySwitch': buy_strategy_switch
                 })
                 
-                logger.info(f"计划ID {plan.planId} 状态更新完成")
+                logger.info(f"计划ID {plan.planId} 状态更新完成", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "fund_code": fund_code, "action": "update_plan_status", "plan_id": plan.planId})
                 
             except Exception as e:
-                logger.error(f"更新计划ID {plan.planId} 状态时发生错误: {str(e)}")
+                logger.error(f"更新计划ID {plan.planId} 状态时发生错误: {str(e)}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "fund_code": fund_code, "action": "update_plan_status", "plan_id": plan.planId})
                 update_results.append({
                     'planId': plan.planId,
                     'fundCode': plan.fundCode,
@@ -76,12 +77,12 @@ def batch_update_fund_plan_status(user: User, fund_code: str, buy_strategy_switc
         success_count = sum(1 for result in update_results if result['success'])
         total_count = len(update_results)
         
-        logger.info(f"批量更新完成，成功: {success_count}/{total_count}")
+        logger.info(f"批量更新完成，成功: {success_count}/{total_count}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "fund_code": fund_code, "action": "update_plan_status"})
         
         return update_results
         
     except Exception as e:
-        logger.error(f"批量更新基金 {fund_code} 定投计划状态时发生错误: {str(e)}")
+        logger.error(f"批量更新基金 {fund_code} 定投计划状态时发生错误: {str(e)}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "fund_code": fund_code, "action": "update_plan_status"})
         raise Exception(f"批量更新失败: {str(e)}")
 
 def pause_all_fund_plans(user: User, fund_code: str) -> List[dict]:

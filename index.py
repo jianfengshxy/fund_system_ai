@@ -40,13 +40,14 @@ from src.bussiness.最优止盈组合.add_new import add_new_funds as add_new_bi
 from src.bussiness.最优止盈组合.increase import increase as increase_biz
 # 新增：导入 bussiness 层的止盈薄封装
 from src.bussiness.最优止盈组合.redeem import redeem as redeem_biz
+from src.common.errors import RetriableError, ValidationError, NonRetriableError
 
 # 新增：导入“见龙在田”业务层新增薄封装
 from src.bussiness.见龙在田.add_new import add_new_funds as jianlong_add_new_biz
 
 # 初始化日志记录器
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from src.common.logger import get_logger
+logger = get_logger(__name__)
 
 def redeem(event, context):
     try:
@@ -57,6 +58,7 @@ def redeem(event, context):
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
         total_budget = payload.get('total_budget')
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "redeem"}
 
         # 校验
         if not all([account, password, sub_account_name]):
@@ -69,18 +71,24 @@ def redeem(event, context):
             logger.error(f"获取用户 {account} 信息失败")
             return
 
-        logger.info(f"开始为用户 {user.customer_name} 执行止盈操作，组合：{sub_account_name}，预算：{total_budget}")
+        logger.info(f"开始为用户 {user.customer_name} 执行止盈操作，组合：{sub_account_name}，预算：{total_budget}", extra=extra)
 
         # 委托业务层薄封装
         success = redeem_biz(user, sub_account_name, total_budget)
 
         if success:
-            logger.info(f"用户 {user.customer_name} 止盈操作成功")
+            logger.info(f"用户 {user.customer_name} 止盈操作成功", extra=extra)
         else:
-            logger.error(f"用户 {user.customer_name} 止盈操作失败")
+            logger.error(f"用户 {user.customer_name} 止盈操作失败", extra=extra)
 
+    except RetriableError as e:
+        logger.warning(f"执行止盈时发生异常可重试: {e}", extra={"action": "redeem"})
+    except ValidationError as e:
+        logger.error(f"执行止盈时发生异常参数错误: {e}", extra={"action": "redeem"})
+    except NonRetriableError as e:
+        logger.error(f"执行止盈时发生异常不可重试: {e}", extra={"action": "redeem"})
     except Exception as e:
-        logger.error(f"执行止盈时发生异常: {e}")
+        logger.error(f"执行止盈时发生异常: {e}", extra={"action": "redeem"})
 
 def increase(event, context):
     try:
@@ -93,6 +101,7 @@ def increase(event, context):
         total_budget = payload.get('total_budget')  
         amount = payload.get('amount')              # Optional
         fund_type = payload.get('fund_type', 'all')
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "increase"}
 
         # 校验
         if not all([account, password, sub_account_name,total_budget]):
@@ -104,18 +113,24 @@ def increase(event, context):
         if not user:
             logger.error(f"获取用户 {account} 信息失败")
 
-        logger.info(f"开始为用户 {user.customer_name} 执行加仓操作，组合：{sub_account_name}，预算：{total_budget}，amount：{amount}，fund_type：{fund_type}")
+        logger.info(f"开始为用户 {user.customer_name} 执行加仓操作，组合：{sub_account_name}，预算：{total_budget}，amount：{amount}，fund_type：{fund_type}", extra=extra)
 
         # 业务调用（与 add_new 的调用风格一致）
         success = increase_biz(user, sub_account_name, total_budget, amount, fund_type)
 
         if success:
-            logger.info(f"用户 {user.customer_name} 加仓操作成功")
+            logger.info(f"用户 {user.customer_name} 加仓操作成功", extra=extra)
         else:
-            logger.error(f"用户 {user.customer_name} 加仓操作失败")
+            logger.error(f"用户 {user.customer_name} 加仓操作失败", extra=extra)
 
+    except RetriableError as e:
+        logger.warning(f"执行加仓时发生异常可重试: {e}", extra={"action": "increase"})
+    except ValidationError as e:
+        logger.error(f"执行加仓时发生异常参数错误: {e}", extra={"action": "increase"})
+    except NonRetriableError as e:
+        logger.error(f"执行加仓时发生异常不可重试: {e}", extra={"action": "increase"})
     except Exception as e:
-        logger.error(f"执行加仓时发生异常: {e}")
+        logger.error(f"执行加仓时发生异常: {e}", extra={"action": "increase"})
 
 #加仓风向标的新增基金调用
 def add_new(event, context):
@@ -130,6 +145,7 @@ def add_new(event, context):
         total_budget = payload.get('total_budget')
         amount = payload.get('amount')  # Optional
         fund_type = payload.get('fund_type', 'all')
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "add_new"}
 
         # 校验
         if not all([account, password, sub_account_name, total_budget]):
@@ -142,13 +158,19 @@ def add_new(event, context):
             logger.error(f"获取用户 {account} 信息失败")
             return
 
-        logger.info(f"开始为用户 {user.customer_name} 执行新增基金操作")
+        logger.info(f"开始为用户 {user.customer_name} 执行新增基金操作", extra=extra)
 
         # 业务调用（改为与 add_new 一致的参数风格）
         success = add_new_biz(user, sub_account_name, total_budget, amount, fund_type)
 
+    except RetriableError as e:
+        logger.warning(f"add_new 异常可重试: {e}", extra={"action": "add_new"})
+    except ValidationError as e:
+        logger.error(f"add_new 异常参数错误: {e}", extra={"action": "add_new"})
+    except NonRetriableError as e:
+        logger.error(f"add_new 异常不可重试: {e}", extra={"action": "add_new"})
     except Exception as e:
-        logger.error(f"add_new 函数执行错误: {str(e)}")
+        logger.error(f"add_new 函数执行错误: {str(e)}", extra={"action": "add_new"})
         return
 
 def add_new_jianlong(event, context):
@@ -164,6 +186,7 @@ def add_new_jianlong(event, context):
         fund_type = payload.get('fund_type', 'all')
         fund_num = payload.get('fund_num', 1)
         spread_days = payload.get('spread_days', 5)
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "jianlong_add_new"}
 
         # 校验
         if not all([account, password, sub_account_name, total_budget]):
@@ -176,18 +199,24 @@ def add_new_jianlong(event, context):
             logger.error(f"获取用户 {account} 信息失败")
             return
 
-        logger.info(f"[见龙在田] 开始为用户 {user.customer_name} 执行新增基金操作，组合：{sub_account_name}，预算：{total_budget}，amount：{amount}，fund_type：{fund_type}，fund_num：{fund_num}，spread_days：{spread_days}")
+        logger.info(f"[见龙在田] 开始为用户 {user.customer_name} 执行新增基金操作，组合：{sub_account_name}，预算：{total_budget}，amount：{amount}，fund_type：{fund_type}，fund_num：{fund_num}，spread_days：{spread_days}", extra=extra)
 
         # 业务调用（见龙在田的新增）
         success = jianlong_add_new_biz(user, sub_account_name, total_budget, amount, fund_type, fund_num, spread_days)
 
         if success:
-            logger.info(f"[见龙在田] 用户 {user.customer_name} 新增基金操作成功")
+            logger.info(f"[见龙在田] 用户 {user.customer_name} 新增基金操作成功", extra=extra)
         else:
-            logger.error(f"[见龙在田] 用户 {user.customer_name} 新增基金操作失败")
+            logger.error(f"[见龙在田] 用户 {user.customer_name} 新增基金操作失败", extra=extra)
 
+    except RetriableError as e:
+        logger.warning(f"add_new_jianlong 异常可重试: {e}", extra={"action": "jianlong_add_new"})
+    except ValidationError as e:
+        logger.error(f"add_new_jianlong 异常参数错误: {e}", extra={"action": "jianlong_add_new"})
+    except NonRetriableError as e:
+        logger.error(f"add_new_jianlong 异常不可重试: {e}", extra={"action": "jianlong_add_new"})
     except Exception as e:
-        logger.error(f"add_new_jianlong 函数执行错误: {str(e)}")
+        logger.error(f"add_new_jianlong 函数执行错误: {str(e)}", extra={"action": "jianlong_add_new"})
         return
 
 # 新增：见龙在田加仓入口（参考 add_new_jianlong）
@@ -204,6 +233,7 @@ def increase_jianlong(event, context):
         fund_type = payload.get('fund_type', 'all')
         fund_num = payload.get('fund_num', 5)
         spread_days = payload.get('spread_days', 5)
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "jianlong_increase"}
 
         # 校验
         if not all([account, password, sub_account_name, total_budget]):
@@ -216,7 +246,7 @@ def increase_jianlong(event, context):
             logger.error(f"获取用户 {account} 信息失败")
             return
 
-        logger.info(f"[见龙在田] 开始为用户 {user.customer_name} 执行加仓操作，组合：{sub_account_name}，预算：{total_budget}，amount：{amount}，fund_type：{fund_type}，fund_num：{fund_num}，spread_days：{spread_days}")
+        logger.info(f"[见龙在田] 开始为用户 {user.customer_name} 执行加仓操作，组合：{sub_account_name}，预算：{total_budget}，amount：{amount}，fund_type：{fund_type}，fund_num：{fund_num}，spread_days：{spread_days}", extra=extra)
 
         # 业务调用（见龙在田的加仓）
         # 导入见龙在田的加仓业务逻辑
@@ -224,12 +254,18 @@ def increase_jianlong(event, context):
         success = jianlong_increase_biz(user, sub_account_name, total_budget, amount, fund_type, fund_num, spread_days)
 
         if success:
-            logger.info(f"[见龙在田] 用户 {user.customer_name} 加仓操作成功")
+            logger.info(f"[见龙在田] 用户 {user.customer_name} 加仓操作成功", extra=extra)
         else:
-            logger.error(f"[见龙在田] 用户 {user.customer_name} 加仓操作失败")
+            logger.error(f"[见龙在田] 用户 {user.customer_name} 加仓操作失败", extra=extra)
 
+    except RetriableError as e:
+        logger.warning(f"increase_jianlong 异常可重试: {e}", extra={"action": "jianlong_increase"})
+    except ValidationError as e:
+        logger.error(f"increase_jianlong 异常参数错误: {e}", extra={"action": "jianlong_increase"})
+    except NonRetriableError as e:
+        logger.error(f"increase_jianlong 异常不可重试: {e}", extra={"action": "jianlong_increase"})
     except Exception as e:
-        logger.error(f"increase_jianlong 函数执行错误: {str(e)}")
+        logger.error(f"increase_jianlong 函数执行错误: {str(e)}", extra={"action": "jianlong_increase"})
         return
 
 def increase_all_fund_plans(event, context):
@@ -295,7 +331,8 @@ def redeem_jianlong(event, context):
             logger.error(f"获取用户 {account} 信息失败")
             return
 
-        logger.info(f"[见龙在田] 开始为用户 {user.customer_name} 执行止盈操作，组合：{sub_account_name}，预算：{total_budget}，止盈阈值：{profit_threshold}%")
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "jianlong_redeem"}
+        logger.info(f"[见龙在田] 开始为用户 {user.customer_name} 执行止盈操作，组合：{sub_account_name}，预算：{total_budget}，止盈阈值：{profit_threshold}%", extra=extra)
 
         # 业务调用（见龙在田的止盈）
         from src.bussiness.见龙在田.redeem import redeem as jianlong_redeem_biz
@@ -305,12 +342,18 @@ def redeem_jianlong(event, context):
             tb = 100000.0
         success = jianlong_redeem_biz(user, sub_account_name, tb, profit_threshold)
         if success:
-            logger.info(f"[见龙在田] 用户 {user.customer_name} 止盈操作完成")
+            logger.info(f"[见龙在田] 用户 {user.customer_name} 止盈操作完成", extra=extra)
         else:
-            logger.error(f"[见龙在田] 用户 {user.customer_name} 止盈操作失败")
+            logger.error(f"[见龙在田] 用户 {user.customer_name} 止盈操作失败", extra=extra)
         return
+    except RetriableError as e:
+        logger.warning(f"[见龙在田] 止盈入口异常可重试：{e}", extra={"action": "jianlong_redeem"})
+    except ValidationError as e:
+        logger.error(f"[见龙在田] 止盈入口异常参数错误：{e}", extra={"action": "jianlong_redeem"})
+    except NonRetriableError as e:
+        logger.error(f"[见龙在田] 止盈入口异常不可重试：{e}", extra={"action": "jianlong_redeem"})
     except Exception as e:
-        logger.error(f"[见龙在田] 止盈入口异常：{e}")
+        logger.error(f"[见龙在田] 止盈入口异常：{e}", extra={"action": "jianlong_redeem"})
         return
 
 def add_new_custom(event, context):
@@ -321,6 +364,7 @@ def add_new_custom(event, context):
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
         fund_list = payload.get('fund_list')
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_add_new"}
 
         if not all([account, password, sub_account_name, fund_list]):
             logger.error("Payload缺少必填参数: account, password, sub_account_name 或 fund_list")
@@ -331,17 +375,23 @@ def add_new_custom(event, context):
             logger.error(f"获取用户 {account} 信息失败")
             return
 
-        logger.info(f"[自定义组合-新增] 开始为用户 {user.customer_name} 执行新增，组合：{sub_account_name}，基金数：{len(fund_list)}")
+        logger.info(f"[自定义组合-新增] 开始为用户 {user.customer_name} 执行新增，组合：{sub_account_name}，基金数：{len(fund_list)}", extra=extra)
 
         from src.service.自定义组合算法.自定义组合新增 import increase_funds as add_new_service
         success = add_new_service(user, sub_account_name, fund_list)
 
         if success:
-            logger.info(f"[自定义组合-新增] 用户 {user.customer_name} 新增完成")
+            logger.info(f"[自定义组合-新增] 用户 {user.customer_name} 新增完成", extra=extra)
         else:
-            logger.error(f"[自定义组合-新增] 用户 {user.customer_name} 新增失败")
+            logger.error(f"[自定义组合-新增] 用户 {user.customer_name} 新增失败", extra=extra)
+    except RetriableError as e:
+        logger.warning(f"[自定义组合-新增] 异常可重试：{e}", extra={"action": "custom_add_new"})
+    except ValidationError as e:
+        logger.error(f"[自定义组合-新增] 异常参数错误：{e}", extra={"action": "custom_add_new"})
+    except NonRetriableError as e:
+        logger.error(f"[自定义组合-新增] 异常不可重试：{e}", extra={"action": "custom_add_new"})
     except Exception as e:
-        logger.error(f"[自定义组合-新增] 入口异常：{e}")
+        logger.error(f"[自定义组合-新增] 入口异常：{e}", extra={"action": "custom_add_new"})
 
 def increase_custom(event, context):
     try:
@@ -351,6 +401,7 @@ def increase_custom(event, context):
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
         fund_list = payload.get('fund_list')
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_increase"}
 
         if not all([account, password, sub_account_name, fund_list]):
             logger.error("Payload缺少必填参数: account, password, sub_account_name 或 fund_list")
@@ -361,17 +412,23 @@ def increase_custom(event, context):
             logger.error(f"获取用户 {account} 信息失败")
             return
 
-        logger.info(f"[自定义组合-加仓] 开始为用户 {user.customer_name} 执行加仓，组合：{sub_account_name}，基金数：{len(fund_list)}")
+        logger.info(f"[自定义组合-加仓] 开始为用户 {user.customer_name} 执行加仓，组合：{sub_account_name}，基金数：{len(fund_list)}", extra=extra)
 
         from src.service.自定义组合算法.自定义组合加仓 import increase_funds as increase_service
         success = increase_service(user, sub_account_name, fund_list)
 
         if success:
-            logger.info(f"[自定义组合-加仓] 用户 {user.customer_name} 加仓完成")
+            logger.info(f"[自定义组合-加仓] 用户 {user.customer_name} 加仓完成", extra=extra)
         else:
-            logger.error(f"[自定义组合-加仓] 用户 {user.customer_name} 加仓失败")
+            logger.error(f"[自定义组合-加仓] 用户 {user.customer_name} 加仓失败", extra=extra)
+    except RetriableError as e:
+        logger.warning(f"[自定义组合-加仓] 异常可重试：{e}", extra={"action": "custom_increase"})
+    except ValidationError as e:
+        logger.error(f"[自定义组合-加仓] 异常参数错误：{e}", extra={"action": "custom_increase"})
+    except NonRetriableError as e:
+        logger.error(f"[自定义组合-加仓] 异常不可重试：{e}", extra={"action": "custom_increase"})
     except Exception as e:
-        logger.error(f"[自定义组合-加仓] 入口异常：{e}")
+        logger.error(f"[自定义组合-加仓] 入口异常：{e}", extra={"action": "custom_increase"})
 
 def redeem_custom(event, context):
     try:
@@ -381,6 +438,7 @@ def redeem_custom(event, context):
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
         fund_list = payload.get('fund_list')
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_redeem"}
 
         if not all([account, password, sub_account_name, fund_list]):
             logger.error("Payload缺少必填参数: account, password, sub_account_name 或 fund_list")
@@ -391,17 +449,23 @@ def redeem_custom(event, context):
             logger.error(f"获取用户 {account} 信息失败")
             return
 
-        logger.info(f"[自定义组合-止盈] 开始为用户 {user.customer_name} 执行止盈，组合：{sub_account_name}，基金数：{len(fund_list)}")
+        logger.info(f"[自定义组合-止盈] 开始为用户 {user.customer_name} 执行止盈，组合：{sub_account_name}，基金数：{len(fund_list)}", extra=extra)
 
         from src.service.自定义组合算法.自定义组合止盈 import redeem_funds as redeem_service
         success = redeem_service(user, sub_account_name, fund_list)
 
         if success:
-            logger.info(f"[自定义组合-止盈] 用户 {user.customer_name} 止盈完成")
+            logger.info(f"[自定义组合-止盈] 用户 {user.customer_name} 止盈完成", extra=extra)
         else:
-            logger.error(f"[自定义组合-止盈] 用户 {user.customer_name} 止盈失败")
+            logger.error(f"[自定义组合-止盈] 用户 {user.customer_name} 止盈失败", extra=extra)
+    except RetriableError as e:
+        logger.warning(f"[自定义组合-止盈] 异常可重试：{e}", extra={"action": "custom_redeem"})
+    except ValidationError as e:
+        logger.error(f"[自定义组合-止盈] 异常参数错误：{e}", extra={"action": "custom_redeem"})
+    except NonRetriableError as e:
+        logger.error(f"[自定义组合-止盈] 异常不可重试：{e}", extra={"action": "custom_redeem"})
     except Exception as e:
-        logger.error(f"[自定义组合-止盈] 入口异常：{e}")
+        logger.error(f"[自定义组合-止盈] 入口异常：{e}", extra={"action": "custom_redeem"})
 
 if __name__ == "__main__":
     # 自定义组合入口的本地测试 payload（与服务层示例一致）

@@ -25,11 +25,13 @@ from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 
 
+from src.common.logger import get_logger
+logger = get_logger("FundInvestmentIndicatorService")
+
 def process_fund_investment_indicators(user, page_size=50) -> List[FundInvestmentIndicator]:
     """
     处理基金投资指标数据，按规则过滤并返回结果
     """
-    logger = logging.getLogger("FundInvestmentIndicatorService")
     
     try:
         # 调用API层获取基础数据
@@ -208,7 +210,7 @@ def save_fund_investment_indicators(user):
         ind.month_item_sc = month_item_sc
 
         # 细粒度日志，便于确认补齐值
-        logging.getLogger().info(
+        logger.info(
             f"入库前补齐({ind.fund_code} {ind.fund_name}): "
             f"rank30={ind.rank_30day}, rank100={ind.rank_100day}, vol={ind.volatility}, nav5={ind.nav_5day_avg}, "
             f"season={ind.season_item_rank}/{ind.season_item_sc}, month={ind.month_item_rank}/{ind.month_item_sc}"
@@ -221,7 +223,7 @@ def save_fund_investment_indicators(user):
     ]
     total = len(indicators)
     counts = {f: sum(1 for x in indicators if getattr(x, f, None) is not None) for f in fields}
-    logging.getLogger().info(
+    logger.info(
         "补齐完成统计: " +
         ", ".join([f"{f}={counts[f]}/{total}" for f in fields])
     )
@@ -251,7 +253,7 @@ _fund_indicators_cache = {}
 def get_fund_investment_indicators(days=10, threshold=3) -> List[FundInvestmentIndicator]:
     cache_key = f"{days}_{threshold}"
     if cache_key in _fund_indicators_cache:
-        logging.info(f"从缓存中获取基金投资指标: days={days}, threshold={threshold}")
+        get_logger(__name__).info(f"从缓存中获取基金投资指标: days={days}, threshold={threshold}")
         return _fund_indicators_cache[cache_key]
     
     repo = FundInvestmentIndicatorRepositoryImpl()
@@ -268,10 +270,10 @@ def get_fund_investment_indicators(days=10, threshold=3) -> List[FundInvestmentI
             elif not ind.tracking_index:
                 unique_indicators.append(ind)  # 保留无tracking_index的
         indicators = unique_indicators
-        logging.info(f"去重后基金数量: {len(indicators)}")
+        get_logger(__name__).info(f"去重后基金数量: {len(indicators)}")
     
     _fund_indicators_cache[cache_key] = indicators
-    logging.info(f"已缓存基金投资指标: days={days}, threshold={threshold}")
+    get_logger(__name__).info(f"已缓存基金投资指标: days={days}, threshold={threshold}")
     return indicators
 
 

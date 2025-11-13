@@ -1,6 +1,7 @@
 import sys
 import os
 import logging
+from src.common.logger import get_logger
 import urllib.parse
 import urllib3
 import warnings
@@ -28,6 +29,7 @@ from src.common.constant import (
     PASSPORT_UTOKEN, PHONE_TYPE, MOBILE_KEY, PAGE_INDEX,
     USER_ID, U_TOKEN, C_TOKEN, PASSPORT_ID, DEFAULT_USER
 )
+from src.common.errors import RetriableError, ValidationError, NonRetriableError
 
 
 def parse_amount(amount_str: str) -> float:
@@ -132,7 +134,8 @@ def getFundRations(user, page_index=1, page_size=1000, planTypes=None, fundTypes
         "passportid": user.passport_id
     }
     
-    logger = logging.getLogger("SmartPlan")
+    logger = get_logger("SmartPlan")
+    extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "getFundRations"}
     try:
         response = requests.post(url, json=body, headers=headers, verify=False)
         response.raise_for_status()
@@ -149,7 +152,7 @@ def getFundRations(user, page_index=1, page_size=1000, planTypes=None, fundTypes
                         FirstError=json_data.get('FirstError'),
                         DebugError=json_data.get('DebugError')
                     )
-                raise Exception('解析响应数据失败: Data字段为空')
+                raise ValidationError('Data为空')
             plans = []
             for item in data.get('data', []):
                 # 在 getFundRations 函数中修改 FundPlan 初始化
@@ -205,13 +208,14 @@ def getFundRations(user, page_index=1, page_size=1000, planTypes=None, fundTypes
                 FirstError=json_data.get('FirstError'),
                 DebugError=json_data.get('DebugError')
             )
+            logger.info(f"定投计划页数: {len(plans)}", extra=extra)
             return api_response
         except Exception as e:
-            logger.error(f'解析响应数据失败: {str(e)}')
-            raise Exception(f'解析响应数据失败: {str(e)}')
+            logger.error(f'解析响应数据失败: {str(e)}', extra=extra)
+            raise ValidationError(str(e))
     except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}')
-        raise Exception(f'请求失败: {str(e)}')
+        logger.error(f'请求失败: {str(e)}', extra=extra)
+        raise RetriableError(str(e))
 
 def getFundPlanList(fund_code, user) -> List[FundPlan]:
     """
@@ -252,7 +256,8 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
         'traceparent': '00-0000000046aa4cae00000196719b333e-0000000000000000-01',
         'tracestate': 'pid=0xb01a105,taskid=0x651cc79'
     }
-    logger = logging.getLogger("SmartPlan")
+    logger = get_logger("SmartPlan")
+    extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "getFundPlanList", "fund_code": fund_code}
     try:
         response = requests.get(full_url, headers=headers, verify=False)
         response.raise_for_status()
@@ -261,13 +266,13 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
         
         # 检查API调用是否成功
         if not json_data.get('Success', False):
-            logger.error(f"API调用失败: {json_data.get('FirstError', 'Unknown error')}")
-            return []
+            logger.error(f"API调用失败: {json_data.get('FirstError', 'Unknown error')}", extra=extra)
+            raise ValidationError(json_data.get('FirstError') or 'API_FAIL')
             
         data = json_data.get('Data')
         if data is None:
-            logger.error('解析响应数据失败: Data字段为空')
-            return []
+            logger.error('解析响应数据失败: Data字段为空', extra=extra)
+            raise ValidationError('Data为空')
             
         # 提取基金基本信息
         fund_code_val = data.get('fundCode', '')
@@ -337,18 +342,18 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
                 )
                 fund_plans.append(plan)
             except Exception as e:
-                logger.error(f'解析单个计划失败: {str(e)}')
+                logger.error(f'解析单个计划失败: {str(e)}', extra=extra)
                 continue
                 
-        logger.info(f'{user.customer_name}获取基金{fund_name}{fund_code}定投计划列表成功，共{len(fund_plans)}个计划')
+        logger.info(f'{user.customer_name}获取基金{fund_name}{fund_code}定投计划列表成功，共{len(fund_plans)}个计划', extra=extra)
         return fund_plans
         
     except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}')
-        return []
+        logger.error(f'请求失败: {str(e)}', extra=extra)
+        raise RetriableError(str(e))
     except Exception as e:
-        logger.error(f'获取计划列表失败: {str(e)}')
-        return []
+        logger.error(f'获取计划列表失败: {str(e)}', extra=extra)
+        raise ValidationError(str(e))
 
 
 def getRationCreateParameters(fund_code,user) -> ApiResponse[RationCreateParameters]:
@@ -395,7 +400,8 @@ def getRationCreateParameters(fund_code,user) -> ApiResponse[RationCreateParamet
         'tracestate': 'pid=0xb01a105,taskid=0xa539a9d'
     }
         
-    logger = logging.getLogger("RationCreate")
+    logger = get_logger("RationCreate")
+    extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "getRationCreateParameters", "fund_code": fund_code}
     try:
         response = requests.get(full_url, headers=headers, verify=False)
         response.raise_for_status()
@@ -411,7 +417,7 @@ def getRationCreateParameters(fund_code,user) -> ApiResponse[RationCreateParamet
                         FirstError=json_data.get('FirstError'),
                         DebugError=json_data.get('DebugError')
                     )
-                raise Exception('解析响应数据失败: Data字段为空')
+                raise ValidationError('Data为空')
 
             discount_rates = []
             for rate_data in data.get('discountRateList', []):
@@ -470,11 +476,11 @@ def getRationCreateParameters(fund_code,user) -> ApiResponse[RationCreateParamet
             )
             return api_response
         except Exception as e:
-            logger.error(f'解析响应数据失败: {str(e)}')
-            raise Exception(f'解析响应数据失败: {str(e)}')
+            logger.error(f'解析响应数据失败: {str(e)}', extra=extra)
+            raise ValidationError(str(e))
     except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}')
-        raise Exception(f'请求失败: {str(e)}')
+        logger.error(f'请求失败: {str(e)}', extra=extra)
+        raise RetriableError(str(e))
 
 def getPlanDetailPro(plan_id, user) -> ApiResponse[FundPlanDetail]:
     """
@@ -513,7 +519,8 @@ def getPlanDetailPro(plan_id, user) -> ApiResponse[FundPlanDetail]:
         'gtoken': 'ceaf-4a997831b1b3b90849f585f98ca6f30e',
         'mp_instance_id': '14'
     }
-    logger = logging.getLogger("SmartPlan")
+    logger = get_logger("SmartPlan")
+    extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "getPlanDetailPro", "plan_id": plan_id}
     try:
         response = requests.post(url, json=data, headers=headers, verify=False)
         response.raise_for_status()
@@ -529,7 +536,7 @@ def getPlanDetailPro(plan_id, user) -> ApiResponse[FundPlanDetail]:
                         FirstError=json_data.get('FirstError'),
                         DebugError=json_data.get('DebugError')
                     )
-                raise Exception('解析响应数据失败: Data字段为空')
+                raise ValidationError('Data为空')
 
             ration_plan_data = data.get('rationPlan', {})
             ration_plan = FundPlan(
@@ -599,11 +606,11 @@ def getPlanDetailPro(plan_id, user) -> ApiResponse[FundPlanDetail]:
             )
             return api_response
         except Exception as e:
-            logger.error(f'解析响应数据失败: {str(e)}')
-            raise Exception(f'解析响应数据失败: {str(e)}')
+            logger.error(f'解析响应数据失败: {str(e)}', extra=extra)
+            raise ValidationError(str(e))
     except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}')
-        raise Exception(f'请求失败: {str(e)}')
+        logger.error(f'请求失败: {str(e)}', extra=extra)
+        raise RetriableError(str(e))
 
 
 def operateRation(user, plan_id: str, operation: str) -> ApiResponse[FundPlanDetail]:
@@ -653,7 +660,8 @@ def operateRation(user, plan_id: str, operation: str) -> ApiResponse[FundPlanDet
         'mp_instance_id': '80'
     }
     
-    logger = logging.getLogger("SmartPlan")
+    logger = get_logger("SmartPlan")
+    extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "operateRation", "plan_id": plan_id}
     try:
         response = requests.post(url, json=body, headers=headers, verify=False)
         response.raise_for_status()
@@ -670,7 +678,7 @@ def operateRation(user, plan_id: str, operation: str) -> ApiResponse[FundPlanDet
                         FirstError=json_data.get('FirstError'),
                         DebugError=json_data.get('DebugError')
                     )
-                raise Exception('解析响应数据失败: Data字段为空')
+                raise ValidationError('Data为空')
 
             # 解析提示信息
             tips = []
@@ -732,12 +740,12 @@ def operateRation(user, plan_id: str, operation: str) -> ApiResponse[FundPlanDet
             )
             
         except Exception as e:
-            logger.error(f'解析响应数据失败: {str(e)}')
-            raise Exception(f'解析响应数据失败: {str(e)}')
+            logger.error(f'解析响应数据失败: {str(e)}', extra=extra)
+            raise ValidationError(str(e))
             
     except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}')
-        raise Exception(f'请求失败: {str(e)}')
+        logger.error(f'请求失败: {str(e)}', extra=extra)
+        raise RetriableError(str(e))
 
 
 def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int = 4, 
@@ -757,7 +765,8 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
     Returns:
         ApiResponse[FundPlan]: 定投计划创建结果
     """
-    logger = logging.getLogger("SmartPlan")
+    logger = get_logger("SmartPlan")
+    extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "createPlanV3", "fund_code": fund_code}
     
     # 获取基金限额并检查
     try:
@@ -897,7 +906,7 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
             
         data = json_data.get('Data')
         if not data:
-            raise Exception('响应数据为空')
+            raise ValidationError('响应为空')
             
         # 创建FundPlan对象而不是FundPlanDetail对象
         plan = FundPlan(
@@ -949,7 +958,7 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
         )
         
         # 记录成功创建定投计划的详细信息
-        logger.info(f"定投计划创建成功 - 计划ID: {plan.planId}, 基金代码: {plan.fundCode}, 基金名称: {plan.fundName}, 定投金额: {plan.amount}, 定投周期: {plan.periodType}, 子账户: {plan.subAccountName}")
+        logger.info(f"定投计划创建成功 - 计划ID: {plan.planId}, 基金代码: {plan.fundCode}, 基金名称: {plan.fundName}, 定投金额: {plan.amount}, 定投周期: {plan.periodType}, 子账户: {plan.subAccountName}", extra=extra)
         
         return ApiResponse(
             Success=True,
@@ -960,11 +969,11 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
         )
         
     except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}')
-        raise Exception(f'请求失败: {str(e)}')
+        logger.error(f'请求失败: {str(e)}', extra=extra)
+        raise RetriableError(str(e))
     except Exception as e:
-        logger.error(f'创建定投计划失败: {str(e)}')
-        raise Exception(f'创建定投计划失败: {str(e)}')
+        logger.error(f'创建定投计划失败: {str(e)}', extra=extra)
+        raise NonRetriableError(str(e))
 
 def updatePlanStatus(user, plan_id: str, buyStrategySwitch: bool):
     """
@@ -1013,7 +1022,8 @@ def updatePlanStatus(user, plan_id: str, buyStrategySwitch: bool):
         'mp_instance_id': '80'
     }
     
-    logger = logging.getLogger("SmartPlan")
+    logger = get_logger("SmartPlan")
+    extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "updatePlanStatus", "plan_id": plan_id}
     try:
         response = requests.post(url, json=body, headers=headers, verify=False)
         response.raise_for_status()
@@ -1030,7 +1040,7 @@ def updatePlanStatus(user, plan_id: str, buyStrategySwitch: bool):
                         FirstError=json_data.get('FirstError'),
                         DebugError=json_data.get('DebugError')
                     )
-                raise Exception('解析响应数据失败: Data字段为空')
+                raise ValidationError('Data为空')
 
             # 解析提示信息
             tips = []
@@ -1092,12 +1102,12 @@ def updatePlanStatus(user, plan_id: str, buyStrategySwitch: bool):
             )
             
         except Exception as e:
-            logger.error(f'解析响应数据失败: {str(e)}')
-            raise Exception(f'解析响应数据失败: {str(e)}')
+            logger.error(f'解析响应数据失败: {str(e)}', extra=extra)
+            raise ValidationError(str(e))
             
     except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}')
-        raise Exception(f'请求失败: {str(e)}')
+        logger.error(f'请求失败: {str(e)}', extra=extra)
+        raise RetriableError(str(e))
 
 
 def updateRation(user, plan_id: str,
@@ -1111,7 +1121,8 @@ def updateRation(user, plan_id: str,
     - 在更新前必须获取计划详情；未填写的 amount/targetRate 用详情原值填充并下发
     - 返回更新后的计划概要信息（Data.tips、amount、periodInfo、targetRate 等）
     """
-    logger = logging.getLogger("SmartPlan")
+    logger = get_logger("SmartPlan")
+    extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "updateRation", "plan_id": plan_id}
 
     # 先取当前计划详情，作为默认值来源
     try:
@@ -1242,7 +1253,7 @@ def updateRation(user, plan_id: str,
                         FirstError=json_data.get("FirstError"),
                         DebugError=json_data.get("DebugError"),
                     )
-                raise Exception("解析响应数据失败: Data字段为空")
+                raise ValidationError("Data为空")
 
             amount_fallback = final_amount
             plan = FundPlan(
@@ -1294,8 +1305,8 @@ def updateRation(user, plan_id: str,
                 DebugError=json_data.get("DebugError"),
             )
         except Exception as e:
-            logger.error(f"解析响应数据失败: {str(e)}")
-            raise Exception(f"解析响应数据失败: {str(e)}")
+            logger.error(f"解析响应数据失败: {str(e)}", extra=extra)
+            raise ValidationError(str(e))
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}")
-        raise Exception(f"请求失败: {str(e)}")
+        logger.error(f"请求失败: {str(e)}", extra=extra)
+        raise RetriableError(str(e))

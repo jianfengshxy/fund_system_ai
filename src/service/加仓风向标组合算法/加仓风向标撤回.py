@@ -1,4 +1,5 @@
 import logging
+from src.common.logger import get_logger
 import os
 import sys
 from typing import List
@@ -15,11 +16,7 @@ from src.service.交易管理.交易查询 import get_withdrawable_trades
 from src.API.交易管理.revokMrg import revoke_order
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def revoke_funds(user: User, sub_account_name: str = "最优止盈") -> bool:
     """

@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import logging
+from src.common.logger import get_logger
 from typing import List, Dict, Any, Optional
 
 # 动态注入项目根目录，避免 ModuleNotFoundError: No module named 'src'
@@ -20,12 +21,7 @@ from src.API.定投计划管理.SmartPlan import (
 )
 from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
 
-logger = logging.getLogger("更新指定基金定投信息")
-if not logger.handlers:
-    logger.setLevel(logging.INFO)
-    _ch = logging.StreamHandler()
-    _ch.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-    logger.addHandler(_ch)
+logger = get_logger("UpdateRationInfo")
 
 
 def _profit_rate_of(rp) -> Optional[str]:

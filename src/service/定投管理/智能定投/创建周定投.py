@@ -2,6 +2,7 @@
 import os
 import sys
 import logging
+from src.common.logger import get_logger
 from typing import Dict, Any, Optional, List, Union
 import time
 
@@ -20,12 +21,7 @@ from src.API.定投计划管理.SmartPlan import (
 from src.domain.fund_plan.fund_plan import FundPlan
 from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
 
-logger = logging.getLogger("批量周定投创建")
-if not logger.handlers:
-    logger.setLevel(logging.INFO)
-    _ch = logging.StreamHandler()
-    _ch.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-    logger.addHandler(_ch)
+logger = get_logger("WeeklySmartPlanCreate")
 
 
 def _period_text(period_type: int, period_value: Optional[int]) -> str:

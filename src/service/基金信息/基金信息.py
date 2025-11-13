@@ -1,4 +1,5 @@
 import logging
+from src.common.logger import get_logger
 from typing import Dict, List, Optional
 import sys
 import os
@@ -21,7 +22,7 @@ from src.domain.user.User import User
 # 用于缓存基金信息的字典，避免重复请求
 fund_info_cache: Dict[str, FundInfo] = {}
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     """

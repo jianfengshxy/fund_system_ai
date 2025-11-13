@@ -1,5 +1,6 @@
 # 顶部导入片段
 import logging
+from src.common.logger import get_logger
 import sys
 import os
 from typing import List, Optional, Set
@@ -20,17 +21,12 @@ from src.service.定投管理.组合定投.组合定投管理 import create_peri
 from src.service.大数据.加仓风向标服务 import get_fund_investment_indicators
 from src.service.交易管理.购买基金 import commit_order
 from src.common.constant import DEFAULT_USER  # 添加导入，如果需要
-from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.common.errors import TradePasswordError  # 新增：捕获密码错误异常
 from src.service.公共服务.nav_gate_service import nav5_gate
 
 # 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def _get_max_funds_threshold() -> int:
     """
@@ -40,12 +36,12 @@ def _get_max_funds_threshold() -> int:
     """
     env_val = os.environ.get('MAX_FUNDS_THRESHOLD')
     if env_val is None or env_val == "":
-        return 30
+        return 20
     try:
         return int(env_val)
     except ValueError:
         logger.warning(f"环境变量 MAX_FUNDS_THRESHOLD 非法值: {env_val}，回退为默认 30")
-        return 30
+        return 20
 
 
 def add_new_funds(
@@ -80,7 +76,8 @@ def add_new_funds(
 
     logger.info(
         f"开始为用户 {user.customer_name} 执行新增基金操作，总预算：{total_budget}元，基金类型：{fund_type}，"
-        f"fund_num={fund_num}，spread_days={spread_days}"
+        f"fund_num={fund_num}，spread_days={spread_days}",
+        extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "wind_add_new"}
     )
     # 读取最大基金数阈值（本地/云端统一）
     MAX_FUNDS_THRESHOLD = _get_max_funds_threshold()
@@ -90,12 +87,12 @@ def add_new_funds(
         base_per_fund = round(total_budget / max(MAX_FUNDS_THRESHOLD, 1) / max(spread_days, 1), 2)
     else:
         base_per_fund = float(amount)
-    logger.info(f"单只基金基础买入金额: {base_per_fund}元")
+    logger.info(f"单只基金基础买入金额: {base_per_fund}元", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "wind_add_new"})
 
 
 
-    logger.info("========== 开始执行新增基金算法（最小落地版） ===========")
-    logger.info(f"用户: {user.customer_name}，组合名称: {sub_account_name}")
+    logger.info("========== 开始执行新增基金算法（最小落地版） ===========", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "wind_add_new"})
+    logger.info(f"用户: {user.customer_name}，组合名称: {sub_account_name}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "wind_add_new"})
 
     try:
         # 1) 获取组合资产与持仓
@@ -201,34 +198,9 @@ def add_new_funds(
         selected_funds = candidates[:max(fund_num, 1)]
         logger.info(f"候选基金数: {len(candidates)}，计划买入: {len(selected_funds)} 只")
 
-        # 3) 查询余额并按余额下调买入只数
-        try:
-            asset_response = GetMyAssetMainPartAsync(user)
-            if getattr(asset_response, 'Success', False) and getattr(asset_response, 'Data', None):
-                available_balance = asset_response.Data.get('HqbValue', 0.0)
-                logger.info(f"从资产API获取HqbValue: {available_balance}元")
-            else:
-                raise Exception("资产API调用失败")
-        except Exception as e:
-            logger.error(f"获取用户资产失败: {e}")
-            return False
-
-        if available_balance <= 0:
-            logger.info("可用余额为0，退出新增流程")
-            return True
-
         if base_per_fund <= 0:
             logger.info(f"单只基金买入金额无效({base_per_fund})，退出新增流程")
             return True
-
-        max_count_by_balance = int(available_balance // base_per_fund)
-        if max_count_by_balance <= 0:
-            logger.info(f"余额({available_balance}元)不足以买入一只基金({base_per_fund}元)，退出新增流程")
-            return True
-
-        if len(selected_funds) > max_count_by_balance:
-            logger.info(f"根据余额限制，将本次买入只数从{len(selected_funds)}下调为{max_count_by_balance}")
-            selected_funds = selected_funds[:max_count_by_balance]
 
         # 4) 获取子账户编号
         sub_account_no = getSubAccountNoByName(user, sub_account_name)

@@ -1,4 +1,5 @@
 import logging
+from src.common.logger import get_logger
 import os
 import sys
 import math
@@ -25,11 +26,7 @@ from src.service.交易管理.交易查询 import count_success_trades_on_prev_n
 
 import datetime
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def increase_funds(user: User, sub_account_name: str, total_budget: float, amount: Optional[float] = None, fund_type: str = 'all', fund_num: int = 5, spread_days: int = 5) -> bool:
     """
@@ -38,10 +35,10 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
     - spread_days: 预算摊薄天数（默认20），仅在未传入amount时生效
     - 若余额不足，动态下调 buy_amount（至少10元）
     """
-    logger.info(f"参数: fund_num={fund_num}, spread_days={spread_days}")
+    logger.info(f"参数: fund_num={fund_num}, spread_days={spread_days}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "jianlong_increase"})
     # 计算基础单笔金额
     base_amount = float(amount) if amount is not None else round(total_budget / max(fund_num, 1) / max(spread_days, 1), 2) * 2
-    logger.info(f"单只基金基础买入金额: {base_amount}元(是新增金额的2倍)")
+    logger.info(f"单只基金基础买入金额: {base_amount}元(是新增金额的2倍)", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "jianlong_increase"})
     # 查询余额并动态下调
     try:
         asset_response = GetMyAssetMainPartAsync(user)

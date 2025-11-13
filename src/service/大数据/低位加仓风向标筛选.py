@@ -8,6 +8,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 import logging
+from src.common.logger import get_logger
 from typing import List, Optional, Union
 
 # 添加项目根目录到路径（与参考文件一致）
@@ -38,7 +39,7 @@ def select_low_position_indicators(
       4) days 窗口内出现次数 > min_appear
     最终按出现次数降序取前 20
     """
-    logger = logging.getLogger("LowPositionFundIndicatorService")
+    logger = get_logger("LowPositionFundIndicatorService")
 
     # 归一化 fund_type 参数为列表或 None
     def normalize_fund_types(ft_param) -> Optional[List[str]]:

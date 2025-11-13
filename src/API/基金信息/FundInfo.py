@@ -1,6 +1,8 @@
 import sys
 import os
 import logging
+from src.common.logger import get_logger
+from src.common.errors import RetriableError, ValidationError
 import urllib.parse
 import urllib3
 import warnings
@@ -73,7 +75,8 @@ def getFundInfo(user,fund_code) -> Optional[FundInfo]:
         'passportid': user.passport_id
     }
     
-    logger = logging.getLogger("FundInfo")
+    logger = get_logger("FundInfo")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_fund_info", "fund_code": fund_code}
     try:
         # 直接使用原始数据，不进行额外编码
         response = requests.post(
@@ -93,37 +96,37 @@ def getFundInfo(user,fund_code) -> Optional[FundInfo]:
         try:
             json_data = json.loads(response_text)
         except json.JSONDecodeError as e:
-            logger.error("JSON解析失败: %s, 响应内容: %s", str(e), response_text[:200])
-            return None
+            logger.error("JSON解析失败: %s, 响应内容: %s", str(e), response_text[:200], extra=extra)
+            raise ValidationError(str(e))
             
         logger.debug("响应数据: %s", json.dumps(json_data, ensure_ascii=False))
         
         if not json_data.get('success', False):
             error_msg = json_data.get('firstError', '未知错误')
-            logger.error("获取基金信息失败: %s", error_msg)
-            return None
+            logger.error("获取基金信息失败: %s", error_msg, extra=extra)
+            raise ValidationError(error_msg)
             
         fund_data = json_data.get('data', [])
         if not fund_data:
-            logger.error("未找到基金信息")
-            return None
+            logger.error("未找到基金信息", extra=extra)
+            raise ValidationError("DATA_EMPTY")
             
         try:
             fund_info_data = fund_data[0]
             fund_info = FundInfo.from_dict(fund_info_data)
             return fund_info
         except (IndexError, KeyError, TypeError) as e:
-            logger.error("解析基金数据失败: %s", str(e))
-            return None
+            logger.error("解析基金数据失败: %s", str(e), extra=extra)
+            raise ValidationError(str(e))
             
     except requests.exceptions.RequestException as e:
-        logger.error('请求失败: %s', str(e))
-        return None
+        logger.error('请求失败: %s', str(e), extra=extra)
+        raise RetriableError(str(e))
     except Exception as e:
-        logger.error('处理过程发生异常: %s', str(e))
+        logger.error('处理过程发生异常: %s', str(e), extra=extra)
         import traceback
-        logger.error('异常堆栈: %s', traceback.format_exc())
-        return None
+        logger.error('异常堆栈: %s', traceback.format_exc(), extra=extra)
+        raise ValidationError(str(e))
 
 def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
     """
@@ -144,7 +147,7 @@ def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
         'User-Agent': 'Apache-HttpClient/4.5.14 (Java/17.0.10)'
     }
     
-    logger = logging.getLogger("FundInfo")
+    logger = get_logger("FundInfo")
     
     # 添加重试机制
     max_retries = 3
@@ -259,7 +262,5 @@ if __name__ == "__main__":
             
     except Exception as e:
         print(f"\n程序执行出错: {str(e)}")
-
-
 
 

@@ -2,12 +2,16 @@
 import requests
 import json
 import logging
+from src.common.logger import get_logger
+from src.common.errors import RetriableError, ValidationError
 import hashlib
 from src.domain.trade.TradeResult import TradeResult
 from src.domain.trade.share import Share
 from src.domain.user.User import User  # 添加User类的导入
 from typing import List, Optional  # 添加类型提示支持
 from src.common.constant import DEFAULT_USER, MOBILE_KEY
+
+logger = get_logger("Trade")
 
 def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status=""):
     """
@@ -62,7 +66,11 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
         })
     }
     
-    logger = logging.getLogger("Trade")
+    extra = {"account": getattr(user, "mobile_phone", None) or getattr(user, "account", None),
+             "sub_account_name": "",
+             "action": "get_trades_list",
+             "fund_code": fund_code,
+             "sub_account_no": sub_account_no}
     try:
         response = requests.post(url, headers=headers, json=data, verify=False)
         response.raise_for_status()
@@ -76,14 +84,14 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
                 results.append(trade_result)
             return results
         else:
-            logger.error(f"获取可撤单交易列表失败: {response_data}")
-            return []
+            logger.error(f"获取可撤单交易列表失败: {response_data}", extra=extra)
+            raise ValidationError("API_FAIL")
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}")
-        return []
+        logger.error(f"请求失败: {str(e)}", extra=extra)
+        raise RetriableError(str(e))
     except Exception as e:
-        logger.error(f"获取可撤单交易列表失败: {str(e)}")
-        return []
+        logger.error(f"获取可撤单交易列表失败: {str(e)}", extra=extra)
+        raise ValidationError(str(e))
 
 def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Share]:
     """
@@ -129,7 +137,11 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
         "subAccountNo": sub_account_no
     }
 
-    logger = logging.getLogger("Trade")
+    logger = get_logger("Trade")
+    extra = {"account": getattr(user, "mobile_phone", None) or getattr(user, "account", None),
+             "action": "get_bank_shares",
+             "fund_code": fund_code,
+             "sub_account_no": sub_account_no}
     try:
         response = requests.post(url, headers=headers, data=data, verify=False)
         response.raise_for_status()
@@ -153,16 +165,17 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
                     totalVol=float(share_data.get("TotalAvaVol", "0"))
                 )
                 bank_shares.append(bank_share)
+            logger.info(f"银行份额条数: {len(bank_shares)}", extra=extra)
             return bank_shares
         else:
-            # logger.error(f"获取银行份额信息失败: {response_data}")
-            return []
+            logger.error(f"获取银行份额信息失败: {response_data}", extra=extra)
+            raise ValidationError("API_FAIL")
     except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}")
-        return []
+        logger.error(f"请求失败: {str(e)}", extra=extra)
+        raise RetriableError(str(e))
     except Exception as e:
-        logger.error(f"获取银行份额信息失败: {str(e)}")
-        return []
+        logger.error(f"获取银行份额信息失败: {str(e)}", extra=extra)
+        raise ValidationError(str(e))
 
 
 if __name__ == "__main__":

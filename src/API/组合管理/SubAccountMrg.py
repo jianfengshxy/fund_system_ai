@@ -2,6 +2,7 @@ from pickle import BUILD
 import sys
 import os
 import logging
+from src.common.logger import get_logger
 import urllib.parse
 import urllib3
 import warnings
@@ -61,7 +62,8 @@ def createSubAccount(user, name: str, style: str = 'S1') -> ApiResponse[SubAccou
         'Name': name
     }
     
-    logger = logging.getLogger("SubAccountMrg")
+    logger = get_logger("SubAccountMrg")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "create_sub_account", "name": name}
     try:
         response = requests.post(url, data=data, headers=headers, verify=False)
         response.raise_for_status()
@@ -111,10 +113,10 @@ def createSubAccount(user, name: str, style: str = 'S1') -> ApiResponse[SubAccou
             )
             return api_response
         except Exception as e:
-            logger.error(f'解析响应数据失败: {str(e)}')
+            logger.error(f'解析响应数据失败: {str(e)}', extra=extra)
             raise Exception(f'解析响应数据失败: {str(e)}')
     except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}')
+        logger.error(f'请求失败: {str(e)}', extra=extra)
         raise Exception(f'请求失败: {str(e)}')
 
 
@@ -160,7 +162,8 @@ def disbandSubAccount(user, sub_account_no: str) -> ApiResponse[SubAccountRespon
         'plat': 'Android'
     }
     
-    logger = logging.getLogger("SubAccountMrg")
+    logger = get_logger("SubAccountMrg")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "disband_sub_account", "sub_account_no": sub_account_no}
     try:
         response = requests.post(url, json=data, headers=headers, verify=False)
         response.raise_for_status()
@@ -210,10 +213,10 @@ def disbandSubAccount(user, sub_account_no: str) -> ApiResponse[SubAccountRespon
             )
             return api_response
         except Exception as e:
-            logger.error(f'解析响应数据失败: {str(e)}')
+            logger.error(f'解析响应数据失败: {str(e)}', extra=extra)
             raise Exception(f'解析响应数据失败: {str(e)}')
     except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}')
+        logger.error(f'请求失败: {str(e)}', extra=extra)
         raise Exception(f'请求失败: {str(e)}')
 
 
@@ -265,7 +268,8 @@ def updateSubAccount(user, sub_account_no: str, open_state: int) -> ApiResponse[
         'UpdateName': 'OpenState'
     }
     
-    logger = logging.getLogger("SubAccountMrg")
+    logger = get_logger("SubAccountMrg")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "update_sub_account", "sub_account_no": sub_account_no}
     try:
         response = requests.post(url, json=data, headers=headers, verify=False)
         response.raise_for_status()
@@ -315,10 +319,10 @@ def updateSubAccount(user, sub_account_no: str, open_state: int) -> ApiResponse[
             )
             return api_response
         except Exception as e:
-            logger.error(f'解析响应数据失败: {str(e)}')
+            logger.error(f'解析响应数据失败: {str(e)}', extra=extra)
             raise Exception(f'解析响应数据失败: {str(e)}')
     except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}')
+        logger.error(f'请求失败: {str(e)}', extra=extra)
         raise Exception(f'请求失败: {str(e)}')
 
 
@@ -422,7 +426,8 @@ def getSubAccountList(user) -> ApiResponse[List[SubAccount]]:
         'plat': 'Android'
     }
         
-    logger = logging.getLogger("SubAccountMrg")
+    logger = get_logger("SubAccountMrg")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "sub_account_list"}
     try:
         response = requests.post(url, json=data, headers=headers, verify=False)
         response.raise_for_status()
@@ -540,10 +545,10 @@ def getSubAccountList(user) -> ApiResponse[List[SubAccount]]:
             )
             return api_response
         except Exception as e:
-            logger.error(f'解析响应数据失败: {str(e)}')
+            logger.error(f'解析响应数据失败: {str(e)}', extra=extra)
             raise Exception(f'解析响应数据失败: {str(e)}')
     except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}')
+        logger.error(f'请求失败: {str(e)}', extra=extra)
         raise Exception(f'请求失败: {str(e)}')
 
 
@@ -592,7 +597,8 @@ def getSubAssetMultList(user) -> ApiResponse[SubAssetMultListResponse]:
         'CToken': user.c_token
     }
     
-    logger = logging.getLogger("SubAccountMrg")
+    logger = get_logger("SubAccountMrg")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "sub_asset_mult_list"}
     try:
         response = requests.post(url, json=data, headers=headers, verify=False)
         response.raise_for_status()
@@ -672,10 +678,10 @@ def getSubAssetMultList(user) -> ApiResponse[SubAssetMultListResponse]:
             )
             return api_response
         except Exception as e:
-            logger.error(f'解析响应数据失败: {str(e)}')
+            logger.error(f'解析响应数据失败: {str(e)}', extra=extra)
             raise Exception(f'解析响应数据失败: {str(e)}')
     except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}')
+        logger.error(f'请求失败: {str(e)}', extra=extra)
         raise Exception(f'请求失败: {str(e)}')
 
  

@@ -153,7 +153,8 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         return True
     else:
         if bypass_ma5:
-            logger.info(f"触发口子：非月定投且 0<资产/定投金额≤1（{times}），跳过5日均线判断。")
+            logger.info(f"触发口子：非月定投且 0<资产/定投金额≤1（{times}），跳过5日均线判断，并直接结束本次处理。")
+            return True  # 口子开启时直接通过并早停
         else:
             logger.info(f"5日均线守卫通过（估算净值>5日均值）：继续执行后续判断。")
 

@@ -860,7 +860,7 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
         "maxTimes": 2,
         "periodType": period_type,
         "PhoneType": "Android",
-        "redeemStrategy": 1,
+        "redeemStrategy": 2,
         "amountStr": "",
         "UserId": user.customer_no,
         "ruleVersion": "1",

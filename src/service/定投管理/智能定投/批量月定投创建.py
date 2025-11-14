@@ -1,13 +1,12 @@
 # 顶部导入处
 import logging
-from src.common.logger import get_logger
+import os
+import sys
 import time
 import datetime
 from typing import Any, Dict, List, Optional, Union
 
-import os
-import sys
-
+# 先修正 sys.path，再进行 src.* 导入
 project_root = os.path.dirname(
     os.path.dirname(
         os.path.dirname(
@@ -20,6 +19,7 @@ project_root = os.path.dirname(
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+from src.common.logger import get_logger
 from src.domain.user.User import User
 from src.API.定投计划管理.SmartPlan import createPlanV3, getFundPlanList, getPlanDetailPro
 from src.domain.fund_plan import FundPlan, ApiResponse
@@ -229,8 +229,8 @@ if __name__ == "__main__":
         # 批量创建 1–28 号的月定投（已存在则跳过）
         result = create_monthly_plans_for_fund(
             user=DEFAULT_USER,
-            fund_code="001595",
-            amount="2000.0",
+            fund_code="011707",
+            amount="10000.0",
             sub_account_name=None,
             skip_existing=True
         )

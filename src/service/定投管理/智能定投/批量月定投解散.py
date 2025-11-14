@@ -2,7 +2,6 @@ import os
 import sys
 import time
 import logging
-from src.common.logger import get_logger
 from typing import Dict, List, Optional, Set
 
 # 将项目根目录加入 sys.path，支持直接运行此脚本
@@ -10,6 +9,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(o
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+from src.common.logger import get_logger
 from src.domain.user.User import User
 from src.common.constant import DEFAULT_USER
 from src.API.定投计划管理.SmartPlan import getFundPlanList, getPlanDetailPro, operateRation
@@ -177,7 +177,7 @@ if __name__ == "__main__":
     # 示例：解散基金 001595 的所有月定投（仅资产为空或0），不限定子账户
     summary = dissolve_monthly_plans_for_fund(
         user=DEFAULT_USER,
-        fund_code="001595",
+        fund_code="011707",
         target_days=None,          # 传 {1,2,3} 可限定日期
         sub_account_name=None,     # 传入组合名称可限定子账户
         dry_run=False,             # True 仅预览，不执行

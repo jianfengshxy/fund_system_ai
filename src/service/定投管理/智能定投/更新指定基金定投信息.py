@@ -2,7 +2,6 @@ import os
 import sys
 import json
 import logging
-from src.common.logger import get_logger
 from typing import List, Dict, Any, Optional
 
 # 动态注入项目根目录，避免 ModuleNotFoundError: No module named 'src'
@@ -10,6 +9,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(o
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+from src.common.logger import get_logger
 from src.domain.user.User import User
 from src.common.constant import DEFAULT_USER
 # 模块导入片段
@@ -302,10 +302,10 @@ def update_smart_investment_info(
 if __name__ == "__main__":
     info = update_smart_investment_info(
         user=DEFAULT_USER,
-        fund_code="001595",
+        fund_code="021740",
         buy_strategy_switch=True,
         amount="10000.0",            # 更新金额为 10000
-        profit_percent="6.0%",      # 更新目标止盈为 10%
+        profit_percent="3.0%",      # 更新目标止盈为 10%
         period_type_filter=3         # 仅更新月定投；传 None 则所有周期
     )
     logger.info(f"完成，共 {info['count']} 个匹配的定投计划（周期过滤={info.get('periodTypeFilter')}）")

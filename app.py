@@ -1,6 +1,8 @@
 import logging
 import sys
 import os
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, jsonify
 
 # 将项目根目录和src目录添加到sys.path
@@ -19,12 +21,31 @@ app = Flask(__name__, template_folder='templates')
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+_executor = ThreadPoolExecutor(max_workers=8)
+_cache = {}
+
+def _get_sub_accounts_cached():
+    k = 'sub_accounts'
+    v = _cache.get(k)
+    if v and v[0] > time.time() - 30:
+        return v[1]
+    resp = getSubAccountList(DEFAULT_USER)
+    _cache[k] = (time.time(), resp)
+    return resp
+
+def _get_assets_cached(portfolio_name):
+    k = f'assets:{portfolio_name}'
+    v = _cache.get(k)
+    if v and v[0] > time.time() - 30:
+        return v[1]
+    lst = get_sub_account_asset_by_name(DEFAULT_USER, portfolio_name)
+    _cache[k] = (time.time(), lst)
+    return lst
 
 @app.route('/', methods=['GET'])
 def home():
     try:
-        # 1. 获取所有组合列表
-        sub_accounts_response = getSubAccountList(DEFAULT_USER)
+        sub_accounts_response = _get_sub_accounts_cached()
         if not sub_accounts_response.Success or not sub_accounts_response.Data:
             return "获取组合列表失败", 500
 
@@ -52,9 +73,7 @@ def get_portfolio_details(portfolio_name):
         estimated_portfolio_change_ratio = 0
         total_profit_value = 0
         portfolio_details = []
-        
-        # 获取组合信息以获取 constant_profit 和 profit_value
-        sub_accounts_response = getSubAccountList(DEFAULT_USER)
+        sub_accounts_response = _get_sub_accounts_cached()
         selected_portfolio = None
         if sub_accounts_response.Success and sub_accounts_response.Data:
             for portfolio in sub_accounts_response.Data:
@@ -62,33 +81,32 @@ def get_portfolio_details(portfolio_name):
                     selected_portfolio = portfolio
                     break
 
-        # 获取所选组合的资产详情
-        asset_details_list = get_sub_account_asset_by_name(DEFAULT_USER, portfolio_name)
+        asset_details_list = _get_assets_cached(portfolio_name) or []
         
         if asset_details_list:
-            enriched_asset_details = []
-            for asset in asset_details_list:
-                total_assets += asset.asset_value
-                total_profit += asset.hold_profit
-                total_profit_value += asset.profit_value
-                
-                # 获取基金的今日估值
-                fund_info = getFundInfo(DEFAULT_USER, asset.fund_code)
-                if fund_info:
-                    updated_fund_info = updateFundEstimatedValue(fund_info)
-                    asset.estimated_change = updated_fund_info.estimated_change if updated_fund_info else 0.0
+            def _enrich(a):
+                fi = getFundInfo(DEFAULT_USER, a.fund_code)
+                if fi:
+                    ufi = updateFundEstimatedValue(fi)
+                    a.estimated_change = ufi.estimated_change if ufi else 0.0
                 else:
-                    asset.estimated_change = 0.0
-                enriched_asset_details.append(asset.to_dict()) # 假设 asset 对象有 to_dict 方法
-            
-            portfolio_details = enriched_asset_details
+                    a.estimated_change = 0.0
+                return a
 
-            # 计算组合整体数据
+            futures = [_executor.submit(_enrich, a) for a in asset_details_list]
+            enriched = []
+            for f in as_completed(futures):
+                a = f.result()
+                enriched.append(a)
+            for a in enriched:
+                total_assets += a.asset_value
+                total_profit += a.hold_profit
+                total_profit_value += a.profit_value
             if total_assets > 0:
-                # 计算组合今日预估涨跌幅
-                for asset in asset_details_list: # 使用原始对象列表
-                    asset_weight = asset.asset_value / total_assets
-                    estimated_portfolio_change_ratio += asset_weight * asset.estimated_change
+                for a in enriched:
+                    w = a.asset_value / total_assets
+                    estimated_portfolio_change_ratio += w * a.estimated_change
+            portfolio_details = [a.to_dict() for a in enriched]
 
         return jsonify({
             'portfolio_details': portfolio_details,

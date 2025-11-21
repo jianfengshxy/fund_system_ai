@@ -92,7 +92,14 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         return True
     sub_account_no = plan_detail.rationPlan.subAccountNo
     sub_account_name = plan_detail.rationPlan.subAccountName
-    shares = get_bank_shares(user, sub_account_no,fund_code)
+    
+    # 获取银行份额信息，添加异常处理
+    try:
+        shares = get_bank_shares(user, sub_account_no, fund_code)
+    except Exception as e:
+        logger.warning(f"获取银行份额信息失败，将使用空份额列表继续处理: {e}")
+        shares = []  # 使用空列表继续处理，而不是失败
+    
     period_type = plan_detail.rationPlan.periodType
     period_value = plan_detail.rationPlan.periodValue
     

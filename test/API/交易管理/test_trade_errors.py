@@ -33,9 +33,10 @@ def test_get_bank_shares_request_error_raises_retriable(monkeypatch):
     with pytest.raises(RetriableError):
         get_bank_shares(DEFAULT_USER, "SUBNO", "000001")
 
-def test_get_bank_shares_api_fail_raises_validation(monkeypatch):
+def test_get_bank_shares_api_fail_returns_empty_list(monkeypatch):
+    """测试API返回错误时返回空列表而不是抛出异常"""
     def _ok(*args, **kwargs):
         return _Resp({"Success": False, "Data": None})
     monkeypatch.setattr("requests.post", _ok)
-    with pytest.raises(ValidationError):
-        get_bank_shares(DEFAULT_USER, "SUBNO", "000001")
+    result = get_bank_shares(DEFAULT_USER, "SUBNO", "000001")
+    assert result == []  # 应该返回空列表而不是抛出异常

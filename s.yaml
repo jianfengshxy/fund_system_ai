@@ -42,7 +42,7 @@ vars:
         qualifier: "LATEST"
         triggerType: "timer"
         enable: true
-        payload: "{\"account\": \"13918199137\",\"password\": \"sWX15706\",\"sub_account_name\": \"飞龙在天\",\"total_budget\": 1000000.0}"
+        payload: "{\"account\": \"13918199137\",\"password\": \"sWX15706\",\"sub_account_name\": \"飞龙在天\",\"total_budget\": 1000000.0,\"fund_type\": \"non_index\"}"
       environmentVariables:
         DB_USER: ${vars.common.database.DB_USER}
         DB_PASSWORD: ${vars.common.database.DB_PASSWORD}
@@ -74,7 +74,7 @@ vars:
        {"fund_code": "008706", "fund_name": "建信富时100指数(QDII)C人民币", "amount": 5000.0},
        {"fund_code": "006105", "fund_name": "宏利印度股票(QDII)", "amount": 5000.0},
        {"fund_code": "007844", "fund_name": "华宝标普油气上游股票人民币C", "amount": 5000.0},
-       {"fund_code": "017873", "fund_name": "汇添富香港优势精选混合(QDII)C", "amount": 5000.0}
+       {"fund_code": "016452", "fund_name": "南方纳斯达克100指数发起(QDII)A", "amount": 5000.0}
      ]
     }
 

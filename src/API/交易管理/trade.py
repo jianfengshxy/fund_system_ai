@@ -168,8 +168,9 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
             logger.info(f"银行份额条数: {len(bank_shares)}", extra=extra)
             return bank_shares
         else:
-            logger.error(f"获取银行份额信息失败: {response_data}", extra=extra)
-            raise ValidationError("API_FAIL")
+            # API返回了响应但没有份额数据，返回空列表而不是抛出异常
+            logger.warning(f"获取银行份额信息返回空数据: {response_data}", extra=extra)
+            return []  # 返回空列表而不是抛出异常
     except requests.exceptions.RequestException as e:
         logger.error(f"请求失败: {str(e)}", extra=extra)
         raise RetriableError(str(e))

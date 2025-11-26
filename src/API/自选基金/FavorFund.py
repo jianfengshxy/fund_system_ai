@@ -1,15 +1,20 @@
 import logging
-from common.logger import get_logger
+import os
+import sys
 import time
 import urllib.parse
 from typing import Any, Dict, Optional
 
-import requests
-import os
-import sys
+# 确保将项目的 src 目录加入到模块路径，保证 common/domain 等包可用
 SRC_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT_DIR = os.path.dirname(SRC_DIR)
 if SRC_DIR not in sys.path:
     sys.path.append(SRC_DIR)
+if ROOT_DIR not in sys.path:
+    sys.path.append(ROOT_DIR)
+
+import requests
+from common.logger import get_logger
 
 from common.constant import (
     SERVER_VERSION,
@@ -24,7 +29,7 @@ FUND_FAVOR_HOST = "fundfavorapi.eastmoney.com"
 
 
 # 补充：导入最新用户信息函数，并设置指定账号密码
-from service.用户管理.用户信息 import get_user_all_info
+from src.service.用户管理.用户信息 import get_user_all_info
 PREFERRED_ACCOUNT = "13918199137"
 PREFERRED_PASSWORD = "sWX15706"
 
@@ -165,7 +170,7 @@ def _build_headers_for_getgroup() -> Dict[str, str]:
     }
 
 def _refresh_user_tokens(user: User) -> Optional[User]:
-    from API.登录接口.login import login, login_passport, inference_passport_for_bind
+    from src.API.登录接口.login import login, login_passport, inference_passport_for_bind
     u0 = login(user.account, user.password)
     if not u0:
         return None
@@ -204,7 +209,8 @@ def get_favor_group(
     favor_version: str = "-2000",
     plat: str = "Iphone",
 ) -> ApiResponse[Dict[str, Any]]:
-    u = _ensure_auth_ready(user)
+    # 使用最新用户信息，避免传入的 user 携带过期 passport 导致 63120
+    u = _ensure_auth_ready(None)
     url = f"https://{FUND_FAVOR_HOST}/favor/fcode/getgroup"
     headers = _build_headers_for_getgroup()
 
@@ -237,7 +243,8 @@ def get_favor_group(
         data = json_data.get("Data", json_data.get("data"))
 
         if not success and (error_code == 63120 or json_data.get("hasWrongToken")):
-            u2 = _refresh_user_tokens(u)
+            # 统一走完整的用户信息聚合，避免仅 PLogin 刷新失败
+            u2 = get_user_all_info(PREFERRED_ACCOUNT, PREFERRED_PASSWORD)
             if u2:
                 form.update({
                     "ctoken": u2.c_token,
@@ -264,7 +271,7 @@ def get_favor_group(
         return ApiResponse(False, "UNKNOWN_ERROR", None, f"未知错误: {str(e)}", None)
 
 
-__all__ = ["add_to_favorites", "get_favor_group"]
+__all__ = ["add_to_favorites", "get_favor_group", "get_favor_groups"]
 
 # 新增：抽取基金项并打印详情的辅助方法
 def _is_fund_item(d: Dict[str, Any]) -> bool:
@@ -316,6 +323,65 @@ def _print_group_funds(data: Any):
         extras.append(f"置顶: {'是' if set_top else '否'}")
         if topic_str: extras.append(f"主题: {topic_str}")
         print(f"    {' | '.join(extras)}")
+
+def get_favor_groups(
+    user: Optional[User] = None,
+    favor_version: str = "-2000",
+    plat: str = "Iphone",
+) -> ApiResponse[Dict[str, Any]]:
+    # 为确保使用最新有效凭证，这里强制使用最新用户信息（忽略传入的 user）
+    u = _ensure_auth_ready(None)
+    url = f"https://{FUND_FAVOR_HOST}/favor/group/get"
+    headers = _build_headers_for_getgroup()
+    form = {
+        "ctoken": u.c_token,
+        "deviceid": MOBILE_KEY,
+        "favorversion": favor_version,
+        "passportctoken": u.passport_ctoken,
+        "passportid": u.passport_id,
+        "passportutoken": u.passport_utoken,
+        "plat": plat,
+        "product": "EFund",
+        "uid": u.customer_no,
+        "utoken": u.u_token,
+        "version": SERVER_VERSION,
+    }
+    logger = get_logger("FavorFund.group_get")
+    extra = {"account": getattr(u, 'mobile_phone', None) or getattr(u, 'account', None), "action": "favor_group_get"}
+    try:
+        resp = requests.post(url, headers=headers, data=form, verify=False, timeout=10)
+        resp.raise_for_status()
+        json_data = resp.json()
+        success = json_data.get("Success", json_data.get("success", False))
+        error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
+        first_error = json_data.get("FirstError") or json_data.get("ErrMsg") or json_data.get("ErrorMessage") or json_data.get("Message")
+        data = json_data.get("Data", json_data.get("data"))
+        if not success and (error_code == 63120 or json_data.get("hasWrongToken")):
+            # 直接使用完整聚合逻辑获取最新用户信息
+            u2 = get_user_all_info(PREFERRED_ACCOUNT, PREFERRED_PASSWORD)
+            if u2:
+                form.update({
+                    "ctoken": u2.c_token,
+                    "passportctoken": u2.passport_ctoken,
+                    "passportid": u2.passport_id,
+                    "passportutoken": u2.passport_utoken,
+                    "uid": u2.customer_no,
+                    "utoken": u2.u_token,
+                })
+                resp = requests.post(url, headers=headers, data=form, verify=False, timeout=10)
+                resp.raise_for_status()
+                json_data = resp.json()
+                success = json_data.get("Success", json_data.get("success", False))
+                error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
+                first_error = json_data.get("FirstError") or json_data.get("ErrMsg") or json_data.get("ErrorMessage") or json_data.get("Message")
+                data = json_data.get("Data", json_data.get("data"))
+        return ApiResponse(bool(success), error_code, data, first_error, json_data.get("hasWrongToken"))
+    except requests.exceptions.RequestException as e:
+        logger.error(f"请求失败: {str(e)}", extra=extra)
+        return ApiResponse(False, "REQUEST_ERROR", None, f"请求失败: {str(e)}", None)
+    except Exception as e:
+        logger.error(f"解析失败: {str(e)}", extra=extra)
+        return ApiResponse(False, "UNKNOWN_ERROR", None, f"未知错误: {str(e)}", None)
 
 if __name__ == "__main__":
     # 演示：打印指定分组内的全部基金（结构化格式）

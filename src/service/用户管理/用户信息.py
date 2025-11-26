@@ -1,47 +1,68 @@
 import os, sys
+import threading
+import time
 from src.API.登录接口.login import login, login_passport, inference_passport_for_bind
 from src.service.银行卡账户.bankAccoutService import getMaxhqbBank
 from src.common.logger import get_logger
 
-# 添加全局缓存字典
-user_cache = {}
+_cache_lock = threading.Lock()
+_user_cache = {}
+_CACHE_TTL_SEC = 1800
 logger = get_logger(__name__)
 
+def _get_cached_user(account: str, password: str):
+    key = (account, password)
+    with _cache_lock:
+        entry = _user_cache.get(key)
+        if not entry:
+            return None
+        if time.time() - entry[1] > _CACHE_TTL_SEC:
+            _user_cache.pop(key, None)
+            return None
+        return entry[0]
+
+def _set_user_cache(user):
+    key = (getattr(user, "account", None), getattr(user, "password", None))
+    if not all(key):
+        return
+    with _cache_lock:
+        _user_cache[key] = (user, time.time())
+
+def invalidate_user_cache(account: str, password: str):
+    key = (account, password)
+    with _cache_lock:
+        _user_cache.pop(key, None)
+
 def get_user_all_info(account: str, password: str):
-    """
-    获取用户的完整信息，包括登录信息、passport信息和最大活期宝银行卡信息
-    Args:
-        account: 用户账号
-        password: 用户密码
-    Returns:
-        User: 包含完整信息的用户对象，如果任何步骤失败则返回None
-    """
-    # 检查缓存
-    cache_key = (account, password)
-    if cache_key in user_cache:
+    cached = _get_cached_user(account, password)
+    if cached is not None:
         logger.info("用户信息命中缓存", extra={"account": account})
-        return user_cache[cache_key]
-    
-    # 第一步：调用登录接口
+        return cached
     user = login(account, password)
     if not user:
         logger.error("登录失败", extra={"account": account})
         return None
-        
-    # 第二步：获取passport信息
     user = inference_passport_for_bind(user)
     if not user:
         logger.error("passport推断失败", extra={"account": account})
         return None
-        
-    # 第三步：获取最大活期宝银行卡信息
     user = getMaxhqbBank(user)
     if user:
-        user_cache[cache_key] = user
+        _set_user_cache(user)
         logger.info("完成用户信息聚合", extra={"account": account})
     return user
 
-if __name__ == "__main__":
-    from common.constant import DEFAULT_USER
-    result = get_user_all_info(DEFAULT_USER.account, DEFAULT_USER.password)
-    print("最终用户信息:", result)
+def refresh_user_tokens(account: str, password: str):
+    user = _get_cached_user(account, password)
+    if not user:
+        return get_user_all_info(account, password)
+    u1 = login_passport(user)
+    if not u1:
+        invalidate_user_cache(account, password)
+        return get_user_all_info(account, password)
+    u2 = inference_passport_for_bind(u1)
+    if not u2:
+        invalidate_user_cache(account, password)
+        return get_user_all_info(account, password)
+    _set_user_cache(u2)
+    return u2

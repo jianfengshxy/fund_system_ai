@@ -1,15 +1,17 @@
 import logging
-from common.logger import get_logger
+import os
+import sys
 import time
 import urllib.parse
 from typing import Any, Dict, Optional
 
-import requests
-import os
-import sys
+# 确保将项目的 src 目录加入到模块路径，保证 common/domain 等包可用
 SRC_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if SRC_DIR not in sys.path:
     sys.path.append(SRC_DIR)
+
+import requests
+from common.logger import get_logger
 
 from common.constant import (
     SERVER_VERSION,

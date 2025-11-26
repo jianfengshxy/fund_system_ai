@@ -209,8 +209,7 @@ def get_favor_group(
     favor_version: str = "-2000",
     plat: str = "Iphone",
 ) -> ApiResponse[Dict[str, Any]]:
-    # 使用最新用户信息，避免传入的 user 携带过期 passport 导致 63120
-    u = _ensure_auth_ready(None)
+    u = _get_user(user)
     url = f"https://{FUND_FAVOR_HOST}/favor/fcode/getgroup"
     headers = _build_headers_for_getgroup()
 
@@ -220,9 +219,9 @@ def get_favor_group(
         "favorversion": favor_version,
         "fundtype": str(fund_type),
         "groupids": group_ids,
-        "passportctoken": u.passport_ctoken,
-        "passportid": u.passport_id,
-        "passportutoken": u.passport_utoken,
+        "passportctoken": getattr(u, "passport_ctoken", None),
+        "passportid": getattr(u, "passport_id", None),
+        "passportutoken": getattr(u, "passport_utoken", None),
         "plat": plat,
         "product": "EFund",
         "uid": u.customer_no,
@@ -242,25 +241,7 @@ def get_favor_group(
         first_error = json_data.get("FirstError") or json_data.get("ErrMsg") or json_data.get("ErrorMessage") or json_data.get("Message")
         data = json_data.get("Data", json_data.get("data"))
 
-        if not success and (error_code == 63120 or json_data.get("hasWrongToken")):
-            # 统一走完整的用户信息聚合，避免仅 PLogin 刷新失败
-            u2 = get_user_all_info(PREFERRED_ACCOUNT, PREFERRED_PASSWORD)
-            if u2:
-                form.update({
-                    "ctoken": u2.c_token,
-                    "passportctoken": u2.passport_ctoken,
-                    "passportid": u2.passport_id,
-                    "passportutoken": u2.passport_utoken,
-                    "uid": u2.customer_no,
-                    "utoken": u2.u_token,
-                })
-                resp = requests.post(url, headers=headers, data=form, verify=False, timeout=10)
-                resp.raise_for_status()
-                json_data = resp.json()
-                success = json_data.get("Success", json_data.get("success", False))
-                error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
-                first_error = json_data.get("FirstError") or json_data.get("ErrMsg") or json_data.get("ErrorMessage") or json_data.get("Message")
-                data = json_data.get("Data", json_data.get("data"))
+        
 
         return ApiResponse(bool(success), error_code, data, first_error, json_data.get("hasWrongToken"))
     except requests.exceptions.RequestException as e:
@@ -329,17 +310,16 @@ def get_favor_groups(
     favor_version: str = "-2000",
     plat: str = "Iphone",
 ) -> ApiResponse[Dict[str, Any]]:
-    # 为确保使用最新有效凭证，这里强制使用最新用户信息（忽略传入的 user）
-    u = _ensure_auth_ready(None)
+    u = _get_user(user)
     url = f"https://{FUND_FAVOR_HOST}/favor/group/get"
     headers = _build_headers_for_getgroup()
     form = {
         "ctoken": u.c_token,
         "deviceid": MOBILE_KEY,
         "favorversion": favor_version,
-        "passportctoken": u.passport_ctoken,
-        "passportid": u.passport_id,
-        "passportutoken": u.passport_utoken,
+        "passportctoken": getattr(u, "passport_ctoken", None),
+        "passportid": getattr(u, "passport_id", None),
+        "passportutoken": getattr(u, "passport_utoken", None),
         "plat": plat,
         "product": "EFund",
         "uid": u.customer_no,
@@ -356,25 +336,7 @@ def get_favor_groups(
         error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
         first_error = json_data.get("FirstError") or json_data.get("ErrMsg") or json_data.get("ErrorMessage") or json_data.get("Message")
         data = json_data.get("Data", json_data.get("data"))
-        if not success and (error_code == 63120 or json_data.get("hasWrongToken")):
-            # 直接使用完整聚合逻辑获取最新用户信息
-            u2 = get_user_all_info(PREFERRED_ACCOUNT, PREFERRED_PASSWORD)
-            if u2:
-                form.update({
-                    "ctoken": u2.c_token,
-                    "passportctoken": u2.passport_ctoken,
-                    "passportid": u2.passport_id,
-                    "passportutoken": u2.passport_utoken,
-                    "uid": u2.customer_no,
-                    "utoken": u2.u_token,
-                })
-                resp = requests.post(url, headers=headers, data=form, verify=False, timeout=10)
-                resp.raise_for_status()
-                json_data = resp.json()
-                success = json_data.get("Success", json_data.get("success", False))
-                error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
-                first_error = json_data.get("FirstError") or json_data.get("ErrMsg") or json_data.get("ErrorMessage") or json_data.get("Message")
-                data = json_data.get("Data", json_data.get("data"))
+        
         return ApiResponse(bool(success), error_code, data, first_error, json_data.get("hasWrongToken"))
     except requests.exceptions.RequestException as e:
         logger.error(f"请求失败: {str(e)}", extra=extra)

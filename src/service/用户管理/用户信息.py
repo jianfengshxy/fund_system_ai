@@ -1,13 +1,19 @@
 import os, sys
 import threading
 import time
+import json
+from pathlib import Path
 from src.API.登录接口.login import login, login_passport, inference_passport_for_bind
 from src.service.银行卡账户.bankAccoutService import getMaxhqbBank
 from src.common.logger import get_logger
+from src.common.constant import DEFAULT_USER
+from src.service.用户管理.user_token_store import UserTokenStore
 
 _cache_lock = threading.Lock()
 _user_cache = {}
 _CACHE_TTL_SEC = 1800
+_FILE_CACHE_TTL_SEC = 86400
+_FILE_CACHE_PATH = Path(__file__).resolve().parent / 'user_cache.json'
 logger = get_logger(__name__)
 
 def _get_cached_user(account: str, password: str):
@@ -28,6 +34,45 @@ def _set_user_cache(user):
     with _cache_lock:
         _user_cache[key] = (user, time.time())
 
+def _user_to_dict(user):
+    return {
+        'account': getattr(user, 'account', None),
+        'password': getattr(user, 'password', None),
+        'c_token': getattr(user, 'c_token', None),
+        'u_token': getattr(user, 'u_token', None),
+        'customer_no': getattr(user, 'customer_no', None),
+        'customer_name': getattr(user, 'customer_name', None),
+        'index': getattr(user, 'index', None),
+        'passport_id': getattr(user, 'passport_id', None),
+        'passport_uid': getattr(user, 'passport_uid', None),
+        'passport_ctoken': getattr(user, 'passport_ctoken', None),
+        'passport_utoken': getattr(user, 'passport_utoken', None),
+        'ts': int(time.time()),
+    }
+
+def _save_file_cache(user):
+    try:
+        data = _user_to_dict(user)
+        _FILE_CACHE_PATH.write_text(json.dumps(data, ensure_ascii=False))
+    except Exception:
+        pass
+
+def _load_file_cache(account: str, password: str):
+    try:
+        if not _FILE_CACHE_PATH.exists():
+            return None
+        raw = json.loads(_FILE_CACHE_PATH.read_text())
+        if raw.get('account') != account or raw.get('password') != password:
+            return None
+        ts = raw.get('ts', 0)
+        if time.time() - ts > _FILE_CACHE_TTL_SEC:
+            return None
+        from src.domain.user.User import User
+        user = User.from_dict(raw)
+        return user
+    except Exception:
+        return None
+
 def invalidate_user_cache(account: str, password: str):
     key = (account, password)
     with _cache_lock:
@@ -38,9 +83,30 @@ def get_user_all_info(account: str, password: str):
     if cached is not None:
         logger.info("用户信息命中缓存", extra={"account": account})
         return cached
+    file_cached = _load_file_cache(account, password)
+    if file_cached is not None:
+        _set_user_cache(file_cached)
+        logger.info("用户信息命中文件缓存", extra={"account": account})
+        return file_cached
+    store = UserTokenStore()
+    db_user = store.get(account)
+    if db_user is not None:
+        _set_user_cache(db_user)
+        _save_file_cache(db_user)
+        logger.info("用户信息命中数据库", extra={"account": account})
+        return db_user
     user = login(account, password)
     if not user:
         logger.error("登录失败", extra={"account": account})
+        fallback = DEFAULT_USER if getattr(DEFAULT_USER, 'account', None) == account else None
+        if fallback:
+            _set_user_cache(fallback)
+            _save_file_cache(fallback)
+            try:
+                UserTokenStore().upsert(fallback)
+            except Exception:
+                pass
+            return fallback
         return None
     user = inference_passport_for_bind(user)
     if not user:
@@ -49,6 +115,11 @@ def get_user_all_info(account: str, password: str):
     user = getMaxhqbBank(user)
     if user:
         _set_user_cache(user)
+        _save_file_cache(user)
+        try:
+            store.upsert(user)
+        except Exception:
+            pass
         logger.info("完成用户信息聚合", extra={"account": account})
     return user
 
@@ -65,4 +136,8 @@ def refresh_user_tokens(account: str, password: str):
         invalidate_user_cache(account, password)
         return get_user_all_info(account, password)
     _set_user_cache(u2)
+    try:
+        UserTokenStore().upsert(u2)
+    except Exception:
+        pass
     return u2

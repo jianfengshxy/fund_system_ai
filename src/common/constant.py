@@ -63,20 +63,7 @@ DEFAULT_HQB_BANK_DATA = {
 # 创建默认的活期宝银行卡常量对象
 DEFAULT_HQB_BANK = HqbBank.from_dict(DEFAULT_HQB_BANK_DATA)
 
-try:
-    from importlib import import_module
-    _get_user_all_info = import_module('src.service.用户管理.用户信息').get_user_all_info
-    _live_user = _get_user_all_info("13918199137", "sWX15706")
-except Exception:
-    _live_user = None
-if _live_user:
-    USER_ID = _live_user.customer_no or USER_ID
-    NAME = _live_user.customer_name or NAME
-    C_TOKEN = _live_user.c_token or C_TOKEN
-    U_TOKEN = _live_user.u_token or U_TOKEN
-    PASSPORT_ID = _live_user.passport_id or PASSPORT_ID
-    PASSPORT_CTOKEN = _live_user.passport_ctoken or PASSPORT_CTOKEN
-    PASSPORT_UTOKEN = _live_user.passport_utoken or PASSPORT_UTOKEN
+ 
 
 # 定义默认的基金定投计划详情数据
 DEFAULT_FUND_PLAN_DETAIL_DATA = {
@@ -293,10 +280,7 @@ user_data = {
 }
 
 # 创建默认用户对象并设置默认活期宝银行卡
-if _live_user:
-    DEFAULT_USER = _live_user
-else:
-    DEFAULT_USER = User.from_dict(user_data)
+DEFAULT_USER = User.from_dict(user_data)
 DEFAULT_USER.max_hqb_bank = DEFAULT_HQB_BANK
 
 # 获取用户对象

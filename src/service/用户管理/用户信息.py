@@ -81,19 +81,19 @@ def invalidate_user_cache(account: str, password: str):
 def get_user_all_info(account: str, password: str):
     cached = _get_cached_user(account, password)
     if cached is not None:
-        logger.info("用户信息命中缓存", extra={"account": account})
+        logger.info("令牌来源: 内存缓存", extra={"account": account, "token_source": "cache"})
         return cached
     file_cached = _load_file_cache(account, password)
     if file_cached is not None:
         _set_user_cache(file_cached)
-        logger.info("用户信息命中文件缓存", extra={"account": account})
+        logger.info("令牌来源: 文件缓存", extra={"account": account, "token_source": "file_cache"})
         return file_cached
     store = UserTokenStore()
     db_user = store.get(account)
     if db_user is not None:
         _set_user_cache(db_user)
         _save_file_cache(db_user)
-        logger.info("用户信息命中数据库", extra={"account": account})
+        logger.info("令牌来源: 数据库", extra={"account": account, "token_source": "database"})
         return db_user
     user = login(account, password)
     if not user:
@@ -106,6 +106,7 @@ def get_user_all_info(account: str, password: str):
                 UserTokenStore().upsert(fallback)
             except Exception:
                 pass
+            logger.info("令牌来源: 默认用户", extra={"account": account, "token_source": "default_user"})
             return fallback
         return None
     user = inference_passport_for_bind(user)
@@ -120,7 +121,7 @@ def get_user_all_info(account: str, password: str):
             store.upsert(user)
         except Exception:
             pass
-        logger.info("完成用户信息聚合", extra={"account": account})
+        logger.info("令牌来源: 登录聚合", extra={"account": account, "token_source": "login"})
     return user
 
 def refresh_user_tokens(account: str, password: str):
@@ -140,4 +141,28 @@ def refresh_user_tokens(account: str, password: str):
         UserTokenStore().upsert(u2)
     except Exception:
         pass
+    logger.info("令牌来源: 刷新凭证", extra={"account": account, "token_source": "refresh"})
     return u2
+
+def get_user_from_store_or_cache(account: str, password: str):
+    cached = _get_cached_user(account, password)
+    if cached is not None:
+        logger.info("令牌来源: 内存缓存(无登录)", extra={"account": account, "token_source": "cache_nologin"})
+        return cached
+    file_cached = _load_file_cache(account, password)
+    if file_cached is not None:
+        _set_user_cache(file_cached)
+        logger.info("令牌来源: 文件缓存(无登录)", extra={"account": account, "token_source": "file_cache_nologin"})
+        return file_cached
+    try:
+        store = UserTokenStore()
+        db_user = store.get(account)
+        if db_user is not None:
+            _set_user_cache(db_user)
+            _save_file_cache(db_user)
+            logger.info("令牌来源: 数据库(无登录)", extra={"account": account, "token_source": "database_nologin"})
+            return db_user
+    except Exception:
+        pass
+    logger.info("令牌来源: 默认用户(无登录)", extra={"account": account, "token_source": "default_user_nologin"})
+    return DEFAULT_USER

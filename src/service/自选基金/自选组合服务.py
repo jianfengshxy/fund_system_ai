@@ -9,6 +9,7 @@ if proj_root not in sys.path:
 
 from src.API.自选基金.FavorFund import get_favor_groups, get_favor_group
 from src.common.constant import DEFAULT_USER
+from src.service.用户管理.用户信息 import get_user_from_store_or_cache
 
 def _collect_items(obj: Any) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
@@ -26,7 +27,8 @@ def _collect_items(obj: Any) -> List[Dict[str, Any]]:
     return items
 
 def get_group_funds_by_name(group_name: str) -> List[Dict[str, Any]]:
-    r = get_favor_groups(DEFAULT_USER)
+    u = get_user_from_store_or_cache(getattr(DEFAULT_USER, 'account', None), getattr(DEFAULT_USER, 'password', None))
+    r = get_favor_groups(u)
     if not r.Success or r.Data is None:
         return []
     data = r.Data
@@ -56,7 +58,7 @@ def get_group_funds_by_name(group_name: str) -> List[Dict[str, Any]]:
     gid = target.get("GroupId") or target.get("groupId") or target.get("Id") or target.get("id")
     if not gid:
         return []
-    r2 = get_favor_group(group_ids=str(gid), fund_type=0, user=DEFAULT_USER)
+    r2 = get_favor_group(group_ids=str(gid), fund_type=0, user=u)
     if not r2.Success or r2.Data is None:
         return []
     return _collect_items(r2.Data)
@@ -68,4 +70,3 @@ if __name__ == "__main__":
         code = item.get("fcode") or item.get("FundCode") or item.get("fund_code") or item.get("FCODE") or item.get("code")
         name = item.get("shortname") or item.get("fname") or item.get("FundName") or item.get("fund_name") or item.get("name")
         print(f"{i}. {code} {name}")
-

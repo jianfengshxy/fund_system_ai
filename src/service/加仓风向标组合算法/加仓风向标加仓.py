@@ -54,7 +54,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
     logger.info(f"[加仓参数] 用户={getattr(user,'customer_name','N/A')} | 组合={sub_account_name} | fund_num={fund_num} | spread_days={spread_days}")
     # 计算基础单笔金额（与新增金额保持一致，再乘2）
     if amount is not None:
-        base_amount = float(amount)
+        base_amount = float(amount) * 2
     else:
         MAX_FUNDS_THRESHOLD = _get_max_funds_threshold()
         base_amount = round(total_budget / max(MAX_FUNDS_THRESHOLD, 1) / max(spread_days, 1), 2) * 2

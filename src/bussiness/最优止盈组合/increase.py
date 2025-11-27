@@ -1,20 +1,18 @@
 import logging
-from src.common.logger import get_logger
+import os
+import sys
 from random import vonmisesvariate
 import re
 from typing import Optional
 import threading
 from concurrent.futures import ThreadPoolExecutor
-import os
-import sys
 
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-# 如果项目根目录不在Python路径中，则添加
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
+from src.common.logger import get_logger
 from src.domain.fund import fund_info
 from src.service.定投管理.定投查询.定投查询 import get_all_fund_plan_details
 from src.domain.user.User import User
@@ -161,7 +159,7 @@ def increase(user: User, sub_account_name: str, total_budget: Optional[float] = 
         logger.error(f"用户 {user.customer_name} 委托加仓失败", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "optimal_increase"})
     return success
 
-def increase(user: User, sub_account_name: str, total_budget: Optional[float] = None, amount: Optional[float] = None, fund_type: str = 'all', fund_num: int = 5, spread_days: int = 20) -> bool:
+def increase(user: User, sub_account_name: str, total_budget: Optional[float] = None, amount: Optional[float] = None, fund_type: str = 'all', fund_num: int = 5, spread_days: int = 5) -> bool:
     """
     加仓（最小集成落地）：
     - fund_num: 本次最多下单次数（默认5）
@@ -186,7 +184,7 @@ def increase(user: User, sub_account_name: str, total_budget: Optional[float] = 
 if __name__ == "__main__":
     # 测试 amount 不传的情况
     try:
-        success = increase(DEFAULT_USER, "飞龙在天", 1000000.0, fund_type='index')  # amount 不传，使用 None
+        success = increase(DEFAULT_USER, "马丁格尔plus", 1000000.0, fund_type='index')  # amount 不传，使用 None
         if success:
             logging.info("测试成功（amount 未传）")
         else:

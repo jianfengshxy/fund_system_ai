@@ -93,12 +93,26 @@ def revoke(user: User, sub_account_name: str = "最优止盈") -> bool:
     logger.info(f"{customer_name} 在组合 {sub_account_name} 中找到 {len(trades)} 个可撤回交易")
     
     success = True
-    for trade in trades:
+    # 仅处理买入类交易（业务代码=22），排除非买入/现金宝转入以外的类型
+    buy_trades = []
+    for t in trades:
+        code = getattr(t, 'business_code', None) or getattr(t, 'display_business_code', None)
+        text = getattr(t, 'business_type', None)
+        if str(code) == '22' or (text and ('买入' in text or '转入基金' in text)):
+            buy_trades.append(t)
+
+    if not buy_trades:
+        logger.info(f"{customer_name} 在组合 {sub_account_name} 中无买入类可撤回交易")
+        return True
+
+    for trade in buy_trades:
         try:
+            # 优先使用业务代码作为撤回 BusinType
+            bus_code = getattr(trade, 'business_code', None) or getattr(trade, 'display_business_code', None) or getattr(trade, 'business_type', '')
             result = revoke_order(
                 user,
                 trade.busin_serial_no,
-                trade.business_type,
+                str(bus_code),
                 trade.fund_code,
                 trade.amount,
                 sub_account_no=sub_account_no
@@ -116,4 +130,8 @@ def revoke(user: User, sub_account_name: str = "最优止盈") -> bool:
 
 if __name__ == "__main__":
     # 直接运行测试
-    revoke_all_users()
+    try:
+        revoke(DEFAULT_USER, "马丁格尔plus")
+        logging.info(f"用户 {DEFAULT_USER.customer_name} 撤回操作完成")
+    except Exception as e:
+        logging.error(f"测试用户撤回失败：{str(e)}")

@@ -1,18 +1,16 @@
 import logging
-from src.common.logger import get_logger
-import sys
 import os
+import sys
 import logging
 from types import NoneType
 from typing import List, Optional, Set
 from concurrent.futures import ThreadPoolExecutor
 
-# 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-# 如果项目根目录不在Python路径中，则添加
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
+
+from src.common.logger import get_logger
 
 from src.domain.user.User import User
 from src.common.constant import DEFAULT_USER

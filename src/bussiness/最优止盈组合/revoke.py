@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+import re
 
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -93,22 +94,15 @@ def revoke(user: User, sub_account_name: str = "最优止盈") -> bool:
     logger.info(f"{customer_name} 在组合 {sub_account_name} 中找到 {len(trades)} 个可撤回交易")
     
     success = True
-    # 仅处理买入类交易（业务代码=22），排除非买入/现金宝转入以外的类型
-    buy_trades = []
-    for t in trades:
-        code = getattr(t, 'business_code', None) or getattr(t, 'display_business_code', None)
-        text = getattr(t, 'business_type', None)
-        if str(code) == '22' or (text and ('买入' in text or '转入基金' in text)):
-            buy_trades.append(t)
-
-    if not buy_trades:
-        logger.info(f"{customer_name} 在组合 {sub_account_name} 中无买入类可撤回交易")
-        return True
-
-    for trade in buy_trades:
+    # 撤回全部可撤回交易：为每条交易计算正确的业务代码
+    for trade in trades:
         try:
             # 优先使用业务代码作为撤回 BusinType
-            bus_code = getattr(trade, 'business_code', None) or getattr(trade, 'display_business_code', None) or getattr(trade, 'business_type', '')
+            bus_code = getattr(trade, 'business_code', None) or getattr(trade, 'display_business_code', None)
+            if bus_code is None:
+                text = getattr(trade, 'business_type', '') or ''
+                m = re.search(r"(\d{2,3})", str(text))
+                bus_code = m.group(1) if m else '22'
             result = revoke_order(
                 user,
                 trade.busin_serial_no,

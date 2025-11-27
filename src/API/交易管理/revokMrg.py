@@ -52,6 +52,10 @@ def revoke_order(user: User, busin_serial_no: str, business_type: str, fund_code
     # 对密码进行MD5加密
     password_hash = hashlib.md5(user.password.encode()).hexdigest()
 
+    # 计算撤单 TradeType 与 BusinType：优先使用数字业务代码
+    bus_code = str(business_type or "")
+    trade_type = f"AsyJCJY{bus_code.zfill(3)}" if bus_code.isdigit() else "AsyJCJY022"
+
     data = {
         "BankAccountNo": bank_account_no,
         "CouponsId": "",
@@ -66,7 +70,7 @@ def revoke_order(user: User, busin_serial_no: str, business_type: str, fund_code
         "SubAccountNo": sub_account_no,
         "TotalAmounts": amount,
         "TraceID": f"{busin_serial_no}_zrA2NQcw4sld",
-        "TradeType": "AsyJCJY022",
+        "TradeType": trade_type,
         "appType": "ttjj",
         "cToken": user.c_token,
         "phoneType": "Iphone",
@@ -75,7 +79,7 @@ def revoke_order(user: User, busin_serial_no: str, business_type: str, fund_code
         "userId": user.customer_no,
         "version": "6.6.11",
         "BusinId": busin_serial_no,
-        "BusinType": business_type
+        "BusinType": bus_code
     }
 
     logger = get_logger("RevokeMrg")

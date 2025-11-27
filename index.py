@@ -562,8 +562,8 @@ if __name__ == "__main__":
     event = {"payload": json.dumps(payload)}
 
     # 选择调用新增/加仓/止盈中的一个（示例调用新增）
-    add_new_custom(event, None)
-    #increase_custom(event, None)
+    #add_new_custom(event, None)
+    increase_custom(event, None)
     # redeem_custom(event, None)
     # 根据需要调用 redeem 或 increase 函数
     # sync_fund_investment_indicators(None, None)

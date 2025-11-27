@@ -30,11 +30,16 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
         logger.error(f"提交订单失败: 银行卡信息未设置。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}", extra=extra)
         return None
 
-    # 2.1) 基金购买限额检查（与 SmartPlan 创建定投时一致）
+    # 2.1) 基金状态与购买限额检查
     try:
         fund_info = get_all_fund_info(user, fund_code)
         if not fund_info:
             logger.warning(f"无法获取基金{fund_code}的信息", extra=extra)
+            return None
+
+        can_purchase = getattr(fund_info, 'can_purchase', None)
+        if can_purchase is not None and not bool(can_purchase):
+            logger.info(f"基金{fund_code}当前不可申购，跳过", extra=extra)
             return None
 
         if not hasattr(fund_info, 'max_purchase') or not fund_info.max_purchase:
@@ -63,8 +68,12 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
             amount = float(amount) - round(random.uniform(0.01, 1), 2)
 
     # 4) 余额校验（示例阈值：100）
-    if getattr(bank_card_info, "CurrentRealBalance", 0) < 100:
-        logger.error(f"银行卡余额不足: {bank_card_info.CurrentRealBalance} < 100。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}", extra=extra)
+    balance = getattr(bank_card_info, "CurrentRealBalance", 0) if bank_card_info is not None else 0
+    if balance < 100:
+        logger.error(
+            f"银行卡余额不足: {balance} < 100。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}",
+            extra=extra,
+        )
         return None
 
     # 5) 调用 API 层发起真实下单请求

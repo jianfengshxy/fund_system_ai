@@ -34,6 +34,16 @@ def _set_user_cache(user):
     with _cache_lock:
         _user_cache[key] = (user, time.time())
 
+def _ensure_bank(user):
+    try:
+        has_bank = getattr(user, 'max_hqb_bank', None) is not None
+        if not has_bank:
+            user2 = getMaxhqbBank(user)
+            return user2 or user
+        return user
+    except Exception:
+        return user
+
 def _user_to_dict(user):
     return {
         'account': getattr(user, 'account', None),
@@ -81,16 +91,20 @@ def invalidate_user_cache(account: str, password: str):
 def get_user_all_info(account: str, password: str):
     cached = _get_cached_user(account, password)
     if cached is not None:
+        cached = _ensure_bank(cached)
+        _set_user_cache(cached)
         logger.info("令牌来源: 内存缓存", extra={"account": account, "token_source": "cache"})
         return cached
     file_cached = _load_file_cache(account, password)
     if file_cached is not None:
+        file_cached = _ensure_bank(file_cached)
         _set_user_cache(file_cached)
         logger.info("令牌来源: 文件缓存", extra={"account": account, "token_source": "file_cache"})
         return file_cached
     store = UserTokenStore()
     db_user = store.get(account)
     if db_user is not None:
+        db_user = _ensure_bank(db_user)
         _set_user_cache(db_user)
         _save_file_cache(db_user)
         logger.info("令牌来源: 数据库", extra={"account": account, "token_source": "database"})
@@ -100,6 +114,7 @@ def get_user_all_info(account: str, password: str):
         logger.error("登录失败", extra={"account": account})
         fallback = DEFAULT_USER if getattr(DEFAULT_USER, 'account', None) == account else None
         if fallback:
+            fallback = _ensure_bank(fallback)
             _set_user_cache(fallback)
             _save_file_cache(fallback)
             try:
@@ -136,6 +151,7 @@ def refresh_user_tokens(account: str, password: str):
     if not u2:
         invalidate_user_cache(account, password)
         return get_user_all_info(account, password)
+    u2 = _ensure_bank(u2)
     _set_user_cache(u2)
     try:
         UserTokenStore().upsert(u2)
@@ -147,10 +163,13 @@ def refresh_user_tokens(account: str, password: str):
 def get_user_from_store_or_cache(account: str, password: str):
     cached = _get_cached_user(account, password)
     if cached is not None:
+        cached = _ensure_bank(cached)
+        _set_user_cache(cached)
         logger.info("令牌来源: 内存缓存(无登录)", extra={"account": account, "token_source": "cache_nologin"})
         return cached
     file_cached = _load_file_cache(account, password)
     if file_cached is not None:
+        file_cached = _ensure_bank(file_cached)
         _set_user_cache(file_cached)
         logger.info("令牌来源: 文件缓存(无登录)", extra={"account": account, "token_source": "file_cache_nologin"})
         return file_cached
@@ -158,6 +177,7 @@ def get_user_from_store_or_cache(account: str, password: str):
         store = UserTokenStore()
         db_user = store.get(account)
         if db_user is not None:
+            db_user = _ensure_bank(db_user)
             _set_user_cache(db_user)
             _save_file_cache(db_user)
             logger.info("令牌来源: 数据库(无登录)", extra={"account": account, "token_source": "database_nologin"})

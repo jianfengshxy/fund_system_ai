@@ -53,8 +53,11 @@ def super_transfer(user: User, sub_account_no: str, fund_code: str, fund_amount:
         "Content-Type": "application/x-www-form-urlencoded"
     }
     
-    # 对密码进行MD5加密
-    password_hash = hashlib.md5(user.password.encode()).hexdigest()
+    password_raw = getattr(user, 'password', None) or getattr(user, 'paypassword', None) or ''
+    if not password_raw:
+        from src.common.errors import ValidationError
+        raise ValidationError('missing password')
+    password_hash = hashlib.md5(str(password_raw).encode()).hexdigest()
     req_no = str(int(time.time() * 1000))  # 当前时间的毫秒级Unix时间戳
     
     data = {
@@ -158,8 +161,11 @@ def hqbMakeRedemption(user: User, sub_account_no: str, fund_code: str, fund_amou
         "Cookie": "acw_tc=0bca392617092637189786468e3ebc1cbaae75aedd2ca760b7029b704565f0"
     }
     
-    # 构造请求参数
-    password_hash = hashlib.md5(user.password.encode()).hexdigest()
+    password_raw = getattr(user, 'password', None) or getattr(user, 'paypassword', None) or ''
+    if not password_raw:
+        from src.common.errors import ValidationError
+        raise ValidationError('missing password')
+    password_hash = hashlib.md5(str(password_raw).encode()).hexdigest()
     req_no = str(int(time.time() * 1000))  # 当前时间的毫秒级Unix时间戳
     
     payload = {

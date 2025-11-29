@@ -101,9 +101,19 @@ def get_user_all_info(account: str, password: str):
         _set_user_cache(file_cached)
         logger.info("令牌来源: 文件缓存", extra={"account": account, "token_source": "file_cache"})
         return file_cached
+    # 若未提供有效密码且为默认账号，使用默认用户密码
+    if not password and getattr(DEFAULT_USER, 'account', None) == account:
+        password = getattr(DEFAULT_USER, 'password', '')
     store = UserTokenStore()
     db_user = store.get(account)
     if db_user is not None:
+        # 填充密码（避免下游交易接口因密码为空抛错）
+        try:
+            setattr(db_user, 'password', password)
+            if not getattr(db_user, 'paypassword', None):
+                setattr(db_user, 'paypassword', password)
+        except Exception:
+            pass
         db_user = _ensure_bank(db_user)
         _set_user_cache(db_user)
         _save_file_cache(db_user)
@@ -174,9 +184,19 @@ def get_user_from_store_or_cache(account: str, password: str):
         logger.info("令牌来源: 文件缓存(无登录)", extra={"account": account, "token_source": "file_cache_nologin"})
         return file_cached
     try:
+        # 若未提供有效密码且为默认账号，使用默认用户密码
+        if not password and getattr(DEFAULT_USER, 'account', None) == account:
+            password = getattr(DEFAULT_USER, 'password', '')
         store = UserTokenStore()
         db_user = store.get(account)
         if db_user is not None:
+            # 填充密码（避免下游交易接口因密码为空抛错）
+            try:
+                setattr(db_user, 'password', password)
+                if not getattr(db_user, 'paypassword', None):
+                    setattr(db_user, 'paypassword', password)
+            except Exception:
+                pass
             db_user = _ensure_bank(db_user)
             _set_user_cache(db_user)
             _save_file_cache(db_user)

@@ -26,8 +26,44 @@ def _collect_items(obj: Any) -> List[Dict[str, Any]]:
     walk(obj)
     return items
 
-def get_group_funds_by_name(group_name: str) -> List[Dict[str, Any]]:
-    u = get_user_from_store_or_cache(getattr(DEFAULT_USER, 'account', None), getattr(DEFAULT_USER, 'password', None))
+def get_all_group_names(user) -> List[str]:
+    r = get_favor_groups(user)
+    if not r.Success or r.Data is None:
+        return []
+    data = r.Data
+    groups = None
+    
+    if isinstance(data, list):
+        groups = data
+    elif isinstance(data, dict):
+        for k in ["Groups", "groups", "GroupList", "groupList", "Data", "data"]:
+            v = data.get(k)
+            if isinstance(v, list) and len(v) > 0:
+                if any(isinstance(i, dict) and ("GroupId" in i or "groupId" in i or "Id" in i or "id" in i) for i in v):
+                    groups = v
+                    break
+        if groups is None:
+            for v in data.values():
+                if isinstance(v, list) and any(isinstance(i, dict) and ("GroupId" in i or "groupId" in i or "Id" in i or "id" in i) for i in v):
+                    groups = v
+                    break
+    
+    if not groups:
+        return []
+        
+    names = []
+    for g in groups:
+        name = g.get("GroupName") or g.get("groupName") or g.get("Name") or g.get("name")
+        if name:
+            names.append(name)
+    return names
+
+def get_group_funds_by_name(group_name: str, user=None) -> List[Dict[str, Any]]:
+    if user is None:
+        u = get_user_from_store_or_cache(getattr(DEFAULT_USER, 'account', None), getattr(DEFAULT_USER, 'password', None))
+    else:
+        u = user
+    
     r = get_favor_groups(u)
     if not r.Success or r.Data is None:
         return []

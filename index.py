@@ -355,16 +355,15 @@ def redeem_jianlong(event, context):
     except Exception as e:
         logger.error(f"[见龙在田] 止盈入口异常：{e}", extra={"action": "jianlong_redeem"})
         return
-
 def add_new_custom(event, context):
     try:
         evt, payload = parse_fc_event(event)
 
         account = payload.get('account')
         password = payload.get('password')
-        sub_account_list = payload.get('sub_account_list') or []
-        if not all([account, password]) or not isinstance(sub_account_list, list) or not sub_account_list:
-            logger.error("Payload缺少必填参数: account, password 或 sub_account_list")
+        
+        if not all([account, password]):
+            logger.error("Payload缺少必填参数: account, password")
             return
 
         user = get_user_all_info(account, password)
@@ -372,28 +371,49 @@ def add_new_custom(event, context):
             logger.error(f"获取用户 {account} 信息失败")
             return
 
-        from src.service.自选基金.自选组合服务 import get_group_funds_by_name
+        from src.service.自选基金.自选组合服务 import get_all_group_names, get_group_funds_by_name
         from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
         from src.bussiness.自定义组合.add_new import add_new as biz_add_new
+        from src.API.组合管理.SubAccountMrg import getSubAssetMultList
 
-        for entry in sub_account_list:
-            sub_account_name = entry.get('sub_account_name')
-            amount = entry.get('amount')
-            try:
-                amount = float(amount) if amount is not None else 5000.0
-            except Exception:
-                amount = 5000.0
+        # 先拿到用户所有自选组合名字
+        all_favorite_groups = get_all_group_names(user)
+        if not all_favorite_groups:
+            logger.warning("该用户下无任何自选组合，直接返回")
+            return
+
+        favorite_set = {g for g in all_favorite_groups}
+
+        # 获取用户所有资产组合
+        sub_asset_response = getSubAssetMultList(user)
+        if not sub_asset_response.Success or not sub_asset_response.Data:
+            logger.warning("获取用户资产组合列表失败或为空")
+            return
+
+        # 获取全局默认金额
+        amount_global = payload.get('amount')
+        try:
+            amount_global = float(amount_global) if amount_global is not None else 5000.0
+        except Exception:
+            amount_global = 5000.0
+
+        for group in sub_asset_response.Data.list_group:
+            sub_account_name = group.group_name
             extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_add_new"}
 
             if not sub_account_name:
                 continue
 
-            assets = get_sub_account_asset_by_name(user, sub_account_name)
-            if not assets:
-                logger.warning(f"资产组合未找到，跳过：{sub_account_name}", extra=extra)
+            # 只在自选组合名集合里才继续
+            if sub_account_name not in favorite_set:
                 continue
 
-            funds = get_group_funds_by_name(sub_account_name)
+            assets = get_sub_account_asset_by_name(user, sub_account_name)
+            if not assets:
+                logger.warning(f"资产组合未找到详细资产信息，跳过：{sub_account_name}", extra=extra)
+                continue
+
+            funds = get_group_funds_by_name(sub_account_name, user)
             if not funds:
                 logger.warning(f"自选组合基金为空，跳过：{sub_account_name}", extra=extra)
                 continue
@@ -404,7 +424,7 @@ def add_new_custom(event, context):
                 name_val = item.get("shortname") or item.get("fname") or item.get("FundName") or item.get("fund_name") or item.get("name")
                 if not code:
                     continue
-                fund_list.append({"fund_code": code, "fund_name": name_val, "amount": amount})
+                fund_list.append({"fund_code": code, "fund_name": name_val, "amount": amount_global})
 
             logger.info(f"[自定义组合-新增] 开始为用户 {user.customer_name} 执行新增，组合：{sub_account_name}，基金数：{len(fund_list)}", extra=extra)
             success = biz_add_new(user, sub_account_name, fund_list)
@@ -426,9 +446,9 @@ def increase_custom(event, context):
         evt, payload = parse_fc_event(event)
         account = payload.get('account')
         password = payload.get('password')
-        sub_account_list = payload.get('sub_account_list') or []
-        if not all([account, password]) or not isinstance(sub_account_list, list) or not sub_account_list:
-            logger.error("Payload缺少必填参数: account, password 或 sub_account_list")
+
+        if not all([account, password]):
+            logger.error("Payload缺少必填参数: account, password")
             return
 
         user = get_user_all_info(account, password)
@@ -436,28 +456,47 @@ def increase_custom(event, context):
             logger.error(f"获取用户 {account} 信息失败")
             return
 
-        from src.service.自选基金.自选组合服务 import get_group_funds_by_name
+        from src.service.自选基金.自选组合服务 import get_all_group_names, get_group_funds_by_name
         from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
         from src.bussiness.自定义组合.increase import increase as biz_increase
+        from src.API.组合管理.SubAccountMrg import getSubAssetMultList
 
-        for entry in sub_account_list:
-            sub_account_name = entry.get('sub_account_name')
-            amount = entry.get('amount')
-            try:
-                amount = float(amount) if amount is not None else 5000.0
-            except Exception:
-                amount = 5000.0
+        all_favorite_groups = get_all_group_names(user)
+        if not all_favorite_groups:
+            logger.warning("该用户下无任何自选组合，直接返回")
+            return
+
+        favorite_set = {g for g in all_favorite_groups}
+
+        # 获取用户所有资产组合
+        sub_asset_response = getSubAssetMultList(user)
+        if not sub_asset_response.Success or not sub_asset_response.Data:
+            logger.warning("获取用户资产组合列表失败或为空")
+            return
+
+        # 获取全局默认金额
+        amount_global = payload.get('amount')
+        try:
+            amount_global = float(amount_global) if amount_global is not None else 5000.0
+        except Exception:
+            amount_global = 5000.0
+
+        for group in sub_asset_response.Data.list_group:
+            sub_account_name = group.group_name
             extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_increase"}
 
             if not sub_account_name:
                 continue
 
-            assets = get_sub_account_asset_by_name(user, sub_account_name)
-            if not assets:
-                logger.warning(f"资产组合未找到，跳过：{sub_account_name}", extra=extra)
+            if sub_account_name not in favorite_set:
                 continue
 
-            funds = get_group_funds_by_name(sub_account_name)
+            assets = get_sub_account_asset_by_name(user, sub_account_name)
+            if not assets:
+                logger.warning(f"资产组合未找到详细资产信息，跳过：{sub_account_name}", extra=extra)
+                continue
+
+            funds = get_group_funds_by_name(sub_account_name, user)
             if not funds:
                 logger.warning(f"自选组合基金为空，跳过：{sub_account_name}", extra=extra)
                 continue
@@ -468,7 +507,7 @@ def increase_custom(event, context):
                 name_val = item.get("shortname") or item.get("fname") or item.get("FundName") or item.get("fund_name") or item.get("name")
                 if not code:
                     continue
-                fund_list.append({"fund_code": code, "fund_name": name_val, "amount": amount})
+                fund_list.append({"fund_code": code, "fund_name": name_val, "amount": amount_global})
 
             logger.info(f"[自定义组合-加仓] 开始为用户 {user.customer_name} 执行加仓，组合：{sub_account_name}，基金数：{len(fund_list)}", extra=extra)
             success = biz_increase(user, sub_account_name, fund_list)
@@ -490,9 +529,9 @@ def redeem_custom(event, context):
         evt, payload = parse_fc_event(event)
         account = payload.get('account')
         password = payload.get('password')
-        sub_account_list = payload.get('sub_account_list') or []
-        if not all([account, password]) or not isinstance(sub_account_list, list) or not sub_account_list:
-            logger.error("Payload缺少必填参数: account, password 或 sub_account_list")
+
+        if not all([account, password]):
+            logger.error("Payload缺少必填参数: account, password")
             return
 
         user = get_user_all_info(account, password)
@@ -500,28 +539,47 @@ def redeem_custom(event, context):
             logger.error(f"获取用户 {account} 信息失败")
             return
 
-        from src.service.自选基金.自选组合服务 import get_group_funds_by_name
+        from src.service.自选基金.自选组合服务 import get_all_group_names, get_group_funds_by_name
         from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
         from src.bussiness.自定义组合.redeem import redeem as biz_redeem
+        from src.API.组合管理.SubAccountMrg import getSubAssetMultList
 
-        for entry in sub_account_list:
-            sub_account_name = entry.get('sub_account_name')
-            amount = entry.get('amount')
-            try:
-                amount = float(amount) if amount is not None else 5000.0
-            except Exception:
-                amount = 5000.0
+        all_favorite_groups = get_all_group_names(user)
+        if not all_favorite_groups:
+            logger.warning("该用户下无任何自选组合，直接返回")
+            return
+
+        favorite_set = {g for g in all_favorite_groups}
+
+        # 获取用户所有资产组合
+        sub_asset_response = getSubAssetMultList(user)
+        if not sub_asset_response.Success or not sub_asset_response.Data:
+            logger.warning("获取用户资产组合列表失败或为空")
+            return
+
+        # 获取全局默认金额
+        amount_global = payload.get('amount')
+        try:
+            amount_global = float(amount_global) if amount_global is not None else 5000.0
+        except Exception:
+            amount_global = 5000.0
+
+        for group in sub_asset_response.Data.list_group:
+            sub_account_name = group.group_name
             extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_redeem"}
 
             if not sub_account_name:
                 continue
 
-            assets = get_sub_account_asset_by_name(user, sub_account_name)
-            if not assets:
-                logger.warning(f"资产组合未找到，跳过：{sub_account_name}", extra=extra)
+            if sub_account_name not in favorite_set:
                 continue
 
-            funds = get_group_funds_by_name(sub_account_name)
+            assets = get_sub_account_asset_by_name(user, sub_account_name)
+            if not assets:
+                logger.warning(f"资产组合未找到详细资产信息，跳过：{sub_account_name}", extra=extra)
+                continue
+
+            funds = get_group_funds_by_name(sub_account_name, user)
             if not funds:
                 logger.warning(f"自选组合基金为空，跳过：{sub_account_name}", extra=extra)
                 continue
@@ -532,7 +590,7 @@ def redeem_custom(event, context):
                 name_val = item.get("shortname") or item.get("fname") or item.get("FundName") or item.get("fund_name") or item.get("name")
                 if not code:
                     continue
-                fund_list.append({"fund_code": code, "fund_name": name_val, "amount": amount})
+                fund_list.append({"fund_code": code, "fund_name": name_val, "amount": amount_global})
 
             logger.info(f"[自定义组合-止盈] 开始为用户 {user.customer_name} 执行止盈，组合：{sub_account_name}，基金数：{len(fund_list)}", extra=extra)
             success = biz_redeem(user, sub_account_name, fund_list)
@@ -554,15 +612,14 @@ if __name__ == "__main__":
     payload = {
         "account": "13918199137",
         "password": "sWX15706",
-        "sub_account_list": [
-            {"sub_account_name": "海外基金组合", "amount": 5000.0}
-        ]
+        "amount": 5000.0
+        # "sub_account_list": [ ... ]  # 不再需要
     }
     # parse_fc_event 支持 dict 或 {"payload": "..."}；此处用 JSON 字符串更贴近 FC 触发
     event = {"payload": json.dumps(payload)}
 
     # 选择调用新增/加仓/止盈中的一个（示例调用新增）
-    #add_new_custom(event, None)
+    # add_new_custom(event, None)
     increase_custom(event, None)
     # redeem_custom(event, None)
     # 根据需要调用 redeem 或 increase 函数

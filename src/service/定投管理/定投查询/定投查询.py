@@ -16,6 +16,7 @@ from src.common.constant import (
 
 from src.API.定投计划管理.SmartPlan import getFundRations
 from src.common.errors import RetriableError, ValidationError
+from src.common.logger import get_logger
 def get_all_fund_plan_details(user: User) -> List[FundPlanDetail]:
     """
     查询所有的定投计划并获取所有详情

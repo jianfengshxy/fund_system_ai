@@ -119,12 +119,12 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             logger.info("开始检查止盈条件...")
             stop_rate = 5.0
             # 指数基金：排名>90 且 >1% 即止盈（赎回低费率）
-            if fund_type == '000' and estimated_profit_rate > 1.0 and rank_100 > 90 and fund_info.estimated_change != 0.0:
-                logger.info(f"{customer_name}的止盈操作开始：指数基金{fund_name}{fund_code}预估收益{estimated_profit_rate},100日排名:{rank_100},实际止盈点:1.0")
-                res = sell_low_fee_shares(user, sub_account_no, fund_code, shares)
-                if res is not None and getattr(res, 'busin_serial_no', None):
-                    success_count += 1
-                continue
+            # if fund_type == '000' and estimated_profit_rate > 1.0 and rank_100 > 90 and fund_info.estimated_change != 0.0:
+            #     logger.info(f"{customer_name}的止盈操作开始：指数基金{fund_name}{fund_code}预估收益{estimated_profit_rate},100日排名:{rank_100},实际止盈点:1.0")
+            #     res = sell_low_fee_shares(user, sub_account_no, fund_code, shares)
+            #     if res is not None and getattr(res, 'busin_serial_no', None):
+            #         success_count += 1
+            #     continue
 
             # 赎回 0 费率份额
             if  estimated_profit_rate > 3.0:

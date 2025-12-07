@@ -235,7 +235,10 @@ resources:
       runtime: ${vars.common.props.runtime}
       region: ${vars.common.props.region}
       timeout: ${vars.common.props.timeout}
-      environmentVariables: ${vars.common.props.environmentVariables}
+      environmentVariables: 
+        JIANLONG_PROFIT_THRESHOLD: 15.0
+        PYTHONPATH: /code
+        TZ: Asia/Shanghai
       triggers:
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
@@ -390,7 +393,10 @@ resources:
       runtime: ${vars.common.props.runtime}
       region: ${vars.common.props.region}
       timeout: ${vars.common.props.timeout}
-      environmentVariables: ${vars.common.props.environmentVariables}
+      environmentVariables: 
+        JIANLONG_PROFIT_THRESHOLD: 15.0
+        PYTHONPATH: /code
+        TZ: Asia/Shanghai
       triggers:
       # 见龙在田
       - qualifier: ${vars.common.props.triggerConfig.qualifier}

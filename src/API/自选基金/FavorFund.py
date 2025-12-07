@@ -81,8 +81,17 @@ def add_to_favorites(
 
     url = f"https://{FUND_FAVOR_HOST}/favor/fcode/add"
 
-    # actionparam 形如: "-1,001743"
     actionparam = f"{group_id},{fund_code}"
+
+    current_version = None
+    try:
+        rv = get_favor_group(group_ids=str(group_id), user=u)
+        if rv and rv.Data and isinstance(rv.Data, dict):
+            current_version = rv.Data.get("version") or rv.Data.get("Version")
+    except Exception:
+        current_version = None
+
+    favor_version = current_version or "-2000"
 
     params = [
         ("MobileKey", MOBILE_KEY),
@@ -91,11 +100,11 @@ def add_to_favorites(
         ("appVersion", SERVER_VERSION),
         ("ctoken", u.c_token),
         ("deviceid", MOBILE_KEY),
-        ("favorversion", str(int(time.time() * 1000))),
+        ("favorversion", favor_version),
         ("passportctoken", u.passport_ctoken),
         ("passportid", u.passport_id),
         ("passportutoken", u.passport_utoken),
-        ("plat", "Web"),
+        ("plat", "Iphone"),
         ("product", "EFund"),
         ("uid", u.customer_no),
         ("utoken", u.u_token),
@@ -104,16 +113,19 @@ def add_to_favorites(
     query = urllib.parse.urlencode(params)
     full_url = f"{url}?{query}"
 
-    headers = _build_headers()
+    # 使用专门的 headers（包含特定的 validmark）
+    headers = _build_headers_for_add()
     logger = get_logger("FavorFund.add")
     extra = {"account": getattr(u, 'mobile_phone', None) or getattr(u, 'account', None), "action": "favor_add", "fund_code": fund_code}
-
+    
     try:
-        resp = requests.get(full_url, headers=headers, verify=False, timeout=10)
+        form_data = dict(params)
+        resp = requests.post(url, headers=headers, data=form_data, verify=False, timeout=10)
+        if resp.status_code == 405:
+            resp = requests.get(full_url, headers=headers, verify=False, timeout=10)
         resp.raise_for_status()
         json_data = resp.json()
 
-        # 兼容大小写
         success = json_data.get("Success", json_data.get("success", False))
         error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
         first_error = (
@@ -123,6 +135,31 @@ def add_to_favorites(
             or json_data.get("Message")
         )
         data = json_data.get("Data", json_data.get("data"))
+
+        if not success and error_code == 63117 and isinstance(data, dict):
+            new_version = data.get("version") or data.get("Version")
+            if new_version and new_version != favor_version:
+                params_retry = list(params)
+                for i, (k, v) in enumerate(params_retry):
+                    if k == "favorversion":
+                        params_retry[i] = (k, new_version)
+                        break
+                form_retry = dict(params_retry)
+                resp2 = requests.post(url, headers=headers, data=form_retry, verify=False, timeout=10)
+                if resp2.status_code == 405:
+                    query_retry = urllib.parse.urlencode(params_retry)
+                    resp2 = requests.get(f"{url}?{query_retry}", headers=headers, verify=False, timeout=10)
+                resp2.raise_for_status()
+                json_data2 = resp2.json()
+                success = json_data2.get("Success", json_data2.get("success", False))
+                error_code = json_data2.get("ErrorCode", json_data2.get("errorCode"))
+                first_error = (
+                    json_data2.get("FirstError")
+                    or json_data2.get("ErrMsg")
+                    or json_data2.get("ErrorMessage")
+                    or json_data2.get("Message")
+                )
+                data = json_data2.get("Data", json_data2.get("data"))
 
         return ApiResponse(
             Success=bool(success),
@@ -209,7 +246,7 @@ def get_favor_group(
     favor_version: str = "-2000",
     plat: str = "Iphone",
 ) -> ApiResponse[Dict[str, Any]]:
-    u = _get_user(user)
+    u = _ensure_auth_ready(user)
     url = f"https://{FUND_FAVOR_HOST}/favor/fcode/getgroup"
     headers = _build_headers_for_getgroup()
 
@@ -249,10 +286,102 @@ def get_favor_group(
         return ApiResponse(False, "REQUEST_ERROR", None, f"请求失败: {str(e)}", None)
     except Exception as e:
         logger.error(f"解析失败: {str(e)}", extra=extra)
-        return ApiResponse(False, "UNKNOWN_ERROR", None, f"未知错误: {str(e)}", None)
+    return ApiResponse(False, "UNKNOWN_ERROR", None, f"未知错误: {str(e)}", None)
 
 
-__all__ = ["add_to_favorites", "get_favor_group", "get_favor_groups"]
+def remove_from_favorites(
+    fund_code: str,
+    group_id: int = -1,
+    user: Optional[User] = None,
+) -> ApiResponse[Dict[str, Any]]:
+    u = _ensure_auth_ready(user)
+    actionparam = f"{group_id},{fund_code}"
+    current_version = None
+    try:
+        rv = get_favor_group(group_ids=str(group_id), user=u)
+        if rv and rv.Data and isinstance(rv.Data, dict):
+            current_version = rv.Data.get("version") or rv.Data.get("Version")
+    except Exception:
+        current_version = None
+    favor_version = current_version or "-2000"
+    params = [
+        ("MobileKey", MOBILE_KEY),
+        ("actionparam", actionparam),
+        ("appType", "ttjj"),
+        ("appVersion", SERVER_VERSION),
+        ("ctoken", u.c_token),
+        ("deviceid", MOBILE_KEY),
+        ("favorversion", favor_version),
+        ("passportctoken", u.passport_ctoken),
+        ("passportid", u.passport_id),
+        ("passportutoken", u.passport_utoken),
+        ("plat", "Iphone"),
+        ("product", "EFund"),
+        ("uid", u.customer_no),
+        ("utoken", u.u_token),
+        ("version", SERVER_VERSION),
+    ]
+    headers = _build_headers_for_add()
+    endpoints = [
+        f"https://{FUND_FAVOR_HOST}/favor/fcode/del",
+    ]
+    last_resp = None
+    for url in endpoints:
+        try:
+            form_data = dict(params)
+            resp = requests.post(url, headers=headers, data=form_data, verify=False, timeout=10)
+            if resp.status_code == 405:
+                query = urllib.parse.urlencode(params)
+                resp = requests.get(f"{url}?{query}", headers=headers, verify=False, timeout=10)
+            resp.raise_for_status()
+            json_data = resp.json()
+            success = json_data.get("Success", json_data.get("success", False))
+            error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
+            first_error = (
+                json_data.get("FirstError")
+                or json_data.get("ErrMsg")
+                or json_data.get("ErrorMessage")
+                or json_data.get("Message")
+            )
+            data = json_data.get("Data", json_data.get("data"))
+            last_resp = ApiResponse(bool(success), error_code, data, first_error, json_data.get("hasWrongToken"))
+            if success:
+                return last_resp
+            if not success and error_code == 63117 and isinstance(data, dict):
+                new_version = data.get("version") or data.get("Version")
+                if new_version and new_version != favor_version:
+                    params_retry = list(params)
+                    for i, (k, v) in enumerate(params_retry):
+                        if k == "favorversion":
+                            params_retry[i] = (k, new_version)
+                            break
+                    form_retry = dict(params_retry)
+                    resp2 = requests.post(url, headers=headers, data=form_retry, verify=False, timeout=10)
+                    if resp2.status_code == 405:
+                        query_retry = urllib.parse.urlencode(params_retry)
+                        resp2 = requests.get(f"{url}?{query_retry}", headers=headers, verify=False, timeout=10)
+                    resp2.raise_for_status()
+                    json_data2 = resp2.json()
+                    success2 = json_data2.get("Success", json_data2.get("success", False))
+                    error_code2 = json_data2.get("ErrorCode", json_data2.get("errorCode"))
+                    first_error2 = (
+                        json_data2.get("FirstError")
+                        or json_data2.get("ErrMsg")
+                        or json_data2.get("ErrorMessage")
+                        or json_data2.get("Message")
+                    )
+                    data2 = json_data2.get("Data", json_data2.get("data"))
+                    last_resp = ApiResponse(bool(success2), error_code2, data2, first_error2, json_data2.get("hasWrongToken"))
+                    if success2:
+                        return last_resp
+        except requests.exceptions.RequestException:
+            continue
+        except Exception:
+            continue
+    return last_resp or ApiResponse(False, "UNKNOWN_ERROR", None, "未知错误", None)
+
+
+__all__ = ["add_to_favorites", "remove_from_favorites", "get_favor_group", "get_favor_groups"]
 
 # 新增：抽取基金项并打印详情的辅助方法
 def _is_fund_item(d: Dict[str, Any]) -> bool:
@@ -310,7 +439,7 @@ def get_favor_groups(
     favor_version: str = "-2000",
     plat: str = "Iphone",
 ) -> ApiResponse[Dict[str, Any]]:
-    u = _get_user(user)
+    u = _ensure_auth_ready(user)
     url = f"https://{FUND_FAVOR_HOST}/favor/group/get"
     headers = _build_headers_for_getgroup()
     form = {

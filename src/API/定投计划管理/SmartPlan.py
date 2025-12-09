@@ -2,6 +2,7 @@ import sys
 import os
 import logging
 from src.common.logger import get_logger
+from src.API.登录接口.login import ensure_user_fresh
 import urllib.parse
 import urllib3
 import warnings
@@ -98,11 +99,12 @@ def getFundRations(user, page_index=1, page_size=1000, planTypes=None, fundTypes
         # 确保fundTypes只包含0、1和2
         fundTypes = [ft for ft in fundTypes if ft in [0, 1, 2]]
 
-    url = f'https://ibgapi{user.index}.1234567.com.cn/ration-list/getFundRations'
+    u = ensure_user_fresh(user)
+    url = f'https://ibgapi{u.index}.1234567.com.cn/ration-list/getFundRations'
     
     headers = {
         'Connection': 'keep-alive',
-        'Host': f'ibgapi{user.index}.1234567.com.cn',
+        'Host': f'ibgapi{u.index}.1234567.com.cn',
         'Accept': '*/*',
         'GTOKEN': '4474AFD3E15F441E937647556C01C174',
         'clientInfo': 'ttjj-iPhone 11 Pro-iOS-iOS16.2',
@@ -118,20 +120,20 @@ def getFundRations(user, page_index=1, page_size=1000, planTypes=None, fundTypes
         "ServerVersion": SERVER_VERSION,
         "planTypes": planTypes,  # 使用传入的planTypes参数
         "pageSize": page_size,
-        "passportctoken": user.passport_ctoken,
+        "passportctoken": u.passport_ctoken,
         "fundTypes": fundTypes,  # 使用传入的fundTypes参数
-        "passportutoken": user.passport_utoken,
+        "passportutoken": u.passport_utoken,
         "PhoneType": PHONE_TYPE,
         "pageIndex": page_index,
         "periodTypes": [],
         "sortType": "1",
         "MobileKey": MOBILE_KEY,
-        "UserId": user.customer_no,
+        "UserId": u.customer_no,
         "planStates": 0,
-        "UToken": user.u_token,
+        "UToken": u.u_token,
         "usingNew": False,
-        "CToken": user.c_token,
-        "passportid": user.passport_id
+        "CToken": u.c_token,
+        "passportid": u.passport_id
     }
     
     logger = get_logger("SmartPlan")
@@ -145,13 +147,30 @@ def getFundRations(user, page_index=1, page_size=1000, planTypes=None, fundTypes
             data = json_data.get('Data')
             if data is None:
                 if not json_data.get('Success', False):
-                    return ApiResponse(
-                        Success=json_data.get('Success', False),
-                        ErrorCode=json_data.get('ErrorCode'),
-                        Data=None,
-                        FirstError=json_data.get('FirstError'),
-                        DebugError=json_data.get('DebugError')
-                    )
+                    u2 = ensure_user_fresh(u, force_refresh=True)
+                    url2 = f'https://ibgapi{u2.index}.1234567.com.cn/ration-list/getFundRations'
+                    body2 = dict(body)
+                    body2["passportctoken"] = u2.passport_ctoken
+                    body2["passportutoken"] = u2.passport_utoken
+                    body2["UserId"] = u2.customer_no
+                    body2["UToken"] = u2.u_token
+                    body2["CToken"] = u2.c_token
+                    body2["passportid"] = u2.passport_id
+                    headers2 = dict(headers)
+                    headers2['Host'] = f'ibgapi{u2.index}.1234567.com.cn'
+                    r2 = requests.post(url2, json=body2, headers=headers2, verify=False)
+                    r2.raise_for_status()
+                    jd2 = r2.json()
+                    data = jd2.get('Data')
+                    if data is None and not jd2.get('Success', False):
+                        return ApiResponse(
+                            Success=jd2.get('Success', False),
+                            ErrorCode=jd2.get('ErrorCode'),
+                            Data=None,
+                            FirstError=jd2.get('FirstError'),
+                            DebugError=jd2.get('DebugError')
+                        )
+                    json_data = jd2
                 raise ValidationError('Data为空')
             plans = []
             for item in data.get('data', []):
@@ -486,33 +505,34 @@ def getPlanDetailPro(plan_id, user) -> ApiResponse[FundPlanDetail]:
     """
     获取定投计划详情
     """
-    url = f'https://ibgapi{user.index}.1234567.com.cn/ration/getPlanDetailPro'
+    u = ensure_user_fresh(user)
+    url = f'https://ibgapi{u.index}.1234567.com.cn/ration/getPlanDetailPro'
     data = {
         'product': 'EFund',
         'ServerVersion': SERVER_VERSION,
         'PlanId': plan_id,
-        'passportctoken': user.passport_ctoken,
-        'passportutoken': user.passport_utoken,
+        'passportctoken': u.passport_ctoken,
+        'passportutoken': u.passport_utoken,
         'deviceid': MOBILE_KEY,
-        'userid': user.customer_no,
+        'userid': u.customer_no,
         'version': SERVER_VERSION,
-        'ctoken': user.c_token,
-        'uid': user.customer_no,
+        'ctoken': u.c_token,
+        'uid': u.customer_no,
         'PhoneType': PHONE_TYPE,
         'MobileKey': MOBILE_KEY,
-        'UserId': user.customer_no,
-        'utoken': user.u_token,
+        'UserId': u.customer_no,
+        'utoken': u.u_token,
         'plat': 'Android',
-        'UToken': user.u_token,
-        'passportid': user.passport_id,
-        'CToken': user.c_token
+        'UToken': u.u_token,
+        'passportid': u.passport_id,
+        'CToken': u.c_token
     }
     headers = {
         'Accept': '*/*',
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive',
         'Content-Type': 'application/json; charset=utf-8',
-        'Host': f'ibgapi{user.index}.1234567.com.cn',
+        'Host': f'ibgapi{u.index}.1234567.com.cn',
         'Referer': f'https://mpservice.com/fund46516ffab83642/release/pages/plan-detail/index?planId={plan_id}',
         'User-Agent': 'okhttp/3.12.13',
         'clientInfo': 'ttjj-ZTE 7534N-Android-11',
@@ -529,13 +549,34 @@ def getPlanDetailPro(plan_id, user) -> ApiResponse[FundPlanDetail]:
             data = json_data.get('Data')
             if data is None:
                 if not json_data.get('Success', False):
-                    return ApiResponse(
-                        Success=json_data.get('Success', False),
-                        ErrorCode=json_data.get('ErrorCode'),
-                        Data=None,
-                        FirstError=json_data.get('FirstError'),
-                        DebugError=json_data.get('DebugError')
-                    )
+                    u2 = ensure_user_fresh(u, force_refresh=True)
+                    url2 = f'https://ibgapi{u2.index}.1234567.com.cn/ration/getPlanDetailPro'
+                    data2 = dict(data)
+                    data2['passportctoken'] = u2.passport_ctoken
+                    data2['passportutoken'] = u2.passport_utoken
+                    data2['userid'] = u2.customer_no
+                    data2['ctoken'] = u2.c_token
+                    data2['uid'] = u2.customer_no
+                    data2['UserId'] = u2.customer_no
+                    data2['utoken'] = u2.u_token
+                    data2['UToken'] = u2.u_token
+                    data2['passportid'] = u2.passport_id
+                    data2['CToken'] = u2.c_token
+                    headers2 = dict(headers)
+                    headers2['Host'] = f'ibgapi{u2.index}.1234567.com.cn'
+                    r2 = requests.post(url2, json=data2, headers=headers2, verify=False)
+                    r2.raise_for_status()
+                    jd2 = r2.json()
+                    d2 = jd2.get('Data')
+                    if d2 is None and not jd2.get('Success', False):
+                        return ApiResponse(
+                            Success=jd2.get('Success', False),
+                            ErrorCode=jd2.get('ErrorCode'),
+                            Data=None,
+                            FirstError=jd2.get('FirstError'),
+                            DebugError=jd2.get('DebugError')
+                        )
+                    json_data = jd2
                 raise ValidationError('Data为空')
 
             ration_plan_data = data.get('rationPlan', {})

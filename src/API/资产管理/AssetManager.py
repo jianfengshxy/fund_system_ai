@@ -14,30 +14,32 @@ from src.common.constant import (
     SERVER_VERSION, PHONE_TYPE, MOBILE_KEY,
     USER_ID, U_TOKEN, C_TOKEN, PASSPORT_ID, DEFAULT_USER
 )
+from src.API.登录接口.login import ensure_user_fresh
 
 def GetMyAssetMainPartAsync(user) -> ApiResponse:
     """
     获取用户资产信息
     """
-    url = f'https://tradeapilvs{user.index}.1234567.com.cn/User/Asset/GetMyAssetMainPartAsync'
+    u = ensure_user_fresh(user)
+    url = f'https://tradeapilvs{u.index}.1234567.com.cn/User/Asset/GetMyAssetMainPartAsync'
     data = {
         'ServerVersion': SERVER_VERSION,
         'PhoneType': PHONE_TYPE,
         'MobileKey': MOBILE_KEY,
         'Version': SERVER_VERSION,
-        'UserId': user.customer_no,
+        'UserId': u.customer_no,
         'ContainsPension': True,
-        'UToken': user.u_token,
+        'UToken': u.u_token,
         'AppType': 'ttjj',
-        'CustomerNo': user.customer_no,
-        'CToken': user.c_token
+        'CustomerNo': u.customer_no,
+        'CToken': u.c_token
     }
     headers = {
         'Accept': '*/*',
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive',
         'Content-Type': 'application/json; charset=utf-8',
-        'Host': f'tradeapilvs{user.index}.1234567.com.cn',
+        'Host': f'tradeapilvs{u.index}.1234567.com.cn',
         'Referer': 'https://mpservice.com/882b8205738149eeb1b0f4f516953fe9/release/pages/home/index',
         'User-Agent': 'okhttp/3.12.13',
         'clientInfo': 'ttjj-ZTE 7534N-Android-11',
@@ -56,6 +58,25 @@ def GetMyAssetMainPartAsync(user) -> ApiResponse:
             data = json_data.get('Data')
             if data is None:
                 if not json_data.get('Success', False):
+                    u2 = ensure_user_fresh(u, force_refresh=True)
+                    url2 = f'https://tradeapilvs{u2.index}.1234567.com.cn/User/Asset/GetMyAssetMainPartAsync'
+                    data2 = dict(data)
+                    data2['UserId'] = u2.customer_no
+                    data2['UToken'] = u2.u_token
+                    data2['CustomerNo'] = u2.customer_no
+                    data2['CToken'] = u2.c_token
+                    r2 = requests.post(url2, json=data2, headers=headers, verify=False)
+                    r2.raise_for_status()
+                    jd2 = r2.json()
+                    if jd2.get('Data') is not None or jd2.get('Success', False):
+                        d2 = jd2.get('Data')
+                        return ApiResponse(
+                            Success=jd2.get('Success', False),
+                            ErrorCode=jd2.get('ErrorCode'),
+                            Data=d2,
+                            FirstError=jd2.get('FirstError'),
+                            DebugError=jd2.get('DebugError')
+                        )
                     return ApiResponse(
                         Success=json_data.get('Success', False),
                         ErrorCode=json_data.get('ErrorCode'),

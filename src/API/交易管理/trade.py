@@ -10,6 +10,7 @@ from src.domain.trade.share import Share
 from src.domain.user.User import User  # 添加User类的导入
 from typing import List, Optional  # 添加类型提示支持
 from src.common.constant import DEFAULT_USER, MOBILE_KEY
+from src.API.登录接口.login import ensure_user_fresh
 
 logger = get_logger("Trade")
 
@@ -26,8 +27,9 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
         List[TradeResult]: 交易结果列表
     """
     # print(f"index:{user.index}")
-    url = f"https://tquerycoreapi{user.index}.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
-    if not user.index:
+    u = ensure_user_fresh(user)
+    url = f"https://tquerycoreapi{u.index}.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
+    if not u.index:
         url = "https://tquerycoreapi1.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
     
     headers = {
@@ -45,12 +47,12 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
     }
     
     data = {
-        "utoken": user.u_token,
-        "uid": user.customer_no,
+        "utoken": u.u_token,
+        "uid": u.customer_no,
         "mobileKey": MOBILE_KEY,
-        "customerNo": user.customer_no,
+        "customerNo": u.customer_no,
         "deviceid": "6A464B04-3930-4D99-AFAD-E40BE6727075",
-        "ctoken": user.c_token,
+        "ctoken": u.c_token,
         "serverversion": "6.6.11",
         "rtype": "app",
         "data": json.dumps({
@@ -62,7 +64,7 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
             "Statu": status,
             "Account": "",
             "SubAccountNo": sub_account_no,
-            "CustomerNo": user.customer_no
+            "CustomerNo": u.customer_no
         })
     }
     
@@ -84,6 +86,23 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
                 results.append(trade_result)
             return results
         else:
+            u2 = ensure_user_fresh(u, force_refresh=True)
+            url2 = f"https://tquerycoreapi{u2.index}.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
+            if not u2.index:
+                url2 = "https://tquerycoreapi1.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
+            data["utoken"] = u2.u_token
+            data["uid"] = u2.customer_no
+            data["customerNo"] = u2.customer_no
+            data["ctoken"] = u2.c_token
+            payload = data.copy()
+            response = requests.post(url2, headers=headers, json=payload, verify=False)
+            response.raise_for_status()
+            response_data = response.json()
+            if response_data.get("Succeed", False):
+                results = []
+                for trade_info in response_data.get("responseObjects", []):
+                    results.append(TradeResult.from_api(trade_info))
+                return results
             logger.error(f"获取可撤单交易列表失败: {response_data}", extra=extra)
             raise ValidationError("API_FAIL")
     except requests.exceptions.RequestException as e:
@@ -103,8 +122,9 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
     Returns:
         List[Share]: 银行份额列表
     """
-    url = f"https://tradeapilvs{user.index}.1234567.com.cn/User/home/GetShareDetail"
-    if not user.index:
+    u = ensure_user_fresh(user)
+    url = f"https://tradeapilvs{u.index}.1234567.com.cn/User/home/GetShareDetail"
+    if not u.index:
         url = "https://tradeapilvs1.1234567.com.cn/User/home/GetShareDetail"
     
     headers = {
@@ -123,15 +143,15 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
 
     data = {
         "AppType": "ttjj",
-        "CToken": user.c_token,
-        "CustomerNo": user.customer_no,
+        "CToken": u.c_token,
+        "CustomerNo": u.customer_no,
         "IsBaseAsset": "false",
         "MobileKey": MOBILE_KEY,
-        "Passportid": user.passport_id,
+        "Passportid": u.passport_id,
         "PhoneType": "IOS15.6.0",
         "ServerVersion": "6.6.11",
-        "UToken": user.u_token,
-        "UserId": user.customer_no,
+        "UToken": u.u_token,
+        "UserId": u.customer_no,
         "Version": "6.6.11",
         "fundCode": fund_code,
         "subAccountNo": sub_account_no
@@ -168,9 +188,37 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
             logger.info(f"银行份额条数: {len(bank_shares)}", extra=extra)
             return bank_shares
         else:
-            # API返回了响应但没有份额数据，返回空列表而不是抛出异常
+            u2 = ensure_user_fresh(u, force_refresh=True)
+            data["CToken"] = u2.c_token
+            data["CustomerNo"] = u2.customer_no
+            data["Passportid"] = u2.passport_id
+            data["UToken"] = u2.u_token
+            data["UserId"] = u2.customer_no
+            url2 = f"https://tradeapilvs{u2.index}.1234567.com.cn/User/home/GetShareDetail"
+            if not u2.index:
+                url2 = "https://tradeapilvs1.1234567.com.cn/User/home/GetShareDetail"
+            response = requests.post(url2, headers=headers, data=data, verify=False)
+            response.raise_for_status()
+            response_data = response.json()
+            bank_shares = []
+            if response_data.get("Data") and response_data["Data"].get("Shares"):
+                shares_list = response_data["Data"]["Shares"]
+                for share_data in shares_list:
+                    bank_share = Share(
+                        bankName=share_data.get("BankName", ""),
+                        bankCode=share_data.get("BankCode", ""),
+                        showBankCode=share_data.get("ShowBankCode", ""),
+                        bankCardNo=share_data.get("BankCardNo", ""),
+                        shareId=share_data.get("ShareId", ""),
+                        bankAccountNo=share_data.get("BankAccountNo", ""),
+                        availableVol=float(share_data.get("AvailableShare", "0")),
+                        totalVol=float(share_data.get("TotalAvaVol", "0"))
+                    )
+                    bank_shares.append(bank_share)
+                logger.info(f"银行份额条数: {len(bank_shares)}", extra=extra)
+                return bank_shares
             logger.warning(f"获取银行份额信息返回空数据: {response_data}", extra=extra)
-            return []  # 返回空列表而不是抛出异常
+            return []
     except requests.exceptions.RequestException as e:
         logger.error(f"请求失败: {str(e)}", extra=extra)
         raise RetriableError(str(e))

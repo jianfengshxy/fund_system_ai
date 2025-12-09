@@ -22,6 +22,7 @@ from src.common.constant import DEFAULT_USER, MOBILE_KEY
 from src.API.交易管理.trade import get_trades_list
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.common.errors import RetriableError, ValidationError
+from src.API.登录接口.login import ensure_user_fresh
 
 def get_fund_asset_detail(user: User, sub_account_no: str,fund_code: str) -> Optional[AssetDetails]:
     """
@@ -35,7 +36,11 @@ def get_fund_asset_detail(user: User, sub_account_no: str,fund_code: str) -> Opt
     Returns:
         Optional[AssetDetails]: 如果找到对应基金的资产详情则返回，否则返回None
     """
-    asset_details_list = get_asset_list_of_sub(user, sub_account_no)
+    fresh_user = ensure_user_fresh(user, 600)
+    asset_details_list = get_asset_list_of_sub(fresh_user, sub_account_no)
+    if not asset_details_list:
+        fresh_user = ensure_user_fresh(user, 600, True)
+        asset_details_list = get_asset_list_of_sub(fresh_user, sub_account_no)
     
     # 查找匹配fund_code的资产详情
     for asset_detail in asset_details_list:
@@ -65,7 +70,11 @@ def get_sub_account_asset_by_name(user: User, sub_account_name: str) -> Optional
         return None
     
     # 获取资产列表并添加详细日志
-    asset_details_list = get_asset_list_of_sub(user, sub_account_no)
+    fresh_user = ensure_user_fresh(user, 600)
+    asset_details_list = get_asset_list_of_sub(fresh_user, sub_account_no)
+    if not asset_details_list:
+        fresh_user = ensure_user_fresh(user, 600, True)
+        asset_details_list = get_asset_list_of_sub(fresh_user, sub_account_no)
     
     if asset_details_list:
         logger.info(f"获取到组合 {sub_account_name} 的资产详情:", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "sub_account_name": sub_account_name, "action": "get_assets"})

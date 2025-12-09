@@ -11,10 +11,13 @@ sys.path.append(root_dir)
 sys.path.append(os.path.join(root_dir, 'src'))
 
 from src.common.constant import DEFAULT_USER
-from src.API.组合管理.SubAccountMrg import getSubAccountList
+from src.domain.user import ApiResponse
+from src.API.组合管理.SubAccountMrg import getSubAccountList, getSubAssetMultList
+from src.domain.sub_account.sub_account import SubAccount
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
 from src.API.基金信息.FundInfo import getFundInfo, updateFundEstimatedValue
 from src.domain.fund.fund_info import FundInfo
+from src.API.登录接口.login import ensure_user_fresh
 
 # 初始化 Flask 应用
 app = Flask(__name__, template_folder='templates')
@@ -29,7 +32,29 @@ def _get_sub_accounts_cached():
     v = _cache.get(k)
     if v and v[0] > time.time() - 30:
         return v[1]
-    resp = getSubAccountList(DEFAULT_USER)
+    u = ensure_user_fresh(DEFAULT_USER, 600)
+    resp = getSubAccountList(u)
+    try:
+        if (not getattr(resp, 'Success', False)) or (not getattr(resp, 'Data', None)):
+            u2 = ensure_user_fresh(u, 600, True)
+            resp = getSubAccountList(u2)
+        if (not getattr(resp, 'Success', False)) or (not getattr(resp, 'Data', None)):
+            fallback = getSubAssetMultList(u2)
+            if getattr(fallback, 'Success', False) and getattr(fallback, 'Data', None):
+                groups = getattr(fallback.Data, 'list_group', []) or []
+                lst = []
+                for g in groups:
+                    sa = SubAccount.from_basic_info(u2.customer_no, getattr(g, 'sub_account_no', ''), getattr(g, 'group_name', ''))
+                    try:
+                        sa.asset_value = float(getattr(g, 'total_amount_decimal', 0.0) or 0.0)
+                    except Exception:
+                        sa.asset_value = 0.0
+                    lst.append(sa)
+                resp = ApiResponse(True, 0, lst, None, None)
+            else:
+                resp = ApiResponse(True, 0, [], None, None)
+    except Exception:
+        resp = ApiResponse(True, 0, [], None, None)
     _cache[k] = (time.time(), resp)
     return resp
 
@@ -38,7 +63,8 @@ def _get_assets_cached(portfolio_name):
     v = _cache.get(k)
     if v and v[0] > time.time() - 30:
         return v[1]
-    lst = get_sub_account_asset_by_name(DEFAULT_USER, portfolio_name)
+    u = ensure_user_fresh(DEFAULT_USER, 600)
+    lst = get_sub_account_asset_by_name(u, portfolio_name)
     _cache[k] = (time.time(), lst)
     return lst
 
@@ -46,10 +72,15 @@ def _get_assets_cached(portfolio_name):
 def home():
     try:
         sub_accounts_response = _get_sub_accounts_cached()
-        if not sub_accounts_response.Success or not sub_accounts_response.Data:
-            return "获取组合列表失败", 500
+        portfolios = []
+        try:
+            data = getattr(sub_accounts_response, 'Data', None)
+            if isinstance(data, list):
+                portfolios = data
+        except Exception:
+            portfolios = []
 
-        all_portfolios = sorted(sub_accounts_response.Data, key=lambda x: x.asset_value, reverse=True)
+        all_portfolios = sorted(portfolios, key=lambda x: getattr(x, 'asset_value', 0.0) or 0.0, reverse=True)
         top_5_portfolios = all_portfolios[:10]
 
         # 2. 确定默认选择的组合
@@ -63,7 +94,7 @@ def home():
 
     except Exception as e:
         logging.error(f"处理主页请求时发生错误: {e}", exc_info=True)
-        return f"服务器内部错误: {e}", 500
+        return render_template('index.html', portfolios=[], selected_portfolio_name='')
 
 @app.route('/api/portfolio/<portfolio_name>', methods=['GET'])
 def get_portfolio_details(portfolio_name):

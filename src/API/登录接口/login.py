@@ -4,6 +4,8 @@ import logging
 from src.common.logger import get_logger
 import sys
 import os
+import time
+from typing import Dict, Tuple
 
 # 添加项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -251,4 +253,60 @@ def inference_passport_for_bind(user: User) -> User:
 
 
 
+_LOGIN_CACHE: Dict[str, User] = {}
 
+def _copy_tokens(dst: User, src: User) -> None:
+    dst.c_token = src.c_token
+    dst.u_token = src.u_token
+    dst.customer_no = src.customer_no or dst.customer_no
+    dst.index = src.index or dst.index
+    dst.passport_id = getattr(src, 'passport_id', getattr(src, 'passport_uid', '')) or getattr(dst, 'passport_id', '')
+    dst.passport_uid = getattr(src, 'passport_uid', '') or getattr(dst, 'passport_uid', '')
+    dst.passport_ctoken = getattr(src, 'passport_ctoken', '') or getattr(dst, 'passport_ctoken', '')
+    dst.passport_utoken = getattr(src, 'passport_utoken', '') or getattr(dst, 'passport_utoken', '')
+
+def cache_user(user: User) -> None:
+    account = getattr(user, 'account', '')
+    if account:
+        _LOGIN_CACHE[account] = user
+
+def get_cached_user(account: str) -> User:
+    return _LOGIN_CACHE.get(account)
+
+def ensure_user_fresh(user: User, max_age_sec: int = 600, force_refresh: bool = False) -> User:
+    account = getattr(user, 'account', '')
+    if not account:
+        return user
+    cached = get_cached_user(account)
+    if cached and not force_refresh:
+        _copy_tokens(user, cached)
+        return cached
+    try:
+        from src.service.用户管理.用户信息 import get_user_from_store_or_cache, refresh_user_tokens, get_user_all_info
+    except Exception:
+        get_user_from_store_or_cache = None
+        refresh_user_tokens = None
+        get_user_all_info = None
+    pwd = getattr(user, 'password', '')
+    if not force_refresh and get_user_from_store_or_cache:
+        u2 = get_user_from_store_or_cache(account, pwd)
+        if u2:
+            cache_user(u2)
+            _copy_tokens(user, u2)
+            return u2
+    u3 = None
+    if refresh_user_tokens:
+        try:
+            u3 = refresh_user_tokens(account, pwd)
+        except Exception:
+            u3 = None
+    if not u3 and get_user_all_info:
+        u3 = get_user_all_info(account, pwd)
+    if not u3:
+        u3 = login(account, pwd)
+        u3 = login_passport(u3) if u3 else None
+    if u3:
+        cache_user(u3)
+        _copy_tokens(user, u3)
+        return u3
+    return user

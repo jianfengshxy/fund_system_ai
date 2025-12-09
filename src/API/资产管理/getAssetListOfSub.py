@@ -19,27 +19,44 @@ from src.common.constant import SERVER_VERSION, PHONE_TYPE, MOBILE_KEY
 from src.domain.asset.asset_details import AssetDetails
 
 def get_asset_list_of_sub(user, sub_account_no):
-    url = f"https://tradeapilvs{user.index}.1234567.com.cn/User/Asset/GetFundAssetListOfSubV2"
+    base = f"https://tradeapilvs{user.index}.1234567.com.cn"
+    url_list = [
+        f"{base}/User/Asset/GetFundAssetListOfSubV2",
+        f"{base}/User/Asset/GetFundAssetListOfSub"
+    ]
     headers = {
-        "Connection": "keep-alive",
-        "Host": f"tradeapilvs{user.index}.1234567.com.cn",
         "Accept": "*/*",
-        "GTOKEN": "4474AFD3E15F441E937647556C01C174",
-        "clientInfo": "ttjj-iPhone12,3-iOS-iOS16.2",
-        "MP-VERSION": "3.20.0",
         "Accept-Encoding": "gzip, deflate, br",
-        "Accept-Language": "zh-Hans-CN;q=1",
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "EMProjJijin/6.6.2 (iPhone; iOS 16.2; Scale/3.00)",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json; charset=utf-8",
+        "Host": f"tradeapilvs{user.index}.1234567.com.cn",
         "Referer": "https://mpservice.com/33cb2e2622954432b6073633f27149ba/release/pages/SubAccountDetail",
-        "Content-Length": "787"
+        "User-Agent": "okhttp/3.12.13",
+        "clientInfo": "ttjj-ZTE 7534N-Android-11",
+        "gtoken": "ceaf-5ec1aeaf313a267434fbe314a1575707",
+        "mp_instance_id": "162",
+        "traceparent": "00-0000000046aa4cae000001968ae7a434-0000000000000000-01",
+        "tracestate": "pid=0xc3c6c4a,taskid=0x7f81dfc"
     }
-    data = {
+    data_json = {
+        "ServerVersion": SERVER_VERSION,
+        "PhoneType": PHONE_TYPE,
+        "MobileKey": MOBILE_KEY,
+        "Version": SERVER_VERSION,
+        "UserId": user.customer_no,
+        "UToken": user.u_token,
+        "AppType": "ttjj",
+        "CustomerNo": user.customer_no,
+        "CToken": user.c_token,
+        "SubAccountNo": sub_account_no,
+        "Passportid": getattr(user, "passport_id", "")
+    }
+    data_form = {
         "BankCardNo": "",
         "CustomerNo": user.customer_no,
         "MobileKey": MOBILE_KEY,
-        "Passportid": user.passport_uid,
-        "PhoneType": "IOS16.2.0",
+        "Passportid": getattr(user, "passport_id", ""),
+        "PhoneType": PHONE_TYPE,
         "SubAccountNo": sub_account_no,
         "UnifiedType": "",
         "appType": "ttjj",
@@ -55,12 +72,28 @@ def get_asset_list_of_sub(user, sub_account_no):
     }
     logger = get_logger("AssetAPI")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_asset_list", "sub_account_no": sub_account_no}
-    try:
-        response = requests.post(url, headers=headers, data=data, verify=False)
-        response.raise_for_status()
-        response_data = response.json()
-    except requests.exceptions.RequestException as e:
-        logger.error(f"资产列表请求失败: {str(e)}", extra=extra)
+    response_data = None
+    for url in url_list:
+        try:
+            r = requests.post(url, json=data_json, headers=headers, verify=False, timeout=10)
+            r.raise_for_status()
+            rd = r.json()
+            if rd.get("Data", {}).get("AssetDetails"):
+                response_data = rd
+                break
+        except Exception:
+            pass
+        try:
+            r = requests.post(url, data=data_form, headers={**headers, "Content-Type": "application/x-www-form-urlencoded"}, verify=False, timeout=10)
+            r.raise_for_status()
+            rd = r.json()
+            if rd.get("Data", {}).get("AssetDetails"):
+                response_data = rd
+                break
+        except Exception:
+            pass
+    if response_data is None:
+        logger.info("资产明细条数: 0", extra=extra)
         return []
     asset_details_list = []
     for asset in response_data.get("Data", {}).get("AssetDetails", []):
@@ -108,6 +141,4 @@ def get_asset_list_of_sub(user, sub_account_no):
     logger.info(f"资产明细条数: {len(asset_details_list)}", extra=extra)
     return asset_details_list
    
-
-
 

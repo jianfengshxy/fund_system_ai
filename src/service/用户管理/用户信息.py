@@ -12,7 +12,7 @@ from src.service.用户管理.user_token_store import UserTokenStore
 _cache_lock = threading.Lock()
 _user_cache = {}
 _CACHE_TTL_SEC = 1800
-_FILE_CACHE_TTL_SEC = 86400
+_FILE_CACHE_TTL_SEC = 8640000000
 _FILE_CACHE_PATH = Path(__file__).resolve().parent / 'user_cache.json'
 logger = get_logger(__name__)
 
@@ -73,9 +73,6 @@ def _load_file_cache(account: str, password: str):
             return None
         raw = json.loads(_FILE_CACHE_PATH.read_text())
         if raw.get('account') != account or raw.get('password') != password:
-            return None
-        ts = raw.get('ts', 0)
-        if time.time() - ts > _FILE_CACHE_TTL_SEC:
             return None
         from src.domain.user.User import User
         user = User.from_dict(raw)

@@ -94,7 +94,7 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
                 continue
 
             try:
-                times = float(plan_assets) // float(fund_amount)
+                times = round(float(plan_assets) / float(fund_amount), 2)
             except Exception:
                 logger.info(f"基金 {fund_name}{fund_code} 的 amount 解析失败，跳过")
                 continue
@@ -111,6 +111,9 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
 
             if shares == []:
                 logger.info("份额为空，跳过该计划")
+                continue
+            if times < 0.98 and times > 0.0:
+                logger.info(f"组合{sub_account_no}，基金{fund_name}({fund_code})资产{plan_assets:.2f}，当前资产倍数{times},满足限购保护，停止止盈。")
                 continue
             if estimated_profit_rate < 1.0:
                 logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}的收益率{estimated_profit_rate}小于1.0.")

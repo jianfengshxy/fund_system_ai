@@ -146,7 +146,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                   
     logger.info(f"当前计划:{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}的周期类型{period_type},period_type:{period_value},当前月的值:{day_of_month},当前资产:{plan_assets},计划类型:{plan_type}")
     # 5日均线守卫：对所有可回撤的买入/定投交易生效
-    bypass_ma5 = (period_type != 3) and (0 < times <= 1)
+    bypass_ma5 = (period_type != 3) and (times <= 1)
     gate_ok = True if bypass_ma5 else bool(nav5_gate(fund_info, fund_name, fund_code, logger))
     if not gate_ok:
         logger.info(f"5日均线守卫未通过（估算净值≤5日均值）：撤回当天所有可回撤交易。资产={plan_assets} 定投金额={fund_amount}")
@@ -160,10 +160,13 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         return True
     else:
         if bypass_ma5:
-            logger.info(f"触发口子：非月定投且 0<资产/定投金额≤1（{times}），跳过5日均线判断，并直接结束本次处理。")
+            logger.info(f"触发口子：非月定投且 资产/定投金额≤1（{times}），跳过5日均线判断，并直接结束本次处理。")
             return True  # 口子开启时直接通过并早停
         else:
             logger.info(f"5日均线守卫通过（估算净值>5日均值）：继续执行后续判断。")
+            if period_type == 3 and times <= 1:
+                logger.info(f"月定投首次且通过5日均线：直接结束本次处理。资产={plan_assets} 定投金额={fund_amount}")
+                return True
 
     #判断是否是周定投延期交易
     if period_type == 1 and  period_value != day_of_week_number + 1:
@@ -210,8 +213,10 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         f"当前收益率:{current_profit_rate},估值增长率:{estimated_change},预估收益率:{estimated_profit_rate}."
     )
     
-    # 首次定投或资产占比较低（资产倍数<0.98）例外
+    # 首次定投例外：优先以计划执行次数判断，其次以资产倍数兜底
     is_first_investment = (times == 1.0)
+    if is_first_investment:
+        return True
 
     if not is_first_investment and estimated_profit_rate > -1.0 :
         logger.info(f"预估收益率检查 - {customer_name}的组合{sub_account_name}{fund_name}的预估收益率{estimated_profit_rate} > -1.0,执行回撤")

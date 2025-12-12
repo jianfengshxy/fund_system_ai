@@ -241,22 +241,23 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
     获取指定基金定投计划列表
     返回: FundPlan对象列表
     """
-    url = f'https://ibgapi{user.index}.1234567.com.cn/asset/getFundPlanListV2'
+    u = ensure_user_fresh(user)
+    url = f'https://ibgapi{u.index}.1234567.com.cn/asset/getFundPlanListV2'
     params = [
         ('ServerVersion', SERVER_VERSION),
         ('pageSize', PAGE_SIZE),
-        ('passportctoken', user.passport_ctoken),
+        ('passportctoken', u.passport_ctoken),
         ('type', PLAN_TYPE),
-        ('passportutoken', user.passport_utoken),
+        ('passportutoken', u.passport_utoken),
         ('subAccountNo', ''),
         ('PhoneType', PHONE_TYPE),
         ('MobileKey', MOBILE_KEY),
         ('fundCode', fund_code),
         ('pageIndex', PAGE_INDEX),
-        ('UserId', user.customer_no),
-        ('UToken', user.u_token),
-        ('CToken', user.c_token),
-        ('passportid', user.passport_id),
+        ('UserId', u.customer_no),
+        ('UToken', u.u_token),
+        ('CToken', u.c_token),
+        ('passportid', u.passport_id),
     ]
     query_string = urllib.parse.urlencode(params)
     full_url = f"{url}?{query_string}"
@@ -264,7 +265,7 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
         'Accept': '*/*',
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive',
-        'Host': f'ibgapi{user.index}.1234567.com.cn',
+        'Host': f'ibgapi{u.index}.1234567.com.cn',
         'If-Modified-Since': 'Sat, 26 Apr 2025 08:55:51 GMT',
         'Referer': f'https://mpservice.com/fund46516ffab83642/release/pages/home/index?fundCode={fund_code}&subAccountNo=&reference=holdDetail',
         'User-Agent': 'okhttp/3.12.13',
@@ -281,12 +282,41 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
         response = requests.get(full_url, headers=headers, verify=False)
         response.raise_for_status()
         json_data = response.json()
-        # logger.info(f"响应数据: {json_data}")
         
         # 检查API调用是否成功
         if not json_data.get('Success', False):
-            logger.error(f"API调用失败: {json_data.get('FirstError', 'Unknown error')}", extra=extra)
-            raise ValidationError(json_data.get('FirstError') or 'API_FAIL')
+            # 尝试刷新Token重试
+            logger.warning(f"API调用失败: {json_data.get('FirstError', 'Unknown error')}，尝试刷新Token重试", extra=extra)
+            u2 = ensure_user_fresh(u, force_refresh=True)
+            url2 = f'https://ibgapi{u2.index}.1234567.com.cn/asset/getFundPlanListV2'
+            params2 = [
+                ('ServerVersion', SERVER_VERSION),
+                ('pageSize', PAGE_SIZE),
+                ('passportctoken', u2.passport_ctoken),
+                ('type', PLAN_TYPE),
+                ('passportutoken', u2.passport_utoken),
+                ('subAccountNo', ''),
+                ('PhoneType', PHONE_TYPE),
+                ('MobileKey', MOBILE_KEY),
+                ('fundCode', fund_code),
+                ('pageIndex', PAGE_INDEX),
+                ('UserId', u2.customer_no),
+                ('UToken', u2.u_token),
+                ('CToken', u2.c_token),
+                ('passportid', u2.passport_id),
+            ]
+            query_string2 = urllib.parse.urlencode(params2)
+            full_url2 = f"{url2}?{query_string2}"
+            headers2 = dict(headers)
+            headers2['Host'] = f'ibgapi{u2.index}.1234567.com.cn'
+            
+            response2 = requests.get(full_url2, headers=headers2, verify=False)
+            response2.raise_for_status()
+            json_data = response2.json()
+            
+            if not json_data.get('Success', False):
+                logger.error(f"API重试失败: {json_data.get('FirstError', 'Unknown error')}", extra=extra)
+                raise ValidationError(json_data.get('FirstError') or 'API_FAIL')
             
         data = json_data.get('Data')
         if data is None:

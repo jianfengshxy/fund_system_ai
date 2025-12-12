@@ -210,7 +210,10 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         f"当前收益率:{current_profit_rate},估值增长率:{estimated_change},预估收益率:{estimated_profit_rate}."
     )
     
-    if estimated_profit_rate > -1.0 :
+    # 首次定投或资产占比较低（资产倍数<0.98）例外
+    is_first_investment = (times == 1.0)
+
+    if not is_first_investment and estimated_profit_rate > -1.0 :
         logger.info(f"预估收益率检查 - {customer_name}的组合{sub_account_name}{fund_name}的预估收益率{estimated_profit_rate} > -1.0,执行回撤")
         #回撤所有交易
         for i, trade in enumerate(trades):

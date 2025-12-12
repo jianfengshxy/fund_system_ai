@@ -38,7 +38,7 @@ def _get_sub_accounts_cached():
         if (not getattr(resp, 'Success', False)) or (not getattr(resp, 'Data', None)):
             u2 = ensure_user_fresh(u, 600, True)
             resp = getSubAccountList(u2)
-        if (not getattr(resp, 'Success', False)) or (not getattr(resp, 'Data', None)):
+        if (not getattr(resp, 'Success', False))     or (not getattr(resp, 'Data', None)):
             fallback = getSubAssetMultList(u2)
             if getattr(fallback, 'Success', False) and getattr(fallback, 'Data', None):
                 groups = getattr(fallback.Data, 'list_group', []) or []

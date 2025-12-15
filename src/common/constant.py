@@ -1,5 +1,6 @@
 import sys
 import os
+import json
 import numpy as np  # 新增：导入 numpy 模块
 
 # 如果需要定义一个类似 Null 的常量，可以使用 None 或自定义常量
@@ -21,15 +22,15 @@ from src.domain.trade.share import Share
 SERVER_VERSION = '6.7.1'
 PAGE_SIZE = '100'
 DEVICE_ID = '15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me'
-PASSPORT_CTOKEN = 'CR0PL-qa8w6SmCGBL4KzSXeTioFwoR7HN_JmcR_yMVCGSVFCGYTR4KBYc8gQI5rUPIp-fs6Hg5yN6jIPAYli_sE4Fnm-S2TN298wRuSBAxzWaDoRd82XYXt7FuPkh57WzKu7ejHQrhMXwp-uR5zuPnQi2L1joI7KuE0jnW4Yl2E'
+PASSPORT_CTOKEN = 'bOo9gglQX18xtG64BnG-Igsf5a-CuXf-juiDpldasTjEvqc-rZ8XOZm3FlaMbRuqO15TcdPkAxLJfDnTyZ4XK9VQ9doVEZoAF9OButgIz7II23dqvTnqFuISH0fFLN5UCMLfYM_ULPkUbgxD_WebQkAheKXB-QXBNGDiRu07R3k'
 PLAN_TYPE = '1'
-PASSPORT_UTOKEN = 'QjaJ8B6U43EzrU9QuBKxUcLl7plJD3DQnGBVESjw_tEyqhKYNefuSoxE23M_B7Jf3J0QXt9K8L11-c8kM0US8Dh8-cOaAbUY9-Grz_lOD6YHTQVF-VrpwJ3rltTFJyrpYlAiTIjmOCCKRTAZHnZpLu0sRlqnHr8eQboojFxiYI6iO6kzsJMrP02LvOzw4P_nGXUk8trx06j9Y2RFXx950V04nn1NMRjyTSRUNbPKmwTYeaI1PGmptAYRY16wQzraxG8vMqmV8HoG5zVi9ovBuh0H3rBpfAMvAPsQpNSkMYs83gdJjuXZi4pY133FWRGdIG-1Hula3rHsjdvZm56ZkLT4UjljRP3aoFZ7N_zbM-g'
+PASSPORT_UTOKEN = 'FobyicMgeV7VCVxp1r4B0kdVrm-y1EoJHx3-rXf1wfucAyPQk1w0-rDbUqn__OZ2Cw0i-oibZcOsklmsZ0ykpcrQ9glRksKpkatxjr4auUshSgF2LZHJuNXAphgoTjZYF6SSB71DAHZNkctNflwKrKjXU9Y9qYQ-SRl_IwkhgbknrmgaEcBrdf5JVF5Nt1O5a_ggVkk5asgXHFyXBmRWeagei7AUcAunGuh6nx6dK2bqdXsSgDFTKK_QcBKar5X9aGvLi3RG93dq3i-riQpjPaCWs0NU5nvZQuq0eeZJWfJNHjLmhbPbHZsMAHOOlF3thyskEBEZaLQ'
 PHONE_TYPE = 'Android'
 MOBILE_KEY = '15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me'
 PAGE_INDEX = '1'
 USER_ID = 'cd0b7906b53b43ffa508a99744b4055b'
-U_TOKEN = 'CTZAr6Vx9U6SCvZEIZ5zmTvaG8t53DNGjfLyDr-paGMyqI-sh4QTKVawSW82SgLIU1eNn25zIksAj3J82S29TNDksOhD93p2HYuiCWB4IL_9H2J4kelucqM__eoWiXjeCCvzTvVdQGjG6c4UCVseea4jLsXm2ANQf30bIdlb1P8.5'
-C_TOKEN = 'xR1h5WuKZqVp9l_uzA4vmt1TbZvcuH97mfnMo8i25njxNggTR1F5Vy0FcmNOr7lcAhJSPqY1erg_deGhXFZ55j_xbVJbd19AHy1jCksXg7PjZtPuCTAF9keQTT-5TbG4qhOM6YtifyX15WE7Dn-F40DXYm8s_vSUBewq1S4OlzwT4k3mTLaIC4fUIttpmCxjUWgWeHBzBKLOkrYF1bvmidcxfd9G6pCYskXwInJcWiUqGVfJjWkRd1FXly1YR8og.5'
+U_TOKEN = 'SI789hHl4gsEAbvrI_oZ3m5qNM7jK-aHpDOWmo2xPjHuJDhmTK-wWecGNvbWp070Duh7rbDcQVxwM0YEAVxNa4WoES6DftPZ0SGCpmjsuIqC6LrZuZ1kKutk-swjGs3IRpjx5IEsUAm_D-YBC3XeuoKFMZyMiTfjixU96Jqu4u0.5'
+C_TOKEN = 'xR1h5WuKZqVp9l_uzA4vmt1TbZvcuH97mfnMo8i25njxNggTR1F5Vy0FcmNOr7lcAhJSPqY1erg_deGhXFZ55j_xbVJbd19AHy1jCksXg7PjZtPuCTAF9keQTT-5TbG4qhOM6YtifyX15WE7Dn-F422CVLUdR766-RhPXoTP6laFP47mceaJCMyZyE5LawuJRkYfpEHnskeC76TmpF4ilFivNCnjiu3cnDWZsAr3k2WeAB3Cq2Su6HU3Ee5T00Np.5'
 PASSPORT_ID = '8461315737102942'
 NAME = '施小雨'
 PLAN_ID = '2e82e7fa28d34c99a3b3abb072b880bc'
@@ -264,20 +265,39 @@ DEFAULT_FUND_PLAN_DETAIL = FundPlanDetail(
     shares=DEFAULT_SHARES
 )
 
-user_data = {
-    'account': '13918199137',
-    'password': 'sWX15706',
-    'paypassword': 'sWX15706',
-    'c_token': C_TOKEN,
-    'u_token': U_TOKEN,
-    'customer_no': USER_ID,
-    'customer_name': NAME,
-    'index': '5',
-    'passport_id': PASSPORT_ID,
-    'passport_uid': PASSPORT_ID,
-    'passport_ctoken': PASSPORT_CTOKEN,
-    'passport_utoken': PASSPORT_UTOKEN,
-}
+_user_cache_path = os.path.join(root_dir, 'src', 'service', '用户管理', 'user_cache.json')
+try:
+    with open(_user_cache_path, 'r', encoding='utf-8') as f:
+        _cache = json.load(f)
+    user_data = {
+        'account': _cache.get('account'),
+        'password': _cache.get('password'),
+        'paypassword': _cache.get('password'),
+        'c_token': _cache.get('c_token'),
+        'u_token': _cache.get('u_token'),
+        'customer_no': _cache.get('customer_no'),
+        'customer_name': _cache.get('customer_name'),
+        'index': str(_cache.get('index')) if _cache.get('index') is not None else '5',
+        'passport_id': _cache.get('passport_id'),
+        'passport_uid': _cache.get('passport_uid') or _cache.get('passport_id'),
+        'passport_ctoken': _cache.get('passport_ctoken'),
+        'passport_utoken': _cache.get('passport_utoken'),
+    }
+except Exception:
+    user_data = {
+        'account': '13918199137',
+        'password': 'sWX15706',
+        'paypassword': 'sWX15706',
+        'c_token': C_TOKEN,
+        'u_token': U_TOKEN,
+        'customer_no': USER_ID,
+        'customer_name': NAME,
+        'index': '5',
+        'passport_id': PASSPORT_ID,
+        'passport_uid': PASSPORT_ID,
+        'passport_ctoken': PASSPORT_CTOKEN,
+        'passport_utoken': PASSPORT_UTOKEN,
+    }
 
 # 创建默认用户对象并设置默认活期宝银行卡
 DEFAULT_USER = User.from_dict(user_data)

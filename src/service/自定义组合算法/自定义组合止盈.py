@@ -24,6 +24,7 @@ from src.service.资产管理.get_fund_asset_detail import (
 )
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
+from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
 from src.service.定投管理.定投查询.定投查询 import get_all_fund_plan_details
 from src.common.constant import DEFAULT_USER
 
@@ -47,24 +48,12 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
         logger.error(f"未找到组合 {sub_account_name} 的账号")
         return False
 
-    # 校验 payload 的基金列表
-    if not fund_list or not isinstance(fund_list, list):
-        logger.info(f"未提供 fund_list 或格式不正确，跳过自定义组合止盈")
-        return False
-
     success_count = 0
 
-    # 逐基金执行与业务层一致的止盈逻辑
-    for fund_item in fund_list:
+    assets = get_asset_list_of_sub(user, sub_account_no)
+    for asset in assets:
         try:
-            fund_code = (fund_item or {}).get('fund_code')
-            fund_amount = (fund_item or {}).get('amount')
-            if not fund_code:
-                logger.info("fund_code 缺失，跳过该条目")
-                continue
-            if not fund_amount or float(fund_amount) <= 0:
-                logger.info(f"基金 {fund_code} 的 amount 缺失或无效，跳过该基金")
-                continue
+            fund_code = asset.fund_code
 
             fund_info = get_all_fund_info(user, fund_code)
             fund_name = fund_info.fund_name
@@ -94,9 +83,10 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
                 continue
 
             try:
+                fund_amount = plan_assets if plan_assets and float(plan_assets) > 0 else 1.0
                 times = round(float(plan_assets) / float(fund_amount), 2)
             except Exception:
-                logger.info(f"基金 {fund_name}{fund_code} 的 amount 解析失败，跳过")
+                logger.info(f"基金 {fund_name}{fund_code} 的资产解析失败，跳过")
                 continue
             volatility = fund_info.volatility 
 

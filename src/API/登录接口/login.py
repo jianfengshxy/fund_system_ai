@@ -147,7 +147,7 @@ def login_passport(user: User) -> User:
         logger.info(f"Passport登录响应数据: {json_data}", extra=extra)
         
         if not json_data.get('Success', False):
-            logger.error("Passport登录失败，接口返回Success=False", extra=extra)
+            logger.warning("Passport登录失败，接口返回Success=False", extra=extra)
             return None
             
         data = json_data.get('Data')
@@ -304,7 +304,8 @@ def ensure_user_fresh(user: User, max_age_sec: int = 600, force_refresh: bool = 
         u3 = get_user_all_info(account, pwd)
     if not u3:
         u3 = login(account, pwd)
-        u3 = login_passport(u3) if u3 else None
+        if u3:
+            u3 = inference_passport_for_bind(u3) or login_passport(u3)
     if u3:
         cache_user(u3)
         _copy_tokens(user, u3)

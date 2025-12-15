@@ -150,7 +150,7 @@ def refresh_user_tokens(account: str, password: str):
     user = _get_cached_user(account, password)
     if not user:
         return get_user_all_info(account, password)
-    u1 = login_passport(user)
+    u1 = inference_passport_for_bind(user) or login_passport(user)
     if not u1:
         invalidate_user_cache(account, password)
         return get_user_all_info(account, password)

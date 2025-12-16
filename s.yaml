@@ -394,7 +394,7 @@ resources:
       region: ${vars.common.props.region}
       timeout: ${vars.common.props.timeout}
       environmentVariables: 
-        JIANLONG_PROFIT_THRESHOLD: "15.0"
+        JIANLONG_PROFIT_THRESHOLD: "10.0"
         PYTHONPATH: /code
         TZ: Asia/Shanghai
       triggers:

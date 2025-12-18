@@ -1,15 +1,13 @@
-from pickle import BUILD
 import sys
 import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+
 import logging
 from src.common.logger import get_logger
 import urllib.parse
 import urllib3
 import warnings
 import hashlib
-
-# 添加项目根目录到路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 # 禁用SSL证书验证警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -411,7 +409,7 @@ def getSubAccountList(user) -> ApiResponse[List[SubAccount]]:
         'tracestate': 'pid=0x71d3ee2,taskid=0x9e51735'
     }
     
-    data = {
+    request_payload = {
         'product': 'EFund',
         'ServerVersion': SERVER_VERSION,
         'SubType': -1,
@@ -431,27 +429,52 @@ def getSubAccountList(user) -> ApiResponse[List[SubAccount]]:
     logger = get_logger("SubAccountMrg")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "sub_account_list"}
     try:
-        response = requests.post(url, json=data, headers=headers, verify=False)
+        response = requests.post(url, json=request_payload, headers=headers, verify=False)
         response.raise_for_status()
         json_data = response.json()
         # logger.info(f"响应数据: {json_data}")
         try:
             data = json_data.get('Data')
             if data is None:
-                if not json_data.get('Success', False):
-                    u2 = ensure_user_fresh(u, force_refresh=True)
-                    url2 = f'https://tradeapilvs{u2.index}.1234567.com.cn/User/SubA/SubAList'
-                    data2 = dict(data)
-                    data2['UserId'] = u2.customer_no
-                    data2['UToken'] = u2.u_token
-                    data2['CustomerNo'] = u2.customer_no
-                    data2['CToken'] = u2.c_token
-                    data2['uid'] = u2.customer_no
-                    r2 = requests.post(url2, json=data2, headers=headers, verify=False)
-                    r2.raise_for_status()
-                    jd2 = r2.json()
-                    if jd2.get('Success', False) and jd2.get('Data'):
-                        json_data = jd2
+                # 检查是否为正常空数据（ErrorCode=0 或 Success=True）
+                error_code = json_data.get('ErrorCode')
+                is_success = json_data.get('Success', False)
+                if is_success or error_code == 0 or str(error_code) == "0":
+                    logger.info(f"获取子账户列表为空 (ErrorCode=0)", extra=extra)
+                    return ApiResponse(
+                        Success=True,
+                        ErrorCode=0,
+                        Data=[],
+                        FirstError=json_data.get('FirstError'),
+                        DebugError=json_data.get('DebugError')
+                    )
+
+                if not is_success:
+                    err = str(json_data.get('FirstError', '') or '')
+                    need_refresh = any(k in err for k in ['Token', 'token', '凭证', 'passport', '未登录', '请登录', 'UToken', 'CToken', 'passportid', '权限'])
+                    if need_refresh:
+                        u2 = ensure_user_fresh(u, force_refresh=True)
+                        url2 = f'https://tradeapilvs{u2.index}.1234567.com.cn/User/SubA/SubAList'
+                        data2 = dict(request_payload)
+                        data2['UserId'] = u2.customer_no
+                        data2['UToken'] = u2.u_token
+                        data2['CustomerNo'] = u2.customer_no
+                        data2['CToken'] = u2.c_token
+                        data2['uid'] = u2.customer_no
+                        r2 = requests.post(url2, json=data2, headers=headers, verify=False)
+                        r2.raise_for_status()
+                        jd2 = r2.json()
+                        if jd2.get('Success', False) and jd2.get('Data'):
+                            json_data = jd2
+                            data = json_data.get('Data') # Update data reference after retry success
+                        else:
+                            return ApiResponse(
+                                Success=json_data.get('Success', False),
+                                ErrorCode=json_data.get('ErrorCode'),
+                                Data=None,
+                                FirstError=json_data.get('FirstError'),
+                                DebugError=json_data.get('DebugError')
+                            )
                     else:
                         return ApiResponse(
                             Success=json_data.get('Success', False),
@@ -460,7 +483,10 @@ def getSubAccountList(user) -> ApiResponse[List[SubAccount]]:
                             FirstError=json_data.get('FirstError'),
                             DebugError=json_data.get('DebugError')
                         )
-                raise Exception('解析响应数据失败: Data字段为空')
+                
+                # If data is None but logic falls through (should not happen if Success=True handled above)
+                if data is None:
+                     raise Exception('解析响应数据失败: Data字段为空')
 
             sub_accounts = []
             for account in data.get('SubAccounts', []):

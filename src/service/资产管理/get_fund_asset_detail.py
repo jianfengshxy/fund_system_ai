@@ -37,10 +37,11 @@ def get_fund_asset_detail(user: User, sub_account_no: str,fund_code: str) -> Opt
         Optional[AssetDetails]: 如果找到对应基金的资产详情则返回，否则返回None
     """
     fresh_user = ensure_user_fresh(user, 600)
-    asset_details_list = get_asset_list_of_sub(fresh_user, sub_account_no)
+    asset_details_list, meta = get_asset_list_of_sub(fresh_user, sub_account_no, with_meta=True)
     if not asset_details_list:
-        fresh_user = ensure_user_fresh(user, 600, True)
-        asset_details_list = get_asset_list_of_sub(fresh_user, sub_account_no)
+        if meta.get("token_error"):
+            fresh_user = ensure_user_fresh(user, 600, True)
+            asset_details_list, meta = get_asset_list_of_sub(fresh_user, sub_account_no, with_meta=True)
     
     # 查找匹配fund_code的资产详情
     for asset_detail in asset_details_list:
@@ -71,10 +72,11 @@ def get_sub_account_asset_by_name(user: User, sub_account_name: str) -> Optional
     
     # 获取资产列表并添加详细日志
     fresh_user = ensure_user_fresh(user, 600)
-    asset_details_list = get_asset_list_of_sub(fresh_user, sub_account_no)
+    asset_details_list, meta = get_asset_list_of_sub(fresh_user, sub_account_no, with_meta=True)
     if not asset_details_list:
-        fresh_user = ensure_user_fresh(user, 600, True)
-        asset_details_list = get_asset_list_of_sub(fresh_user, sub_account_no)
+        if meta.get("token_error"):
+            fresh_user = ensure_user_fresh(user, 600, True)
+            asset_details_list, meta = get_asset_list_of_sub(fresh_user, sub_account_no, with_meta=True)
     
     if asset_details_list:
         logger.info(f"获取到组合 {sub_account_name} 的资产详情:", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "sub_account_name": sub_account_name, "action": "get_assets"})

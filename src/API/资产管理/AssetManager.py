@@ -1,10 +1,11 @@
 import sys
 import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) ))
+
 import logging
 from src.common.logger import get_logger
 from src.common.errors import RetriableError, ValidationError
 import urllib.parse
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) ))
 
 import requests
 from typing import Optional
@@ -22,7 +23,7 @@ def GetMyAssetMainPartAsync(user) -> ApiResponse:
     """
     u = ensure_user_fresh(user)
     url = f'https://tradeapilvs{u.index}.1234567.com.cn/User/Asset/GetMyAssetMainPartAsync'
-    data = {
+    request_payload = {
         'ServerVersion': SERVER_VERSION,
         'PhoneType': PHONE_TYPE,
         'MobileKey': MOBILE_KEY,
@@ -51,32 +52,48 @@ def GetMyAssetMainPartAsync(user) -> ApiResponse:
     logger = get_logger("AssetManager")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "GetMyAssetMainPartAsync"}
     try:
-        response = requests.post(url, json=data, headers=headers, verify=False)
+        response = requests.post(url, json=request_payload, headers=headers, verify=False)
         response.raise_for_status()
         json_data = response.json()
         try:
             data = json_data.get('Data')
             if data is None:
-                if not json_data.get('Success', False):
-                    u2 = ensure_user_fresh(u, force_refresh=True)
-                    url2 = f'https://tradeapilvs{u2.index}.1234567.com.cn/User/Asset/GetMyAssetMainPartAsync'
-                    data2 = dict(data)
-                    data2['UserId'] = u2.customer_no
-                    data2['UToken'] = u2.u_token
-                    data2['CustomerNo'] = u2.customer_no
-                    data2['CToken'] = u2.c_token
-                    r2 = requests.post(url2, json=data2, headers=headers, verify=False)
-                    r2.raise_for_status()
-                    jd2 = r2.json()
-                    if jd2.get('Data') is not None or jd2.get('Success', False):
-                        d2 = jd2.get('Data')
-                        return ApiResponse(
-                            Success=jd2.get('Success', False),
-                            ErrorCode=jd2.get('ErrorCode'),
-                            Data=d2,
-                            FirstError=jd2.get('FirstError'),
-                            DebugError=jd2.get('DebugError')
-                        )
+                # 检查是否为正常空数据（ErrorCode=0 或 Success=True）
+                error_code = json_data.get('ErrorCode')
+                is_success = json_data.get('Success', False)
+                if is_success or error_code == 0 or str(error_code) == "0":
+                    logger.info(f"获取资产信息为空 (ErrorCode=0)", extra=extra)
+                    return ApiResponse(
+                        Success=True,
+                        ErrorCode=0,
+                        Data=None,
+                        FirstError=json_data.get('FirstError'),
+                        DebugError=json_data.get('DebugError')
+                    )
+
+                if not is_success:
+                    err = str(json_data.get('FirstError', '') or '')
+                    need_refresh = any(k in err for k in ['Token', 'token', '凭证', 'passport', '未登录', '请登录', 'UToken', 'CToken', 'passportid', '权限'])
+                    if need_refresh:
+                        u2 = ensure_user_fresh(u, force_refresh=True)
+                        url2 = f'https://tradeapilvs{u2.index}.1234567.com.cn/User/Asset/GetMyAssetMainPartAsync'
+                        data2 = dict(request_payload)
+                        data2['UserId'] = u2.customer_no
+                        data2['UToken'] = u2.u_token
+                        data2['CustomerNo'] = u2.customer_no
+                        data2['CToken'] = u2.c_token
+                        r2 = requests.post(url2, json=data2, headers=headers, verify=False)
+                        r2.raise_for_status()
+                        jd2 = r2.json()
+                        if jd2.get('Data') is not None or jd2.get('Success', False):
+                            d2 = jd2.get('Data')
+                            return ApiResponse(
+                                Success=jd2.get('Success', False),
+                                ErrorCode=jd2.get('ErrorCode'),
+                                Data=d2,
+                                FirstError=jd2.get('FirstError'),
+                                DebugError=jd2.get('DebugError')
+                            )
                     return ApiResponse(
                         Success=json_data.get('Success', False),
                         ErrorCode=json_data.get('ErrorCode'),

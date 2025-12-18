@@ -284,42 +284,61 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
         json_data = response.json()
         
         # 检查API调用是否成功
+        # 如果 Success=False 但 ErrorCode=0，视为正常空数据，不报错也不刷新 Token
         if not json_data.get('Success', False):
-            # 尝试刷新Token重试
-            logger.warning(f"API调用失败: {json_data.get('FirstError', 'Unknown error')}，尝试刷新Token重试", extra=extra)
-            u2 = ensure_user_fresh(u, force_refresh=True)
-            url2 = f'https://ibgapi{u2.index}.1234567.com.cn/asset/getFundPlanListV2'
-            params2 = [
-                ('ServerVersion', SERVER_VERSION),
-                ('pageSize', PAGE_SIZE),
-                ('passportctoken', u2.passport_ctoken),
-                ('type', PLAN_TYPE),
-                ('passportutoken', u2.passport_utoken),
-                ('subAccountNo', ''),
-                ('PhoneType', PHONE_TYPE),
-                ('MobileKey', MOBILE_KEY),
-                ('fundCode', fund_code),
-                ('pageIndex', PAGE_INDEX),
-                ('UserId', u2.customer_no),
-                ('UToken', u2.u_token),
-                ('CToken', u2.c_token),
-                ('passportid', u2.passport_id),
-            ]
-            query_string2 = urllib.parse.urlencode(params2)
-            full_url2 = f"{url2}?{query_string2}"
-            headers2 = dict(headers)
-            headers2['Host'] = f'ibgapi{u2.index}.1234567.com.cn'
-            
-            response2 = requests.get(full_url2, headers=headers2, verify=False)
-            response2.raise_for_status()
-            json_data = response2.json()
-            
-            if not json_data.get('Success', False):
-                logger.error(f"API重试失败: {json_data.get('FirstError', 'Unknown error')}", extra=extra)
-                raise ValidationError(json_data.get('FirstError') or 'API_FAIL')
+            error_code = json_data.get('ErrorCode')
+            if error_code == 0 or str(error_code) == '0':
+                logger.info('获取定投计划返回 Success=False 但 ErrorCode=0，视为正常空数据', extra=extra)
+                # 能够继续向下执行，依靠 Data check 处理
+            else:
+                err = str(json_data.get('FirstError', '') or '')
+                need_refresh = any(k in err for k in ['Token', 'token', '凭证', 'passport', '未登录', '请登录', 'UToken', 'CToken', 'passportid', '权限'])
+                if need_refresh:
+                    logger.warning(f"API调用失败: {err}，尝试刷新Token重试", extra=extra)
+                    u2 = ensure_user_fresh(u, force_refresh=True)
+                    url2 = f'https://ibgapi{u2.index}.1234567.com.cn/asset/getFundPlanListV2'
+                    params2 = [
+                        ('ServerVersion', SERVER_VERSION),
+                        ('pageSize', PAGE_SIZE),
+                        ('passportctoken', u2.passport_ctoken),
+                        ('type', PLAN_TYPE),
+                        ('passportutoken', u2.passport_utoken),
+                        ('subAccountNo', ''),
+                        ('PhoneType', PHONE_TYPE),
+                        ('MobileKey', MOBILE_KEY),
+                        ('fundCode', fund_code),
+                        ('pageIndex', PAGE_INDEX),
+                        ('UserId', u2.customer_no),
+                        ('UToken', u2.u_token),
+                        ('CToken', u2.c_token),
+                        ('passportid', u2.passport_id),
+                    ]
+                    query_string2 = urllib.parse.urlencode(params2)
+                    full_url2 = f"{url2}?{query_string2}"
+                    headers2 = dict(headers)
+                    headers2['Host'] = f'ibgapi{u2.index}.1234567.com.cn'
+                    
+                    response2 = requests.get(full_url2, headers=headers2, verify=False)
+                    response2.raise_for_status()
+                    json_data = response2.json()
+                    
+                    if not json_data.get('Success', False):
+                        # 重试后再次检查 ErrorCode=0
+                        error_code2 = json_data.get('ErrorCode')
+                        if error_code2 == 0 or str(error_code2) == '0':
+                            logger.info('重试后获取定投计划返回 ErrorCode=0', extra=extra)
+                        else:
+                            logger.error(f"API重试失败: {json_data.get('FirstError', 'Unknown error')}", extra=extra)
+                            raise ValidationError(json_data.get('FirstError') or 'API_FAIL')
             
         data = json_data.get('Data')
         if data is None:
+            # 再次检查 ErrorCode=0，如果是则返回空列表
+            error_code = json_data.get('ErrorCode')
+            if error_code == 0 or str(error_code) == '0':
+                logger.info('获取定投计划数据为空 (ErrorCode=0)', extra=extra)
+                return []
+
             logger.error('解析响应数据失败: Data字段为空', extra=extra)
             raise ValidationError('Data为空')
             

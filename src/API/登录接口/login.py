@@ -295,13 +295,13 @@ def ensure_user_fresh(user: User, max_age_sec: int = 600, force_refresh: bool = 
             _copy_tokens(user, u2)
             return u2
     u3 = None
-    if refresh_user_tokens:
+    if not force_refresh and get_user_all_info:
+        u3 = get_user_all_info(account, pwd)
+    if not u3 and refresh_user_tokens:
         try:
             u3 = refresh_user_tokens(account, pwd)
         except Exception:
             u3 = None
-    if not u3 and get_user_all_info:
-        u3 = get_user_all_info(account, pwd)
     if not u3:
         u3 = login(account, pwd)
         if u3:

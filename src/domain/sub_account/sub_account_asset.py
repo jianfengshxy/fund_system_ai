@@ -1,4 +1,4 @@
-from domain.asset.asset_details import *
+from src.domain.asset.asset_details import *
 
 class SubAccountAsset:
     def __init__(self):

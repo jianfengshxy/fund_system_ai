@@ -1,24 +1,21 @@
 import sys
 import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+
 import logging
 from src.common.logger import get_logger
 import urllib.parse
 import urllib3
 import warnings
 import requests
-from typing import List
-
-# 确保路径添加在导入之前
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from typing import List, Tuple, Dict, Any
 
 # 使用绝对导入
 from src.domain.fund_plan import ApiResponse
 from src.common.constant import SERVER_VERSION, PHONE_TYPE, MOBILE_KEY
 from src.domain.asset.asset_details import AssetDetails
 
-def get_asset_list_of_sub(user, sub_account_no):
+def get_asset_list_of_sub(user, sub_account_no, with_meta: bool = False):
     base = f"https://tradeapilvs{user.index}.1234567.com.cn"
     url_list = [
         f"{base}/User/Asset/GetFundAssetListOfSubV2",
@@ -73,27 +70,51 @@ def get_asset_list_of_sub(user, sub_account_no):
     logger = get_logger("AssetAPI")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_asset_list", "sub_account_no": sub_account_no}
     response_data = None
+    token_error = False
+    first_error_text = ""
     for url in url_list:
         try:
             r = requests.post(url, json=data_json, headers=headers, verify=False, timeout=10)
             r.raise_for_status()
             rd = r.json()
+            if rd.get("Success") is False:
+                # 检查是否为正常空数据（ErrorCode=0）
+                error_code = rd.get("ErrorCode")
+                if error_code == 0 or str(error_code) == "0":
+                    pass # 视为正常，不记录 token_error
+                else:
+                    err = str(rd.get("FirstError", "") or "")
+                    first_error_text = (first_error_text or err)
+                    if any(k in err for k in ['Token', 'token', '凭证', 'passport', '未登录', '请登录', 'UToken', 'CToken', 'passportid', '权限']):
+                        token_error = True
             if rd.get("Data", {}).get("AssetDetails"):
                 response_data = rd
                 break
-        except Exception:
+        except requests.exceptions.RequestException as e:
             pass
         try:
             r = requests.post(url, data=data_form, headers={**headers, "Content-Type": "application/x-www-form-urlencoded"}, verify=False, timeout=10)
             r.raise_for_status()
             rd = r.json()
+            if rd.get("Success") is False:
+                # 检查是否为正常空数据（ErrorCode=0）
+                error_code = rd.get("ErrorCode")
+                if error_code == 0 or str(error_code) == "0":
+                    pass # 视为正常，不记录 token_error
+                else:
+                    err = str(rd.get("FirstError", "") or "")
+                    first_error_text = (first_error_text or err)
+                    if any(k in err for k in ['Token', 'token', '凭证', 'passport', '未登录', '请登录', 'UToken', 'CToken', 'passportid', '权限']):
+                        token_error = True
             if rd.get("Data", {}).get("AssetDetails"):
                 response_data = rd
                 break
-        except Exception:
+        except requests.exceptions.RequestException as e:
             pass
     if response_data is None:
         logger.info("资产明细条数: 0", extra=extra)
+        if with_meta:
+            return [], {"token_error": token_error, "first_error": first_error_text}
         return []
     asset_details_list = []
     for asset in response_data.get("Data", {}).get("AssetDetails", []):
@@ -139,6 +160,7 @@ def get_asset_list_of_sub(user, sub_account_no):
         asset_detail.on_way_transaction_count = asset.get("OnWayTransactionCount", 0)
         asset_details_list.append(asset_detail)
     logger.info(f"资产明细条数: {len(asset_details_list)}", extra=extra)
+    if with_meta:
+        return asset_details_list, {"token_error": token_error, "first_error": first_error_text}
     return asset_details_list
    
-

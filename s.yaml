@@ -51,7 +51,7 @@ vars:
         EXTERNAL_HOST: ${vars.common.database.external_host}
         VPC_ID: ${vars.common.database.vpc_id}
         CIDR: ${vars.common.database.cidr}
-        BANK_BALANCE_THRESHOLD: "300000"
+        BANK_BALANCE_THRESHOLD: "500000"
   # 自定义组合共享 payload（避免三处重复维护）
   custom_portfolio_payload: >
     {"account": "13918199137", "password": "sWX15706",

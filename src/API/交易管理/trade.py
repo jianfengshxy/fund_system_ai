@@ -86,6 +86,22 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
                 results.append(trade_result)
             return results
         else:
+            err_text = ""
+            try:
+                err_text = json.dumps(response_data, ensure_ascii=False)
+            except Exception:
+                err_text = ""
+            
+            # 检查是否为正常空数据（ErrorCode=0）
+            error_code = response_data.get("ErrorCode")
+            if error_code == 0 or str(error_code) == "0":
+                logger.info(f"获取交易列表为空 (ErrorCode=0)", extra=extra)
+                return []
+
+            need_refresh = any(k in err_text for k in ['Token', 'token', '凭证', 'passport', '未登录', '请登录', 'UToken', 'CToken', 'passportid', '权限'])
+            if not need_refresh:
+                logger.error(f"获取可撤单交易列表失败: {response_data}", extra=extra)
+                raise ValidationError("API_FAIL")
             u2 = ensure_user_fresh(u, force_refresh=True)
             url2 = f"https://tquerycoreapi{u2.index}.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
             if not u2.index:
@@ -103,6 +119,13 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
                 for trade_info in response_data.get("responseObjects", []):
                     results.append(TradeResult.from_api(trade_info))
                 return results
+            
+            # 检查是否为正常空数据（ErrorCode=0）
+            error_code = response_data.get("ErrorCode")
+            if error_code == 0 or str(error_code) == "0":
+                logger.info(f"获取交易列表为空 (ErrorCode=0) - 重试后", extra=extra)
+                return []
+
             logger.error(f"获取可撤单交易列表失败: {response_data}", extra=extra)
             raise ValidationError("API_FAIL")
     except requests.exceptions.RequestException as e:
@@ -188,6 +211,23 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
             logger.info(f"银行份额条数: {len(bank_shares)}", extra=extra)
             return bank_shares
         else:
+            err_text = ""
+            try:
+                err_text = json.dumps(response_data, ensure_ascii=False)
+            except Exception:
+                err_text = ""
+            
+            # 检查是否为正常空数据（Success=True 或 ErrorCode=0）
+            is_success = response_data.get("Success", False)
+            error_code = response_data.get("ErrorCode")
+            if is_success or error_code == 0 or str(error_code) == "0":
+                logger.info(f"获取银行份额信息为空 (无持有份额)", extra=extra)
+                return []
+
+            need_refresh = any(k in err_text for k in ['Token', 'token', '凭证', 'passport', '未登录', '请登录', 'UToken', 'CToken', 'passportid', '权限'])
+            if not need_refresh:
+                logger.warning(f"获取银行份额信息返回异常数据: {response_data}", extra=extra)
+                return []
             u2 = ensure_user_fresh(u, force_refresh=True)
             data["CToken"] = u2.c_token
             data["CustomerNo"] = u2.customer_no

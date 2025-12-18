@@ -1,4 +1,5 @@
 import logging
+import yaml
 from random import vonmisesvariate
 import re
 from typing import Optional
@@ -47,6 +48,23 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+def get_bank_balance_threshold():
+    try:
+        yaml_path = os.path.join(root_dir, 's.yaml')
+        if os.path.exists(yaml_path):
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+                val = config.get('vars', {}).get('common', {}).get('props', {}).get('environmentVariables', {}).get('BANK_BALANCE_THRESHOLD')
+                if val:
+                    logger.info(f"Loaded BANK_BALANCE_THRESHOLD from s.yaml: {val}")
+                    return float(val)
+    except Exception as e:
+        logger.warning(f"Failed to load s.yaml: {e}")
+    logger.info("Using default BANK_BALANCE_THRESHOLD: 300000.0")
+    return 300000.0
+
+BANK_BALANCE_THRESHOLD = get_bank_balance_threshold()
 
 def default_user_redeem_all_fund_plans():
     """默认用户批量止盈"""
@@ -210,7 +228,4 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
 if __name__ == "__main__":
     # 直接运行测试
     redeem_all_fund_plans(DEFAULT_USER)
-
-# 新增：银行卡余额阈值（环境变量 BANK_BALANCE_THRESHOLD），默认 300000
-BANK_BALANCE_THRESHOLD = float(os.environ.get("BANK_BALANCE_THRESHOLD", "300000"))
     

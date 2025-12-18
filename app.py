@@ -36,15 +36,19 @@ def _get_sub_accounts_cached():
     resp = getSubAccountList(u)
     try:
         if (not getattr(resp, 'Success', False)) or (not getattr(resp, 'Data', None)):
-            u2 = ensure_user_fresh(u, 600, True)
-            resp = getSubAccountList(u2)
+            err = str(getattr(resp, 'FirstError', '') or '')
+            need_refresh = any(k in err for k in ['Token', 'token', '凭证', 'passport', '未登录', '请登录', 'UToken', 'CToken', 'passportid', '权限'])
+            if need_refresh:
+                u2 = ensure_user_fresh(u, 600, True)
+                resp = getSubAccountList(u2)
         if (not getattr(resp, 'Success', False))     or (not getattr(resp, 'Data', None)):
-            fallback = getSubAssetMultList(u2)
+            u_fallback = 'u2' in locals() and u2 or u
+            fallback = getSubAssetMultList(u_fallback)
             if getattr(fallback, 'Success', False) and getattr(fallback, 'Data', None):
                 groups = getattr(fallback.Data, 'list_group', []) or []
                 lst = []
                 for g in groups:
-                    sa = SubAccount.from_basic_info(u2.customer_no, getattr(g, 'sub_account_no', ''), getattr(g, 'group_name', ''))
+                    sa = SubAccount.from_basic_info(u_fallback.customer_no, getattr(g, 'sub_account_no', ''), getattr(g, 'group_name', ''))
                     try:
                         sa.asset_value = float(getattr(g, 'total_amount_decimal', 0.0) or 0.0)
                     except Exception:

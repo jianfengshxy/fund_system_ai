@@ -84,13 +84,13 @@ resources:
         EXTERNAL_HOST: ${vars.common.database.external_host}
         VPC_ID: ${vars.common.database.vpc_id}
         CIDR: ${vars.common.database.cidr}
-        MAX_FUNDS_THRESHOLD: "30"
+        MAX_FUNDS_THRESHOLD: "10"
       triggers:
       - qualifier: ${vars.common.props.triggerConfig.qualifier}
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "add_new_13918199137_jianlong"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "见龙在田","total_budget": 1000000.0,"amount": 50000.0,"fund_type": "non_index"}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "见龙在田","total_budget": 1000000.0,"amount": 50000.0,"fund_type": "all"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 37 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
@@ -394,7 +394,7 @@ resources:
       region: ${vars.common.props.region}
       timeout: ${vars.common.props.timeout}
       environmentVariables: 
-        JIANLONG_PROFIT_THRESHOLD: "10.0"
+        JIANLONG_PROFIT_THRESHOLD: "5.0"
         PYTHONPATH: /code
         TZ: Asia/Shanghai
       triggers:

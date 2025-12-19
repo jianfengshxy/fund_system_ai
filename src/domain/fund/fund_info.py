@@ -32,6 +32,7 @@ class FundInfo:
     # 交易信息
     max_purchase: float                  # 最大申购金额 MAXSG
     can_purchase: bool                   # 是否可以购买 ISBUY
+    can_redeem: bool                     # 是否可以赎回 (derived from ISBUY)
     
     # 其他信息
     index_code: Optional[str]            # 跟踪指数代码 INDEXCODE
@@ -81,6 +82,7 @@ class FundInfo:
             this_year_return=safe_float(data.get('SYL_JN'), None),
             max_purchase=safe_float(data.get('MAXSG')),
             can_purchase=data.get('ISBUY') == '1',
+            can_redeem=data.get('ISBUY') in ['1', '4'], # 1:可申购赎回, 4:暂停申购但可赎回
             index_code=data.get('INDEXCODE'),
             tracking_error=safe_float(data.get('TRKERROR1'), None),
             rank_100day = 0,
@@ -118,6 +120,7 @@ class FundInfo:
             f"交易信息:\n"
             f"  最大申购金额: {self.max_purchase:,.2f}元\n"
             f"  是否可购买: {'是' if self.can_purchase else '否'}\n"
+            f"  是否可赎回: {'是' if self.can_redeem else '否'}\n"
             f"指数信息:\n"
             f"  跟踪指数: {self.index_code or '暂无'}\n"
             f"  跟踪误差: {f'{self.tracking_error:.4f}%' if self.tracking_error is not None else '暂无'}\n"

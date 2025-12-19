@@ -57,11 +57,7 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
 
             fund_info = get_all_fund_info(user, fund_code)
             fund_name = fund_info.fund_name
-            logger.info(f"基金信息：{fund_name}({fund_code})，可申购：{fund_info.can_purchase}")
-
-            if fund_info.can_purchase == False:
-                logger.info(f"{fund_name}不可申购/赎回")
-                continue
+            logger.info(f"基金信息：{fund_name}({fund_code})，可申购：{fund_info.can_purchase}，可赎回：{fund_info.can_redeem}")
 
             shares = get_bank_shares(user, sub_account_no, fund_code)
 

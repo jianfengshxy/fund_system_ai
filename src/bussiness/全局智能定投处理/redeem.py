@@ -103,10 +103,10 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
     fund_code = plan_detail.rationPlan.fundCode
     fund_info = get_all_fund_info(user, fund_code)
     fund_name = fund_info.fund_name
-    logger.info(f"基金信息：{fund_name}({fund_code})，可申购：{fund_info.can_purchase}")
+    logger.info(f"基金信息：{fund_name}({fund_code})，可申购：{fund_info.can_purchase}，可赎回：{fund_info.can_redeem}")
     
-    if fund_info.can_purchase == False:
-        logger.info(f"{fund_name}不可申购/赎回")
+    if not fund_info.can_redeem:
+        logger.info(f"{fund_name}不可赎回")
         return True
     sub_account_no = plan_detail.rationPlan.subAccountNo
     sub_account_name = plan_detail.rationPlan.subAccountName

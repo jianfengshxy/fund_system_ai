@@ -50,6 +50,13 @@ def sell_0_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:List[
     if not is_trading_time(user):
         logger.info(f"{user.customer_name} 当前非交易时间，跳过赎回0费率份额操作", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_0_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
         return None
+    
+    # 检查是否可赎回
+    fund_info = get_all_fund_info(user, fund_code)
+    if fund_info and not fund_info.can_redeem:
+        logger.info(f"{user.customer_name}基金{fund_code}({fund_info.fund_name})不可赎回，跳过赎回操作", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_0_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
+        return None
+
    #遍历shares
     for share in shares:
         fund_info = get_all_fund_info(user,fund_code)
@@ -105,6 +112,13 @@ def sell_low_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:Lis
     if not is_trading_time(user):
         logger.info(f"{user.customer_name} 当前非交易时间，跳过赎回低费率份额操作", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_low_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
         return None
+    
+    # 检查是否可赎回
+    fund_info = get_all_fund_info(user, fund_code)
+    if fund_info and not fund_info.can_redeem:
+        logger.info(f"{user.customer_name}基金{fund_code}({fund_info.fund_name})不可赎回，跳过赎回操作", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_low_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
+        return None
+
    #遍历shares
     for share in shares:        
         low_fee_shares = round(float(get_low_fee_shares(user,fund_code)), 2)
@@ -175,6 +189,13 @@ def sell_usable_non_zero_fee_shares(user: User, sub_account_no: str, fund_code: 
     if not is_trading_time(user):
         logger.info(f"{user.customer_name} 当前非交易时间，跳过赎回可用非零费率份额操作", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_non_zero_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
         return None
+    
+    # 检查是否可赎回
+    fund_info = get_all_fund_info(user, fund_code)
+    if fund_info and not fund_info.can_redeem:
+        logger.info(f"{user.customer_name}基金{fund_code}({fund_info.fund_name})不可赎回，跳过赎回操作", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_non_zero_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
+        return None
+
     for share in shares:
         fund_info = get_all_fund_info(user,fund_code)
         fund_name = fund_info.fund_name

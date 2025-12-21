@@ -1205,10 +1205,14 @@ def updateRation(user, plan_id: str,
                  period_type: Optional[int] = None,
                  period_value: Optional[Union[str, int]] = None,
                  pay_type: Optional[int] = None,
-                 targetRate: Optional[Union[str, float]] = None) -> ApiResponse[FundPlanDetail]:
+                 targetRate: Optional[Union[str, float]] = None,
+                 renewal: Optional[bool] = None,
+                 redemption_way: Optional[int] = None,
+                 redeem_strategy: Optional[Union[str, int]] = None,
+                 redeem_limit: Optional[str] = None) -> ApiResponse[FundPlanDetail]:
     """
-    更新定投计划信息（如金额、周期、扣款方式、止盈百分比）
-    - 在更新前必须获取计划详情；未填写的 amount/targetRate 用详情原值填充并下发
+    更新定投计划信息（如金额、周期、扣款方式、止盈百分比、续投、赎回策略、赎回限制）
+    - 在更新前必须获取计划详情；未填写的 amount/targetRate/renewal/redemption_way/redeem_strategy/redeem_limit 用详情原值填充并下发
     - 返回更新后的计划概要信息（Data.tips、amount、periodInfo、targetRate 等）
     """
     logger = get_logger("SmartPlan")
@@ -1277,6 +1281,12 @@ def updateRation(user, plan_id: str,
         else (rp.targetRate if rp.targetRate else None)
     )
 
+    # 处理新增参数：renewal, redemption_way, redeem_strategy, redeem_limit
+    final_renewal = renewal if renewal is not None else rp.renewal
+    final_redemption_way = redemption_way if redemption_way is not None else parse_int(rp.redemptionWay)
+    final_redeem_strategy = str(redeem_strategy) if redeem_strategy is not None else (rp.redeemStrategy or "1")
+    final_redeem_limit = str(redeem_limit) if redeem_limit is not None else (rp.redeemLimit or "1")
+
     url = f"https://ibgapi{user.index}.1234567.com.cn/ration/updateRation"
     md5_password = hashlib.md5(user.password.encode("utf-8")).hexdigest()
     body = {
@@ -1303,6 +1313,11 @@ def updateRation(user, plan_id: str,
         "periodType": final_period_type,
         "periodValue": str(final_period_value),
         "payType": final_pay_type,
+        # 新增字段
+        "renewal": final_renewal,
+        "redemptionWay": final_redemption_way,
+        "redeemStrategy": final_redeem_strategy,
+        "redeemLimit": final_redeem_limit,
     }
     # 始终携带 amount（用入参或原值）
     body["amount"] = final_amount
@@ -1365,7 +1380,7 @@ def updateRation(user, plan_id: str,
                 subAccountName=data.get("subAccountName", rp.subAccountName or ""),
                 currentDay=(data.get("applyTime", "") or "").split(" ")[0] if data.get("applyTime") else (rp.currentDay or ""),
                 buyStrategy=str(rp.buyStrategy or "1"),
-                redeemStrategy=str(rp.redeemStrategy or "1"),
+                redeemStrategy=str(data.get("redeemStrategy") or final_redeem_strategy or "1"),
                 planAssets=parse_amount(data.get("planAssets", rp.planAssets or 0)),
                 rationProfit=None,
                 totalProfit=None,
@@ -1374,10 +1389,10 @@ def updateRation(user, plan_id: str,
                 unitPrice=None,
                 targetRate=data.get("targetRate", final_target_rate),
                 retreatPercentage=None,
-                renewal=True,
-                redemptionWay=1,
+                renewal=data.get("renewal", final_renewal),
+                redemptionWay=parse_int(data.get("redemptionWay", final_redemption_way)),
                 planStrategyId="",
-                redeemLimit="1",
+                redeemLimit=data.get("redeemLimit", final_redeem_limit),
             )
 
             plan_detail = FundPlanDetail(

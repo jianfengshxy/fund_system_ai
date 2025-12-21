@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 
 # 动态注入项目根目录，避免 ModuleNotFoundError: No module named 'src'
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
@@ -112,9 +112,37 @@ def update_smart_investment_info(
     profit_percent: Optional[Any] = None,
     output_path: Optional[str] = None,
     period_type_filter: Optional[int] = 3,  # 默认月定投；None 更新所有周期
+    renewal: Optional[bool] = None,
+    redemption_way: Optional[int] = None,
+    redeem_strategy: Optional[Union[str, int]] = None,
+    redeem_limit: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     刷新并更新指定基金的定投信息（支持任意周期，通过 period_type_filter 过滤）。
+    
+    参数说明:
+    - user: 用户对象
+    - fund_code: 基金代码
+    - buy_strategy_switch: 买入策略开关 (True: 恢复买入, False: 暂停买入)
+    - amount: 定投金额
+    - profit_percent: 目标止盈率 (e.g. "7.0%", 7.0)
+    - output_path: 输出路径 (暂未使用)
+    - period_type_filter: 周期过滤 (3=月定投, None=所有周期)
+    - renewal: 止盈后是否自动续投 (True: 自动续投, False: 不续投)
+    - redemption_way: 止盈赎回方式 (0: 按比例赎回, 1: 赎回持有期大于7天的份额/保留短期份额)
+    - redeem_strategy: 止盈策略 (通常为 '1'，代表目标止盈)
+    - redeem_limit: 赎回限制/保留规则 (例如 '0': 全部卖出, '1': 保留收取短期手续费份额)
+
+    【重要经验总结 - 避坑指南】
+    1. 续投控制 (renewal):
+       - 必须显式传入 True 才能开启“止盈后自动续投”。
+       - 只要 API 请求体中缺少 renewal=True，服务器就会默认关闭续投（即“止盈结束”）。
+    
+    2. 保留高费率份额 (需 redemption_way + redeem_limit 配合):
+       - 误区：仅设置 redemption_way=1 (赎回持有期大于7天) 是不够的，这只是设定了“优先卖什么”。
+       - 关键开关：必须同时设置 redeem_limit='1'。这个参数才是“保留收取短期手续费份额”的真正开关。
+       - 如果漏传 redeem_limit='1'，服务器默认行为是“全部卖出” (redeemLimit='0')，导致高费率份额也会被卖掉。
+       - 正确组合：保留高费率份额 = (redemption_way=1) + (redeem_limit='1')
     """
     plans = collect_plan_info_for_fund(user, fund_code, period_type_filter)
 
@@ -211,10 +239,17 @@ def update_smart_investment_info(
             return None
 
     modify_results: Optional[List[Dict[str, Any]]] = None
-    need_modify = (amount is not None and str(amount).strip() != "") or (profit_percent is not None and str(profit_percent).strip() != "")
+    need_modify = (
+        (amount is not None and str(amount).strip() != "") or 
+        (profit_percent is not None and str(profit_percent).strip() != "") or
+        (renewal is not None) or
+        (redemption_way is not None) or
+        (redeem_strategy is not None) or
+        (redeem_limit is not None)
+    )
     if need_modify and plans:
         modify_results = []
-        logger.info(f"批量更新基金 {fund_code} 的参数: amount={amount}, targetRate={profit_percent}（周期过滤={period_type_filter if period_type_filter is not None else '所有'}）")
+        logger.info(f"批量更新基金 {fund_code} 的参数: amount={amount}, targetRate={profit_percent}, renewal={renewal}, redemptionWay={redemption_way}, redeemStrategy={redeem_strategy}, redeemLimit={redeem_limit}（周期过滤={period_type_filter if period_type_filter is not None else '所有'}）")
         expected_amount = _parse_amount(amount)
         expected_target = _normalize_target_rate(profit_percent)
 
@@ -226,13 +261,22 @@ def update_smart_investment_info(
                     plan_id,
                     amount=amount if (amount is not None and str(amount).strip() != "") else None,
                     targetRate=profit_percent if (profit_percent is not None and str(profit_percent).strip() != "") else None,
+                    renewal=renewal,
+                    redemption_way=redemption_way,
+                    redeem_strategy=redeem_strategy,
+                    redeem_limit=redeem_limit
                 )
                 ok = getattr(resp, "Success", False)
 
-                # 二次查询校验金额/止盈
+                # 二次查询校验金额/止盈及其他参数
                 verified = False
                 new_amount = None
                 new_target_rate = None
+                new_renewal = None
+                new_redemption_way = None
+                new_redeem_strategy = None
+                new_redeem_limit = None
+                
                 if ok:
                     try:
                         verify = getPlanDetailPro(plan_id, user)
@@ -240,11 +284,22 @@ def update_smart_investment_info(
                             vrp = verify.Data.rationPlan
                             new_amount = vrp.amount
                             new_target_rate = vrp.targetRate
+                            new_renewal = vrp.renewal
+                            new_redemption_way = vrp.redemptionWay
+                            new_redeem_strategy = vrp.redeemStrategy
+                            new_redeem_limit = vrp.redeemLimit
+
                             cond_amount = True if expected_amount is None else (abs((new_amount or 0.0) - expected_amount) < 1e-6)
                             # 归一化比较，避免 6% vs 6.0% 的格式差异
                             norm_new_target = _normalize_target_rate(new_target_rate)
                             cond_target = True if expected_target is None else (norm_new_target == expected_target)
-                            verified = cond_amount and cond_target
+                            
+                            cond_renewal = True if renewal is None else (new_renewal == renewal)
+                            cond_redemption_way = True if redemption_way is None else (new_redemption_way == redemption_way)
+                            cond_redeem_strategy = True if redeem_strategy is None else (str(new_redeem_strategy) == str(redeem_strategy))
+                            cond_redeem_limit = True if redeem_limit is None else (str(new_redeem_limit) == str(redeem_limit))
+                            
+                            verified = cond_amount and cond_target and cond_renewal and cond_redemption_way and cond_redeem_strategy and cond_redeem_limit
                     except Exception as _ve:
                         logger.warning(f"[参数校验] 计划 {plan_id} 二次查询异常: {_ve}")
 
@@ -258,15 +313,19 @@ def update_smart_investment_info(
                         "verified": verified,
                         "newAmount": new_amount,
                         "newTargetRate": new_target_rate,
+                        "newRenewal": new_renewal,
+                        "newRedemptionWay": new_redemption_way,
+                        "newRedeemStrategy": new_redeem_strategy,
+                        "newRedeemLimit": new_redeem_limit,
                         "error": getattr(resp, "FirstError", None),
                         "action": "update_ration",
                     }
                 )
                 label_r = _period_text(r["periodType"], r["periodValue"])
                 if ok and verified:
-                    logger.info(f"✓ {plan_id} {label_r} 金额/止盈更新并已验证生效")
+                    logger.info(f"✓ {plan_id} {label_r} 参数更新并已验证生效")
                 elif ok and not verified:
-                    logger.warning(f"⚠ {plan_id} {label_r} 更新返回成功，但校验未生效（newAmount={new_amount}, newTargetRate={new_target_rate}）")
+                    logger.warning(f"⚠ {plan_id} {label_r} 更新返回成功，但校验未生效（newAmount={new_amount}, newTargetRate={new_target_rate}, newRenewal={new_renewal}）")
                 else:
                     logger.warning(f"✗ {plan_id} {label_r} 更新失败: {getattr(resp, 'FirstError', None)}")
             except Exception as e:
@@ -302,11 +361,18 @@ def update_smart_investment_info(
 if __name__ == "__main__":
     info = update_smart_investment_info(
         user=DEFAULT_USER,
-        fund_code="001595",
-        buy_strategy_switch=False,
-        amount="10000.0",            # 更新金额为 10000
-        profit_percent="5.0%",      # 更新目标止盈为 10%
-        period_type_filter=None       # 仅更新月定投；传 None 则所有周期
+        fund_code="011707",
+        buy_strategy_switch=True,
+        amount="5000.0",            # 更新金额为 5000
+        profit_percent="7.0%",      # 更新目标止盈为 7%
+        period_type_filter=3,       # 仅更新月定投；传 None 则所有周期
+        
+        # --- 关键参数配置示例 ---
+        renewal=True,               # 【关键】止盈后继续续投（必须显式传True，否则默认结束）
+        redemption_way=1,           # 赎回方式：赎回持有期大于7天的份额
+        redeem_strategy='1',        # 止盈策略：目标止盈
+        redeem_limit='1'            # 【关键】赎回限制：'1'代表打开“保留收取短期手续费份额”开关（若不传则默认全部卖出）
+        # ---------------------
     )
     logger.info(f"完成，共 {info['count']} 个匹配的定投计划（周期过滤={info.get('periodTypeFilter')}）")
 
@@ -334,7 +400,7 @@ if __name__ == "__main__":
             status = "成功" if r.get("success") else f"失败({r.get('error')})"
             verify = "已生效" if r.get("verified") else "未生效"
             label_r = _period_text(r.get("periodType"), r.get("periodValue"))
-            print(f"- 计划 {r.get('planId')} {label_r} {r.get('action')} -> {status} / 校验:{verify}, 新金额={r.get('newAmount')}, 新止盈={r.get('newTargetRate')}")
+            print(f"- 计划 {r.get('planId')} {label_r} {r.get('action')} -> {status} / 校验:{verify}, 新金额={r.get('newAmount')}, 新止盈={r.get('newTargetRate')}, 续投={r.get('newRenewal')}, 赎回方式={r.get('newRedemptionWay')}, 赎回限制={r.get('newRedeemLimit')}")
     else:
         print("未执行金额/止盈更新（amount/profit_percent 未指定或周期内无匹配计划）")
     # 明确提示忽略的参数

@@ -361,11 +361,11 @@ def update_smart_investment_info(
 if __name__ == "__main__":
     info = update_smart_investment_info(
         user=DEFAULT_USER,
-        fund_code="011707",
+        fund_code="021740",
         buy_strategy_switch=True,
-        amount="5000.0",            # 更新金额为 5000
-        profit_percent="7.0%",      # 更新目标止盈为 7%
-        period_type_filter=3,       # 仅更新月定投；传 None 则所有周期
+        amount="10000.0",            # 更新金额为 5000
+        profit_percent="3.0%",      # 更新目标止盈为 7%
+        period_type_filter=None,       # 仅更新月定投；传 None 则所有周期
         
         # --- 关键参数配置示例 ---
         renewal=True,               # 【关键】止盈后继续续投（必须显式传True，否则默认结束）

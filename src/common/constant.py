@@ -268,7 +268,27 @@ DEFAULT_FUND_PLAN_DETAIL = FundPlanDetail(
 _user_cache_path = os.path.join(root_dir, 'src', 'service', '用户管理', 'user_cache.json')
 try:
     with open(_user_cache_path, 'r', encoding='utf-8') as f:
-        _cache = json.load(f)
+        _cache_raw = json.load(f)
+
+    # 兼容多用户缓存格式 {"users": {...}, "last_active_account": ...}
+    if "users" in _cache_raw and isinstance(_cache_raw["users"], dict):
+        # 优先使用 last_active_account
+        _target_acc = _cache_raw.get("last_active_account")
+        # 否则尝试使用默认账号 13918199137
+        if not _target_acc or _target_acc not in _cache_raw["users"]:
+            if "13918199137" in _cache_raw["users"]:
+                _target_acc = "13918199137"
+            # 否则取第一个
+            elif _cache_raw["users"]:
+                _target_acc = list(_cache_raw["users"].keys())[0]
+    
+        if _target_acc and _target_acc in _cache_raw["users"]:
+            _cache = _cache_raw["users"][_target_acc]
+        else:
+            _cache = _cache_raw  # Fallback
+    else:
+        _cache = _cache_raw
+
     user_data = {
         'account': _cache.get('account'),
         'password': _cache.get('password'),

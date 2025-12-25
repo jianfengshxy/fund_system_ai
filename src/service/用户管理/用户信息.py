@@ -62,16 +62,59 @@ def _user_to_dict(user):
 
 def _save_file_cache(user):
     try:
+        account = getattr(user, 'account', None)
+        if not account:
+            return
+        
         data = _user_to_dict(user)
-        _FILE_CACHE_PATH.write_text(json.dumps(data, ensure_ascii=False))
-    except Exception:
-        pass
+        
+        # 读取现有缓存
+        existing_data = {}
+        if _FILE_CACHE_PATH.exists():
+            try:
+                existing_data = json.loads(_FILE_CACHE_PATH.read_text(encoding='utf-8'))
+            except Exception:
+                pass
+        
+        # 迁移旧格式：如果顶层有 account 字段且没有 users 字段，转为新格式
+        if 'account' in existing_data and 'users' not in existing_data:
+            old_acc = existing_data.get('account')
+            if old_acc:
+                existing_data = {
+                    "users": {old_acc: existing_data},
+                    "last_active_account": old_acc
+                }
+        
+        # 确保基本结构存在
+        if "users" not in existing_data:
+            existing_data["users"] = {}
+        
+        # 更新当前用户
+        existing_data["users"][account] = data
+        existing_data["last_active_account"] = account
+        
+        _FILE_CACHE_PATH.write_text(json.dumps(existing_data, ensure_ascii=False), encoding='utf-8')
+    except Exception as e:
+        logger.error(f"保存文件缓存失败: {e}")
 
 def _load_file_cache(account: str, password: str):
     try:
         if not _FILE_CACHE_PATH.exists():
             return None
-        raw = json.loads(_FILE_CACHE_PATH.read_text())
+        raw = json.loads(_FILE_CACHE_PATH.read_text(encoding='utf-8'))
+        
+        # 处理新格式
+        if "users" in raw:
+            user_data = raw["users"].get(account)
+            if not user_data:
+                return None
+            # 简单校验密码
+            if user_data.get('password') != password:
+                return None
+            from src.domain.user.User import User
+            return User.from_dict(user_data)
+        
+        # 处理旧格式
         if raw.get('account') != account or raw.get('password') != password:
             return None
         from src.domain.user.User import User

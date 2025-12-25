@@ -50,7 +50,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         except Exception:
             return default
     # 修改：直接从环境变量读取止盈阈值，忽略传入的 profit_threshold 参数
-    local_threshold = _safe_float(os.environ.get("JIANLONG_PROFIT_THRESHOLD"), 15.0)
+    local_threshold = _safe_float(os.environ.get("JIANLONG_PROFIT_THRESHOLD"), 5.0)
     logger.info(f"止盈收益率阈值设置为: {local_threshold}%")
 
     success_count = 0
@@ -82,31 +82,43 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         # rank_100day
         r100 = _safe_float(getattr(fund_info, "rank_100day", None), None)
 
-        # 月度百分位排名（Y 数据，做分母校验）
-        month_rank_rate = None
+        # 获取月度和季度排名数据
+        month_rank_num = None
+        quarter_rank_num = None
         try:
-            _, month_item_rank, month_item_sc = get_fund_growth_rate(fund_info, 'Y')
-            if month_item_rank is not None and month_item_sc is not None:
-                denom = float(month_item_sc)
-                if denom != 0.0:
-                    month_rank_rate = float(month_item_rank) / denom
+            _, month_item_rank, _ = get_fund_growth_rate(fund_info, 'Y')
+            if month_item_rank is not None:
+                month_rank_num = float(month_item_rank)
+            
+            _, quarter_item_rank, _ = get_fund_growth_rate(fund_info, '3Y')
+            if quarter_item_rank is not None:
+                quarter_rank_num = float(quarter_item_rank)
         except Exception as e:
-            logger.info(f"获取月度排名数据异常: {e}")
+            logger.info(f"获取排名数据异常: {e}")
 
         # 三条件统一止盈：
         # 1) 预估收益率 > 动态阈值 local_threshold
         # 2) rank_100day > 80
-        # 3) month_rank_rate > 0.25（开始掉出前1/4）
+      
+      
+        cond3 = True
+        is_index = getattr(fund_info, 'fund_type', '') == '000'
+        if not is_index:
+            if month_rank_num is not None and quarter_rank_num is not None:
+                cond3 = quarter_rank_num < month_rank_num
+            else:
+                cond3 = False
+
         should_take_profit = (
             (estimated_profit_rate is not None and estimated_profit_rate > local_threshold) and
             (r100 is not None and r100 > 80.0) and
-            (month_rank_rate is not None and month_rank_rate > 0.25)
+            cond3
         )
 
         logger.info(
             f"{user.customer_name}的基金{fund_name}({fund_code}) "
             f"预估收益率={estimated_profit_rate:.2f}%，rank_100day={r100 if r100 is not None else 'N/A'}, "
-            f"month_rank_rate={month_rank_rate if month_rank_rate is not None else 'N/A'}"
+            f"Q_Rank={quarter_rank_num}, M_Rank={month_rank_num}, IsIndex={is_index}"
         )
 
         if not should_take_profit:
@@ -117,7 +129,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             bank_shares = get_bank_shares(user, sub_account_no, fund_code)
             logger.info(
                 f"{user.customer_name}的止盈操作开始：基金{fund_name}({fund_code})满足条件"
-                f"（收益率>{local_threshold}%、rank_100<90、月度百分位>25%）"
+                f"（收益率>{local_threshold}%、rank_100>80、非指数且Q_Rank<M_Rank）"
             )
             sell_result = sell_low_fee_shares(user, sub_account_no, fund_code, bank_shares)
             if sell_result and getattr(sell_result, "busin_serial_no", None):

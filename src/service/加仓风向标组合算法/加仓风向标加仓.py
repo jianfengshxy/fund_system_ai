@@ -140,6 +140,34 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             logger.info(f"[跳过] {prefixed_name}({fund_code}) | 原因: 5日均值判定未通过（详见公共服务日志）")
             continue
 
+        # 公共排名检查（覆盖风向标与非风向标）
+        rank_100 = getattr(fi, "rank_100day", None)
+        rank_30 = getattr(fi, "rank_30day", None)
+        if not isinstance(rank_100, (int, float)) or not isinstance(rank_30, (int, float)):
+            logger.info(f"[跳过] {prefixed_name}({fund_code}) | 原因: 排名数据缺失（rank_100day={rank_100}, rank_30day={rank_30}）")
+            continue
+        if rank_100 < 20 or rank_100 > 90 or rank_30 < 5:
+            logger.info(f"[跳过] {prefixed_name}({fund_code}) | 原因: 排名条件不满足（期望 20<=rank_100day<=90 且 rank_30day>=5），实际 rank_100day={rank_100}, rank_30day={rank_30}")
+            continue
+
+        # 公共百分位排名检查（覆盖风向标与非风向标）
+        try:
+            _, season_item_rank, season_item_sc = get_fund_growth_rate(fi, '3Y')
+            _, month_item_rank, month_item_sc = get_fund_growth_rate(fi, 'Y')
+        except Exception as e:
+            logger.info(f"[跳过] {prefixed_name}({fund_code}) | 原因: 获取百分位排名数据异常 {e}")
+            continue
+        if not season_item_rank or not season_item_sc or season_item_sc == 0 \
+           or not month_item_rank or not month_item_sc or month_item_sc == 0:
+            logger.info(f"[跳过] {prefixed_name}({fund_code}) | 原因: 百分位排名数据不可用（season: rank={season_item_rank}, sc={season_item_sc}; month: rank={month_item_rank}, sc={month_item_sc}）")
+            continue
+
+        month_rank_rate = float(month_item_rank) / float(month_item_sc)
+        season_rank_rate = float(season_item_rank) / float(season_item_sc)
+        if month_rank_rate > 0.75 or season_rank_rate > 0.75:
+            logger.info(f"[跳过] {prefixed_name}({fund_code}) | 原因: 百分位排名过高 month_rank_rate={month_rank_rate:.2%}, season_rank_rate={season_rank_rate:.2%}（阈值<=75%）")
+            continue
+
         # 先尝试风向标路径（仅对风向标标的）
         if in_wind_vane:
             try:
@@ -179,15 +207,6 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
 
         # 非风向标路径（原分支内的 5 日均值判定已前置并统一）
         try:
-            rank_100 = getattr(fi, "rank_100day", None)
-            rank_30 = getattr(fi, "rank_30day", None)
-            if not isinstance(rank_100, (int, float)) or not isinstance(rank_30, (int, float)):
-                logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 排名数据缺失（rank_100day={rank_100}, rank_30day={rank_30}）")
-                continue
-            if rank_100 < 20 or rank_100 > 90 or rank_30 < 5:
-                logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 排名条件不满足（期望 20<=rank_100day<=90 且 rank_30day>=5），实际 rank_100day={rank_100}, rank_30day={rank_30}")
-                continue
-
             season_growth_rate = _safe_float(getattr(fi, "three_month_return", None), 0.0)
             month_growth_rate = _safe_float(getattr(fi, "month_return", None), 0.0)
             week_growth_rate = _safe_float(getattr(fi, "week_return", None), 0.0)
@@ -197,28 +216,13 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                 logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 趋势条件不满足 week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%, season={season_growth_rate:.2f}%")
                 continue
 
-            # 百分位排名数据
-            try:
-                _, season_item_rank, season_item_sc = get_fund_growth_rate(fi, '3Y')
-                _, month_item_rank, month_item_sc = get_fund_growth_rate(fi, 'Y')
-            except Exception as e:
-                logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 获取百分位排名数据异常 {e}")
-                continue
-            if not season_item_rank or not season_item_sc or season_item_sc == 0 \
-               or not month_item_rank or not month_item_sc or month_item_sc == 0:
-                logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 百分位排名数据不可用（season: rank={season_item_rank}, sc={season_item_sc}; month: rank={month_item_rank}, sc={month_item_sc}）")
-                continue
-
-            month_rank_rate = float(month_item_rank) / float(month_item_sc)
-            season_rank_rate = float(season_item_rank) / float(season_item_sc)
-            if month_rank_rate > 0.75 or season_rank_rate > 0.75:
-                logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 百分位排名过高 month_rank_rate={month_rank_rate:.2%}, season_rank_rate={season_rank_rate:.2%}（阈值<=75%）")
-                continue
+            # 原百分位排名数据检查已移动到公共部分
 
             # 5 日均值判定（分支内若仍保留，补充原因日志）
-            if not nav5_gate(fi, fund_name, fund_code, logger):
-                logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 5日均值判定未通过（详见公共服务日志）")
-                continue
+            # 已在公共部分检查，此处无需重复
+            # if not nav5_gate(fi, fund_name, fund_code, logger):
+            #     logger.info(f"[跳过] {fund_name}({fund_code}) | 原因: 5日均值判定未通过（详见公共服务日志）")
+            #     continue
 
             # 基金级不连续交易守卫（上一个交易日(nav_date)+今天，排除撤单）
             try:

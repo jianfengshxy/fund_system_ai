@@ -265,63 +265,69 @@ DEFAULT_FUND_PLAN_DETAIL = FundPlanDetail(
     shares=DEFAULT_SHARES
 )
 
-_user_cache_path = os.path.join(root_dir, 'src', 'service', '用户管理', 'user_cache.json')
-try:
-    with open(_user_cache_path, 'r', encoding='utf-8') as f:
-        _cache_raw = json.load(f)
+# -----------------------------------------------------------------------------
+# DEFAULT_USER Lazy Loading Logic
+# -----------------------------------------------------------------------------
 
-    # 兼容多用户缓存格式 {"users": {...}, "last_active_account": ...}
-    if "users" in _cache_raw and isinstance(_cache_raw["users"], dict):
-        # 优先使用 last_active_account
-        _target_acc = _cache_raw.get("last_active_account")
-        # 否则尝试使用默认账号 13918199137
-        if not _target_acc or _target_acc not in _cache_raw["users"]:
-            if "13918199137" in _cache_raw["users"]:
-                _target_acc = "13918199137"
-            # 否则取第一个
-            elif _cache_raw["users"]:
-                _target_acc = list(_cache_raw["users"].keys())[0]
+def _get_password_from_yaml(account):
+    try:
+        s_yaml_path = os.path.join(root_dir, 's.yaml')
+        if not os.path.exists(s_yaml_path):
+            return None
+        with open(s_yaml_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            # 简单正则匹配 s.yaml 中的账号密码配置
+            import re
+            pattern = r'"account":\s*"' + re.escape(account) + r'".*?"password":\s*"([^"]+)"'
+            match = re.search(pattern, content, re.DOTALL)
+            if match:
+                return match.group(1)
+    except Exception:
+        pass
+    return None
+
+def _load_default_user():
+    target_account = "13918199137"
     
-        if _target_acc and _target_acc in _cache_raw["users"]:
-            _cache = _cache_raw["users"][_target_acc]
-        else:
-            _cache = _cache_raw  # Fallback
-    else:
-        _cache = _cache_raw
+    # 尝试从 s.yaml 获取密码
+    password = _get_password_from_yaml(target_account)
+    if not password:
+        password = "sWX15706" # 默认回退密码
+        
+    user = None
+    try:
+        # 局部导入避免循环引用
+        from src.service.用户管理.用户信息 import get_user_all_info
+        
+        # get_user_all_info 内部逻辑：内存缓存 -> 文件缓存 -> 数据库 -> 登录
+        user = get_user_all_info(target_account, password)
+    except Exception as e:
+        print(f"Error loading default user via service: {e}")
+        
+    if not user:
+        # 如果服务获取失败，回退到使用常量构建基础对象
+        user_data = {
+            'account': target_account,
+            'password': password,
+            'paypassword': password,
+            'c_token': C_TOKEN,
+            'u_token': U_TOKEN,
+            'customer_no': USER_ID,
+            'customer_name': NAME,
+            'index': '5',
+            'passport_id': PASSPORT_ID,
+            'passport_uid': PASSPORT_ID,
+            'passport_ctoken': PASSPORT_CTOKEN,
+            'passport_utoken': PASSPORT_UTOKEN,
+        }
+        user = User.from_dict(user_data)
+    
+    # 确保 max_hqb_bank 存在
+    if not getattr(user, 'max_hqb_bank', None):
+        user.max_hqb_bank = DEFAULT_HQB_BANK
+        
+    return user
 
-    user_data = {
-        'account': _cache.get('account'),
-        'password': _cache.get('password'),
-        'paypassword': _cache.get('password'),
-        'c_token': _cache.get('c_token'),
-        'u_token': _cache.get('u_token'),
-        'customer_no': _cache.get('customer_no'),
-        'customer_name': _cache.get('customer_name'),
-        'index': str(_cache.get('index')) if _cache.get('index') is not None else '5',
-        'passport_id': _cache.get('passport_id'),
-        'passport_uid': _cache.get('passport_uid') or _cache.get('passport_id'),
-        'passport_ctoken': _cache.get('passport_ctoken'),
-        'passport_utoken': _cache.get('passport_utoken'),
-    }
-except Exception:
-    user_data = {
-        'account': '13918199137',
-        'password': 'sWX15706',
-        'paypassword': 'sWX15706',
-        'c_token': C_TOKEN,
-        'u_token': U_TOKEN,
-        'customer_no': USER_ID,
-        'customer_name': NAME,
-        'index': '5',
-        'passport_id': PASSPORT_ID,
-        'passport_uid': PASSPORT_ID,
-        'passport_ctoken': PASSPORT_CTOKEN,
-        'passport_utoken': PASSPORT_UTOKEN,
-    }
-
-# 创建默认用户对象并设置默认活期宝银行卡
-DEFAULT_USER = User.from_dict(user_data)
-DEFAULT_USER.max_hqb_bank = DEFAULT_HQB_BANK
 
 # 获取用户对象
 class _LazyConst:
@@ -345,6 +351,10 @@ class _LazyConst:
     def __str__(self):
         return str(self.value())
 
+# 使用 LazyConst 延迟加载 DEFAULT_USER，确保按需获取且逻辑正确
+# 解决旧逻辑中可能回退到其他账号的问题，强制锁定 13918199137
+DEFAULT_USER = _LazyConst(_load_default_user)
+
 def _load_qiu_xiaoyu():
     from src.service.用户管理.用户信息 import get_user_all_info
     return get_user_all_info("13918797997", "Zj951103")
@@ -354,6 +364,6 @@ QIU_XIAOYU = _LazyConst(_load_qiu_xiaoyu)
 
 if __name__ == '__main__':
     # 运行脚本时打印常量的实际值
-    print(QIU_XIAOYU)
+    # print(QIU_XIAOYU)
     print(DEFAULT_USER)
     # print(DEFAULT_FUND_PLAN_DETAIL)

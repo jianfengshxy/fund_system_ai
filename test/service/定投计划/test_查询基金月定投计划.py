@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO)
 
 def test_get_existing_monthly_day_map():
     user = DEFAULT_USER
-    fund_code = "001595"  # 天弘中证银行ETF联接C
+    fund_code = "011707"  # 天弘中证银行ETF联接C
     plan_list = getFundPlanList(fund_code, user)
     print(f"基金 {fund_code} 计划列表数量: {len(plan_list)}")
     day_map = get_existing_monthly_day_map(user, fund_code, sleep_sec=0.0)

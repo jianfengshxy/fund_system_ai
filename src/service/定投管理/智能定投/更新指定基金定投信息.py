@@ -364,7 +364,7 @@ if __name__ == "__main__":
         fund_code="021740",
         buy_strategy_switch=True,
         amount="10000.0",            # 更新金额为 5000
-        profit_percent="3.0%",      # 更新目标止盈为 7%
+        profit_percent="5.0%",      # 更新目标止盈为 7%
         period_type_filter=None,       # 仅更新月定投；传 None 则所有周期
         
         # --- 关键参数配置示例 ---

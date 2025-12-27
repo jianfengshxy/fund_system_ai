@@ -79,7 +79,18 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
                 continue
 
             try:
-                fund_amount = plan_assets if plan_assets and float(plan_assets) > 0 else 1.0
+                # 尝试从传入的 fund_list 中获取单次投资金额
+                fund_amount = 0.0
+                if fund_list:
+                    for item in fund_list:
+                        if item.get("fund_code") == fund_code:
+                            fund_amount = float(item.get("amount", 0.0))
+                            break
+                
+                # 如果没找到或为0，则默认使用当前资产（此时 times = 1.0，即不触发低仓位保护）
+                if fund_amount <= 0:
+                     fund_amount = float(plan_assets) if plan_assets and float(plan_assets) > 0 else 1.0
+
                 times = round(float(plan_assets) / float(fund_amount), 2)
             except Exception:
                 logger.info(f"基金 {fund_name}{fund_code} 的资产解析失败，跳过")

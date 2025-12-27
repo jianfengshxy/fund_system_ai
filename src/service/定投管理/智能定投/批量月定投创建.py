@@ -229,8 +229,8 @@ if __name__ == "__main__":
         # 批量创建 1–28 号的月定投（已存在则跳过）
         result = create_monthly_plans_for_fund(
             user=DEFAULT_USER,
-            fund_code="011707",
-            amount="5000.0",
+            fund_code="021740",
+            amount="10000.0",
             sub_account_name=None,
             skip_existing=True
         )

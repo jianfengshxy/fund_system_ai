@@ -67,6 +67,15 @@ def sell_0_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:List[
         else:
             amount = share.availableVol
 
+        # 检查剩余份额是否小于10
+        remaining_shares = share.availableVol - amount
+        if 0 < remaining_shares < 10:
+             # 如果剩余不足10份，则少卖出一点，凑够10份剩余
+             amount = share.availableVol - 10.0
+             if amount < 0:
+                 amount = 0.0
+
+
         if amount == 0.0:
             logger.info(f"{user.customer_name}基金{fund_code}({fund_name})的份额为0，跳过赎回操作", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_0_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
             return None
@@ -130,6 +139,15 @@ def sell_low_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:Lis
             amount = low_fee_shares
         else:
             amount = share.availableVol 
+
+        # 检查剩余份额是否小于10
+        remaining_shares = share.availableVol - amount
+        if 0 < remaining_shares < 10:
+             # 如果剩余不足10份，则少卖出一点，凑够10份剩余
+             amount = share.availableVol - 10.0
+             if amount < 0:
+                 amount = 0.0
+ 
 
         # 检查份额是否为0
         if amount == 0.0:

@@ -50,6 +50,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def get_bank_balance_threshold():
+    """
+    读取银行卡余额阈值：
+    - 优先读取环境变量 BANK_BALANCE_THRESHOLD
+    - 其次尝试读取本地 s.yaml 配置文件
+    - 非法或未设置时回退为 300000.0
+    """
+    # 1. 尝试从环境变量读取
+    env_val = os.environ.get('BANK_BALANCE_THRESHOLD')
+    if env_val:
+        try:
+            val = float(env_val)
+            logger.info(f"Loaded BANK_BALANCE_THRESHOLD from environment variable: {val}")
+            return val
+        except ValueError:
+            logger.warning(f"环境变量 BANK_BALANCE_THRESHOLD 非法值: {env_val}，尝试从配置文件读取")
+
+    # 2. 尝试从 s.yaml 读取
     try:
         yaml_path = os.path.join(root_dir, 's.yaml')
         if os.path.exists(yaml_path):
@@ -61,6 +78,8 @@ def get_bank_balance_threshold():
                     return float(val)
     except Exception as e:
         logger.warning(f"Failed to load s.yaml: {e}")
+    
+    # 3. 使用默认值
     logger.info("Using default BANK_BALANCE_THRESHOLD: 300000.0")
     return 300000.0
 
@@ -153,7 +172,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
     logger.info(f"其他指标：波动率{volatility}%，100日排名{rank_100}，投资次数{times}")
    
     if shares == []:
-        logger.info("份额为空，返回False")
+        # logger.info("份额为空，返回False")
         return False
         
     if estimated_profit_rate < 1.0:
@@ -210,7 +229,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         
         #检查银行卡余额,小于30万，且收益大于1.0，立即卖出费率为0的份额
         if estimated_profit_rate > 3.0 and CurrentRealBalance < BANK_BALANCE_THRESHOLD and fund_type == '000' and "QDII" not in fund_name:
-            logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:1.0.")
+            logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},阈值:{BANK_BALANCE_THRESHOLD},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0.")
             sell_usable_non_zero_fee_shares(user,sub_account_no,fund_code,shares)
             return True
         else:
@@ -218,7 +237,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             
         #检查银行卡余额,小于50万，且收益大于3.0，立即卖出费率为0的份额
         if estimated_profit_rate > 3.0 and CurrentRealBalance < BANK_BALANCE_THRESHOLD and fund_type in ['001','002'] and rank_100 is not None and rank_100 > 80:
-            logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0, 100日排名:{rank_100}.")
+            logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},阈值:{BANK_BALANCE_THRESHOLD},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0, 100日排名:{rank_100}.")
             sell_usable_non_zero_fee_shares(user,sub_account_no,fund_code,shares)
             return True
     logger.info("所有止盈条件都不满足，返回True")

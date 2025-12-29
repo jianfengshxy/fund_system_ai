@@ -1,0 +1,318 @@
+
+请求：
+curl -H "Host: fundcomapi.tiantianfunds.com" -H "tracestate: pid=0x104d5e3f0,taskid=0x174db1bc0" -H "Accept: */*" -H "GTOKEN: 03FC9273690F4DC4B71CB2247A0E4338" -H "clientInfo: ttjj-iPhone18,1-iOS-iOS26.0.1" -H "MP-VERSION: 3.6.8" -H "Accept-Language: zh-Hans-CN;q=1" -H "validmark: Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZdSIrQ1Lx4ygfw5br2rQnUfMES8ernsO5lB/RKZKLdR3yjfnrfzfHdSgXTLHDA0NGIiANDpxJn4QqsyZYAe8zKMA==" -H "User-Agent: EMProjJijin/6.8.3 (iPhone; iOS 26.0.1; Scale/3.00)" -H "Referer: https://mpservice.com/516939c37bdb4ba2b1138c50cf69a2e1/release/pages/increase-list/index" -H "traceparent: 00-8f41444868164c8a91be49506978b527-0000000000000000-01" --data "FCODE=018125&RANGE=3y&ctoken=wNQBRXssdPQTwS7LxDmZAF_EQQB0vHyzI1uLKbciCMfQFeO3p1EDc-b-tmthy3-ygdOV2kgiLcmdZ7CT7HNPmKbZ0YPYslfNbdLlZiA0NC8VOscLHgL9g0V5Kx3834RETbSA36THb3ZdiHRpNykFIYkP4YW8dp0HCieRkC3MHjXSPVcgzvW4fwjeQy0PlfeMiUaG3fYULJ1ROGUeIa8YawqC6Fti2STUTodGi6lV2gonXoyRjnBUp2lPfkEuKTVg8pQuzUDGyDTIvyJkOx4cSw.5&deviceid=F5F9C233-F56B-4ED8-8B09-CE448DB28B3C&passportctoken=GOR9_-81zEnYmw3xp5TWD49ozr1qpULOIIwQ9yUoRIwTQem88JrRTQD0xisKLJWD7hjsCNi5Y_a00CLEK5mR8sAQzSFBwLTATG-iAPp_ZRKAixn-QKQqg_rTL5IXNyo1rWp7u17UDpd6mUPMbznWEp2iqfQpEeKGCv0XpGOkWBs&passportid=8461315737102942&passportutoken=QjaJ8B6U43EzrU9QuBKxUThD6Q31I_lmcTHRAb3hZyokq51uHNWw9TN1dAZno6qboZqs8GXv4bNKPyK461WilSX5YWLfNsy2tXjnEOExa5HSa73ozclfAQn8KFkbVp7-G2LWcdo2YK3QvyiLXPKYS7g4wnuSc6oO6-BBt_5Q2j459aePa2K2btTmMO6KXX8B0sdsrbHpXJkgLx-2ifYnpwwG3zvbNe272U470MhP_We2Hdss4puBh5HcwhJLHiRVCZqXMIyXlB7NM1vO6kikrnndm89XXvaKX6iiXb4vLT6gRBg1TSFr2Vo5XcLkVinATleOcIXeSfwadUb5k2NGRGtEdH12YVnGda3JZhQFt6Y7XPdS6ZKNMA&plat=Iphone&product=EFund&uid=cd0b7906b53b43ffa508a99744b4055b&userid=cd0b7906b53b43ffa508a99744b4055b&utoken=PXZ9SiXOeuHbJ5HoBTuAYuUSECkrJfKNReT_FD7HjAwucfw6FYopb0E_F1DxNJJ3k2lCroZWkaIN9y7Upkk0JDyQP9YetleVdB72noUIhmDmQBChnIj4r3AQlgc0ohmwjCY5TNxlueU7iMCHLYr4YU9FB1Lgbj9eHQ6mglAm7vA.5&version=6.8.3" --compressed "https://119.3.45.234/mm/FundMNewApi/FundRankDiagram"
+
+响应：
+
+{
+	"data": [
+		{
+			"PDATE": "2025-09-26",
+			"QRANK": "860.0",
+			"QSC": "4736.0"
+		},
+		{
+			"PDATE": "2025-09-29",
+			"QRANK": "687.0",
+			"QSC": "4715.0"
+		},
+		{
+			"PDATE": "2025-09-30",
+			"QRANK": "958.0",
+			"QSC": "4747.0"
+		},
+		{
+			"PDATE": "2025-10-09",
+			"QRANK": "681.0",
+			"QSC": "4731.0"
+		},
+		{
+			"PDATE": "2025-10-10",
+			"QRANK": "549.0",
+			"QSC": "4760.0"
+		},
+		{
+			"PDATE": "2025-10-13",
+			"QRANK": "958.0",
+			"QSC": "4737.0"
+		},
+		{
+			"PDATE": "2025-10-14",
+			"QRANK": "1446.0",
+			"QSC": "4738.0"
+		},
+		{
+			"PDATE": "2025-10-15",
+			"QRANK": "1162.0",
+			"QSC": "4742.0"
+		},
+		{
+			"PDATE": "2025-10-16",
+			"QRANK": "2067.0",
+			"QSC": "4742.0"
+		},
+		{
+			"PDATE": "2025-10-17",
+			"QRANK": "2519.0",
+			"QSC": "4774.0"
+		},
+		{
+			"PDATE": "2025-10-20",
+			"QRANK": "1811.0",
+			"QSC": "4744.0"
+		},
+		{
+			"PDATE": "2025-10-21",
+			"QRANK": "2072.0",
+			"QSC": "4744.0"
+		},
+		{
+			"PDATE": "2025-10-22",
+			"QRANK": "1679.0",
+			"QSC": "4754.0"
+		},
+		{
+			"PDATE": "2025-10-23",
+			"QRANK": "2056.0",
+			"QSC": "4756.0"
+		},
+		{
+			"PDATE": "2025-10-24",
+			"QRANK": "1717.0",
+			"QSC": "4786.0"
+		},
+		{
+			"PDATE": "2025-10-27",
+			"QRANK": "1794.0",
+			"QSC": "4758.0"
+		},
+		{
+			"PDATE": "2025-10-28",
+			"QRANK": "1557.0",
+			"QSC": "4764.0"
+		},
+		{
+			"PDATE": "2025-10-29",
+			"QRANK": "1475.0",
+			"QSC": "4763.0"
+		},
+		{
+			"PDATE": "2025-10-30",
+			"QRANK": "1497.0",
+			"QSC": "4763.0"
+		},
+		{
+			"PDATE": "2025-10-31",
+			"QRANK": "1141.0",
+			"QSC": "4797.0"
+		},
+		{
+			"PDATE": "2025-11-03",
+			"QRANK": "1246.0",
+			"QSC": "4766.0"
+		},
+		{
+			"PDATE": "2025-11-04",
+			"QRANK": "2082.0",
+			"QSC": "4768.0"
+		},
+		{
+			"PDATE": "2025-11-05",
+			"QRANK": "2255.0",
+			"QSC": "4782.0"
+		},
+		{
+			"PDATE": "2025-11-06",
+			"QRANK": "2415.0",
+			"QSC": "4782.0"
+		},
+		{
+			"PDATE": "2025-11-07",
+			"QRANK": "2900.0",
+			"QSC": "4813.0"
+		},
+		{
+			"PDATE": "2025-11-10",
+			"QRANK": "3450.0",
+			"QSC": "4783.0"
+		},
+		{
+			"PDATE": "2025-11-11",
+			"QRANK": "3434.0",
+			"QSC": "4791.0"
+		},
+		{
+			"PDATE": "2025-11-12",
+			"QRANK": "3825.0",
+			"QSC": "4804.0"
+		},
+		{
+			"PDATE": "2025-11-13",
+			"QRANK": "4020.0",
+			"QSC": "4803.0"
+		},
+		{
+			"PDATE": "2025-11-14",
+			"QRANK": "3866.0",
+			"QSC": "4839.0"
+		},
+		{
+			"PDATE": "2025-11-17",
+			"QRANK": "3971.0",
+			"QSC": "4811.0"
+		},
+		{
+			"PDATE": "2025-11-18",
+			"QRANK": "4024.0",
+			"QSC": "4813.0"
+		},
+		{
+			"PDATE": "2025-11-19",
+			"QRANK": "4457.0",
+			"QSC": "4815.0"
+		},
+		{
+			"PDATE": "2025-11-20",
+			"QRANK": "4455.0",
+			"QSC": "4817.0"
+		},
+		{
+			"PDATE": "2025-11-21",
+			"QRANK": "3941.0",
+			"QSC": "4853.0"
+		},
+		{
+			"PDATE": "2025-11-24",
+			"QRANK": "4046.0",
+			"QSC": "4818.0"
+		},
+		{
+			"PDATE": "2025-11-25",
+			"QRANK": "4146.0",
+			"QSC": "4823.0"
+		},
+		{
+			"PDATE": "2025-11-26",
+			"QRANK": "3607.0",
+			"QSC": "4827.0"
+		},
+		{
+			"PDATE": "2025-11-27",
+			"QRANK": "3502.0",
+			"QSC": "4826.0"
+		},
+		{
+			"PDATE": "2025-11-28",
+			"QRANK": "2548.0",
+			"QSC": "4855.0"
+		},
+		{
+			"PDATE": "2025-12-01",
+			"QRANK": "2372.0",
+			"QSC": "4815.0"
+		},
+		{
+			"PDATE": "2025-12-02",
+			"QRANK": "4095.0",
+			"QSC": "4826.0"
+		},
+		{
+			"PDATE": "2025-12-03",
+			"QRANK": "3823.0",
+			"QSC": "4822.0"
+		},
+		{
+			"PDATE": "2025-12-04",
+			"QRANK": "2619.0",
+			"QSC": "4825.0"
+		},
+		{
+			"PDATE": "2025-12-05",
+			"QRANK": "2375.0",
+			"QSC": "4865.0"
+		},
+		{
+			"PDATE": "2025-12-08",
+			"QRANK": "3578.0",
+			"QSC": "4824.0"
+		},
+		{
+			"PDATE": "2025-12-09",
+			"QRANK": "3758.0",
+			"QSC": "4832.0"
+		},
+		{
+			"PDATE": "2025-12-10",
+			"QRANK": "3323.0",
+			"QSC": "4833.0"
+		},
+		{
+			"PDATE": "2025-12-11",
+			"QRANK": "3807.0",
+			"QSC": "4837.0"
+		},
+		{
+			"PDATE": "2025-12-12",
+			"QRANK": "3841.0",
+			"QSC": "4886.0"
+		},
+		{
+			"PDATE": "2025-12-15",
+			"QRANK": "4244.0",
+			"QSC": "4858.0"
+		},
+		{
+			"PDATE": "2025-12-16",
+			"QRANK": "4771.0",
+			"QSC": "4866.0"
+		},
+		{
+			"PDATE": "2025-12-17",
+			"QRANK": "4801.0",
+			"QSC": "4869.0"
+		},
+		{
+			"PDATE": "2025-12-18",
+			"QRANK": "4826.0",
+			"QSC": "4871.0"
+		},
+		{
+			"PDATE": "2025-12-19",
+			"QRANK": "4847.0",
+			"QSC": "4899.0"
+		},
+		{
+			"PDATE": "2025-12-22",
+			"QRANK": "4833.0",
+			"QSC": "4872.0"
+		},
+		{
+			"PDATE": "2025-12-23",
+			"QRANK": "4857.0",
+			"QSC": "4876.0"
+		},
+		{
+			"PDATE": "2025-12-24",
+			"QRANK": "4853.0",
+			"QSC": "4876.0"
+		},
+		{
+			"PDATE": "2025-12-25",
+			"QRANK": "4741.0",
+			"QSC": "4880.0"
+		},
+		{
+			"PDATE": "2025-12-26",
+			"QRANK": "4744.0",
+			"QSC": "4912.0"
+		}
+	],
+	"errorCode": 0,
+	"firstError": null,
+	"success": true,
+	"hasWrongToken": null,
+	"totalCount": 60,
+	"expansion": null,
+	"jf": "huawei"
+}
+

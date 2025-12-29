@@ -17,6 +17,8 @@ from src.domain.user.User import User
 from src.API.定投计划管理.SmartPlan import getFundRations, getPlanDetailPro
 from src.bussiness.最优止盈组合.increase import increase
 from src.service.用户管理.用户信息 import get_user_all_info
+from index import increase as increase_handler
+import json
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)d)')
@@ -39,8 +41,40 @@ def test_increase():
     # 打印测试结果
     logger.info(f"加仓测试结果: {'成功' if result else '失败'}")
 
+def test_increase_event_success():
+    """测试 index.increase 函数 (Event Handler)"""
+    # 使用提供的 payload 制造 event
+    payload = {
+        "account": "13918199137",
+        "password": "sWX15706",
+        "sub_account_name": "飞龙在天",
+        "total_budget": 1000000.0,
+        "amount": 10000.0,
+        "fund_type": "all"
+    }
+    event = {'payload': json.dumps(payload)}
+    context = None  # 可以根据需要模拟 context，如果不需要则设为 None
+    
+    # 直接调用 increase 函数
+    increase_handler(event, context)
+
+def test_increase_missing_params():
+    """测试 index.increase 函数缺少参数的情况"""
+    # 测试缺少参数的情况
+    payload = {
+        "account": "13918199137",
+        "password": "sWX15706",
+        # 缺少 sub_account_name 和 total_budget
+    }
+    event = {'payload': json.dumps(payload)}
+    context = None
+    
+    # 直接调用 increase 函数
+    increase_handler(event, context)
+
 if __name__ == "__main__":
     # 直接运行测试
     logger.info("直接运行止盈测试")
     test_increase()
+    # test_increase_event_success()
     

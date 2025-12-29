@@ -13,6 +13,8 @@ if root_dir not in sys.path:
 from src.service.用户管理.用户信息 import get_user_all_info
 from src.bussiness.最优止盈组合.add_new import add_new_funds
 from src.common.constant import DEFAULT_USER
+from index import add_new
+import json
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)d)')
@@ -46,3 +48,21 @@ def test_add_new_funds():
 
 if __name__ == "__main__":
     test_add_new_funds()
+
+def test_add_new_event_success():
+    """测试 index.add_new 函数 (Event Handler)"""
+    logger.info("开始测试 index.add_new (Event Handler)")
+    # 使用提供的 payload 制造 event
+    payload = {
+        "account": "13918199137",
+        "password": "sWX15706",
+        "sub_account_name": "飞龙在天",
+        "total_budget": 1000000.0,
+        "amount": 50000.0,
+        "fund_type": "non_index"
+    }
+    event = {'payload': json.dumps(payload)}
+    context = None  # 可以根据需要模拟 context，如果不需要则设为 None
+    
+    # 直接调用 add_new 函数
+    add_new(event, context)

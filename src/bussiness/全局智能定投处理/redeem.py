@@ -85,6 +85,42 @@ def get_bank_balance_threshold():
 
 BANK_BALANCE_THRESHOLD = get_bank_balance_threshold()
 
+def get_profit_threshold_for_low_balance():
+    """
+    读取低余额止盈收益率阈值：
+    - 优先读取环境变量 PROFIT_THRESHOLD_FOR_LOW_BALANCE
+    - 其次尝试读取本地 s.yaml 配置文件
+    - 非法或未设置时回退为 1.0
+    """
+    # 1. 尝试从环境变量读取
+    env_val = os.environ.get('PROFIT_THRESHOLD_FOR_LOW_BALANCE')
+    if env_val:
+        try:
+            val = float(env_val)
+            logger.info(f"Loaded PROFIT_THRESHOLD_FOR_LOW_BALANCE from environment variable: {val}")
+            return val
+        except ValueError:
+            logger.warning(f"环境变量 PROFIT_THRESHOLD_FOR_LOW_BALANCE 非法值: {env_val}，尝试从配置文件读取")
+
+    # 2. 尝试从 s.yaml 读取
+    try:
+        yaml_path = os.path.join(root_dir, 's.yaml')
+        if os.path.exists(yaml_path):
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+                val = config.get('vars', {}).get('common', {}).get('props', {}).get('environmentVariables', {}).get('PROFIT_THRESHOLD_FOR_LOW_BALANCE')
+                if val:
+                    logger.info(f"Loaded PROFIT_THRESHOLD_FOR_LOW_BALANCE from s.yaml: {val}")
+                    return float(val)
+    except Exception as e:
+        logger.warning(f"Failed to load s.yaml: {e}")
+    
+    # 3. 使用默认值
+    logger.info("Using default PROFIT_THRESHOLD_FOR_LOW_BALANCE: 1.0")
+    return 1.0
+
+PROFIT_THRESHOLD_FOR_LOW_BALANCE = get_profit_threshold_for_low_balance()
+
 def default_user_redeem_all_fund_plans():
     """默认用户批量止盈"""
     # 打印测试开始信息
@@ -227,17 +263,17 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             CurrentRealBalance = bank_card_info.CurrentRealBalance
             logger.info(f"银行卡余额：{CurrentRealBalance}")
         
-        #检查银行卡余额,小于30万，且收益大于1.0，立即卖出费率为0的份额
-        if estimated_profit_rate > 3.0 and CurrentRealBalance < BANK_BALANCE_THRESHOLD and fund_type == '000' and "QDII" not in fund_name:
-            logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},阈值:{BANK_BALANCE_THRESHOLD},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0.")
+        #检查银行卡余额,小于30万，且收益大于PROFIT_THRESHOLD_FOR_LOW_BALANCE，且投资次数小于5.0次，立即卖出费率为0的份额
+        if estimated_profit_rate > PROFIT_THRESHOLD_FOR_LOW_BALANCE and CurrentRealBalance < BANK_BALANCE_THRESHOLD and fund_type == '000' and "QDII" not in fund_name and times < 5.0:
+            logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},阈值:{BANK_BALANCE_THRESHOLD},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:{PROFIT_THRESHOLD_FOR_LOW_BALANCE},投资次数:{times}.")
             sell_usable_non_zero_fee_shares(user,sub_account_no,fund_code,shares)
             return True
         else:
             logger.info(f"指数基金余额条件检查：预估收益{estimated_profit_rate}，余额{CurrentRealBalance}，基金类型{fund_type}，估值变化{fund_info.estimated_change}")
             
-        #检查银行卡余额,小于50万，且收益大于3.0，立即卖出费率为0的份额
-        if estimated_profit_rate > 3.0 and CurrentRealBalance < BANK_BALANCE_THRESHOLD and fund_type in ['001','002'] and rank_100 is not None and rank_100 > 80:
-            logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},阈值:{BANK_BALANCE_THRESHOLD},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0, 100日排名:{rank_100}.")
+        #检查银行卡余额,小于50万，且收益大于3.0，且投资次数小于5.0次，立即卖出费率为0的份额
+        if estimated_profit_rate > 3.0 and CurrentRealBalance < BANK_BALANCE_THRESHOLD and fund_type in ['001','002'] and rank_100 is not None and rank_100 > 80 and times < 5.0:
+            logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},阈值:{BANK_BALANCE_THRESHOLD},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0, 100日排名:{rank_100},投资次数:{times}.")
             sell_usable_non_zero_fee_shares(user,sub_account_no,fund_code,shares)
             return True
     logger.info("所有止盈条件都不满足，返回True")

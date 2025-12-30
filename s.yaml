@@ -52,6 +52,7 @@ vars:
         VPC_ID: ${vars.common.database.vpc_id}
         CIDR: ${vars.common.database.cidr}
         BANK_BALANCE_THRESHOLD: "1000000"
+        PROFIT_THRESHOLD_FOR_LOW_BALANCE: "1.0"
   # 自定义组合共享 payload（避免三处重复维护）
   custom_portfolio_payload: >
     {"account": "13918199137", "password": "sWX15706",

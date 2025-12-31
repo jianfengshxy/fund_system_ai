@@ -1,6 +1,5 @@
 # 顶部导入片段
 import logging
-from src.common.logger import get_logger
 import os
 import sys
 from typing import Optional, List, Tuple
@@ -11,6 +10,8 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 # 如果项目根目录不在Python路径中，则添加
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
+
+from src.common.logger import get_logger
 
 from src.domain.user.User import User
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name

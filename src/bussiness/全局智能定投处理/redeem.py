@@ -263,9 +263,9 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             CurrentRealBalance = bank_card_info.CurrentRealBalance
             logger.info(f"银行卡余额：{CurrentRealBalance}")
         
-        #检查银行卡余额,小于30万，且收益大于PROFIT_THRESHOLD_FOR_LOW_BALANCE，且投资次数小于5.0次，立即卖出费率为0的份额
-        if estimated_profit_rate > PROFIT_THRESHOLD_FOR_LOW_BALANCE and CurrentRealBalance < BANK_BALANCE_THRESHOLD and fund_type == '000' and "QDII" not in fund_name and times < 5.0:
-            logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},阈值:{BANK_BALANCE_THRESHOLD},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:{PROFIT_THRESHOLD_FOR_LOW_BALANCE},投资次数:{times}.")
+        #检查银行卡余额,小于30万，且收益大于PROFIT_THRESHOLD_FOR_LOW_BALANCE，且投资次数小于5.0次，且当日估值增长率大于0.5%，立即卖出费率为0的份额
+        if estimated_profit_rate > PROFIT_THRESHOLD_FOR_LOW_BALANCE and CurrentRealBalance < BANK_BALANCE_THRESHOLD and fund_type == '000' and "QDII" not in fund_name and times < 5.0 and estimated_change > 0.5:
+            logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},阈值:{BANK_BALANCE_THRESHOLD},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:{PROFIT_THRESHOLD_FOR_LOW_BALANCE},投资次数:{times},估值增长率:{estimated_change}.")
             sell_usable_non_zero_fee_shares(user,sub_account_no,fund_code,shares)
             return True
         else:

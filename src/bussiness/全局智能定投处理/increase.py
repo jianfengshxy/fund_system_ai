@@ -104,7 +104,42 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     
     logger.info(f"计划详情 - 组合账号: {sub_account_no}, 组合名称: {sub_account_name}")
     logger.info(f"计划详情 - 周期类型: {period_type}, 周期值: {period_value}, 定投金额: {fund_amount}, 计划类型: {plan_type}")
-   
+    
+    #这里最强风控处理极端情况
+    # Strict Bear Protection (Triple Circuit Breaker)
+    # 逻辑: 如果年收益率 <= 0 或 半年收益率 <= 0 或 季度收益率 <= 0, 停止一切加仓.
+    
+    # 1. 获取收益率数据 (Handle None values safely)
+    season_return = getattr(fund_info, "three_month_return", None)
+    half_year_return = getattr(fund_info, "six_month_return", None)
+    year_return = getattr(fund_info, "year_return", None)
+    
+    # Convert to float or None if not valid
+    season_val = float(season_return) if isinstance(season_return, (int, float)) else None
+    half_year_val = float(half_year_return) if isinstance(half_year_return, (int, float)) else None
+    year_val = float(year_return) if isinstance(year_return, (int, float)) else None
+    
+    stop_reason = None
+    
+    if season_val is not None and season_val <= 0:
+        stop_reason = f"季度收益率({season_val}%) <= 0"
+    elif half_year_val is not None and half_year_val <= 0:
+        stop_reason = f"半年收益率({half_year_val}%) <= 0"
+    elif year_val is not None and year_val <= 0:
+        stop_reason = f"年收益率({year_val}%) <= 0"
+        
+    if stop_reason:
+        logger.info(f"最强风控触发 - {fund_name}{fund_code} {stop_reason}，执行回撤")
+        # 回撤所有交易
+        for i, trade in enumerate(trades):
+            logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+            try:
+                revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+                logger.info("交易回撤成功")
+            except Exception as e:
+                logger.error(f"交易回撤失败: {e}")
+        logger.info(f"最强风控触发完成. Skip......")
+        return True
     
     try:
         asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)

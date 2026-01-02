@@ -405,14 +405,14 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
 
             logger.info(f"所有条件检查通过 - {customer_name}在组合{sub_account_name}中{fund_name}{fund_code}候选成功.") 
             
-            # 10倍逻辑检查
+            # 3倍逻辑检查
             if estimated_profit_rate < -5.0 and times > 15 :
-                logger.info(f"10倍加仓逻辑 - {customer_name}在组合{sub_account_name}中{fund_name}{fund_code}满足10倍逻辑条件，预估收益率: {estimated_profit_rate}, 倍数: {times}")
+                logger.info(f"3倍加仓逻辑 - {customer_name}在组合{sub_account_name}中{fund_name}{fund_code}满足3倍逻辑条件，预估收益率: {estimated_profit_rate}, 倍数: {times}")
                 try:
-                    commit_order(user, sub_account_no, fund_code, fund_amount * 10.0)
-                    logger.info(f"10倍加仓订单提交成功 - 金额: {fund_amount * 10.0}")
+                    commit_order(user, sub_account_no, fund_code, fund_amount * 3.0)
+                    logger.info(f"3倍加仓订单提交成功 - 金额: {fund_amount * 3.0}")
                 except Exception as e:
-                    logger.error(f"10倍加仓订单提交失败: {e}")
+                    logger.error(f"3倍加仓订单提交失败: {e}")
                 return True 
                 
             # 基础加仓

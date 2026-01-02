@@ -1,0 +1,56 @@
+{
+  "summary": {
+    "total_investment": 18355000,
+    "final_value": 19202325.822336297,
+    "total_profit": 847325.8223362975,
+    "total_return_rate": 4.616321559990724,
+    "annualized_return": 0.9408525628991304,
+    "max_investment": 18355000,
+    "investment_days": 1759
+  },
+  "yearly_metrics": [
+    {
+      "year": 2021,
+      "total_investment": 3125000,
+      "ending_value": 2849844.143679913,
+      "max_investment": 3125000,
+      "investment_count": 215,
+      "yearly_return": 0
+    },
+    {
+      "year": 2022,
+      "total_investment": 6925000,
+      "ending_value": 7964300.221839063,
+      "max_investment": 6925000,
+      "investment_count": 260,
+      "yearly_return": 19.76672008784482
+    },
+    {
+      "year": 2023,
+      "total_investment": 10725000,
+      "ending_value": 8409891.569633096,
+      "max_investment": 10725000,
+      "investment_count": 260,
+      "yearly_return": -28.51345672034869
+    },
+    {
+      "year": 2024,
+      "total_investment": 14545000,
+      "ending_value": 12943137.819594702,
+      "max_investment": 14545000,
+      "investment_count": 262,
+      "yearly_return": 5.831991607616542
+    },
+    {
+      "year": 2025,
+      "total_investment": 18355000,
+      "ending_value": 19202325.822336297,
+      "max_investment": 18355000,
+      "investment_count": 261,
+      "yearly_return": 14.619279260491677
+    }
+  ],
+  "fund_code": "011707",
+  "strategy_description": "5个周定投（周一至周五各10000元） + 28个月定投（1-28号各5000元）",
+  "analysis_date": "2026-01-02 15:24:44"
+}

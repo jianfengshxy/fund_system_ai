@@ -1,0 +1,269 @@
+# 定投加仓算法详细说明
+
+## 📋 算法概述
+文件路径: `/Users/m672372/Documents/fund_system_ai/src/bussiness/全局智能定投处理/increase.py`
+主要函数: `increase(user: User, plan_detail: FundPlanDetail) -> bool`
+
+## 🎯 算法核心目标
+智能判断是否执行定投加仓操作，通过多重风控条件确保投资安全性
+
+## 🔄 算法执行流程
+
+### 1. 初始化阶段
+```python
+# 1.1 日志记录开始
+logger.info(f"========== 开始执行加仓算法 ==========")
+
+# 1.2 获取用户和基金基本信息
+customer_name = user.customer_name
+fund_code = plan_detail.rationPlan.fundCode
+fund_name = plan_detail.rationPlan.fundName
+
+# 1.3 获取详细的基金信息
+fund_info = get_all_fund_info(user, fund_code)
+```
+
+### 2. 基础信息获取
+```python
+# 2.1 获取组合账户信息
+sub_account_no = plan_detail.rationPlan.subAccountNo
+sub_account_name = plan_detail.rationPlan.subAccountName
+
+# 2.2 获取银行份额信息
+try:
+    shares = get_bank_shares(user, sub_account_no, fund_code)
+except:
+    shares = []  # 异常时使用空列表
+
+# 2.3 获取定投计划参数
+period_type = plan_detail.rationPlan.periodType  # 周期类型
+period_value = plan_detail.rationPlan.periodValue  # 周期值
+fund_amount = plan_detail.rationPlan.amount  # 定投金额
+plan_type = plan_detail.rationPlan.planType  # 计划类型
+```
+
+### 3. 时间信息处理
+```python
+# 3.1 获取当前日期信息
+current_date = datetime.now()
+day_of_month = current_date.day  # 当月第几天
+day_of_week_number = current_date.weekday()  # 星期几(0=周一)
+```
+
+### 4. 交易查询阶段
+```python
+# 4.1 查询可回撤的定投交易
+trades = get_trades_list(user, sub_account_no=sub_account_no, 
+                       fund_code=fund_code, bus_type="4", status="7")
+
+# 4.2 如果没有可回撤交易，直接返回
+if not trades or len(trades) == 0:
+    logger.info("今天没有可以回撤的定投计划交易记录。Skip ..........")
+    return True
+```
+
+### 5. 🚨 最强风控处理（核心风控）
+```python
+# 5.1 获取收益率数据
+season_return = getattr(fund_info, "three_month_return", None)  # 季度收益率
+half_year_return = getattr(fund_info, "six_month_return", None)  # 半年收益率  
+year_return = getattr(fund_info, "year_return", None)  # 年收益率
+
+# 5.2 转换为数值类型
+season_val = float(season_return) if isinstance(season_return, (int, float)) else None
+half_year_val = float(half_year_return) if isinstance(half_year_return, (int, float)) else None
+year_val = float(year_return) if isinstance(year_return, (int, float)) else None
+
+# 5.3 三重熔断机制（任意一个条件触发就停止所有加仓）
+stop_reason = None
+if season_val is not None and season_val <= 0:
+    stop_reason = f"季度收益率({season_val}%) <= 0"
+elif half_year_val is not None and half_year_val <= 0:
+    stop_reason = f"半年收益率({half_year_val}%) <= 0"
+elif year_val is not None and year_val <= 0:
+    stop_reason = f"年收益率({year_val}%) <= 0"
+
+# 5.4 如果触发风控，回撤所有交易并停止
+if stop_reason:
+    logger.info(f"最强风控触发 - {fund_name}{fund_code} {stop_reason}，执行回撤")
+    for trade in trades:
+        revoke_order(user, trade.busin_serial_no, trade.business_code, 
+                   plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+    return True
+```
+
+### 6. 资产详情获取
+```python
+# 6.1 获取资产详情
+asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
+if asset_detail is None:
+    logger.info("资产为空。Skip ..........")
+    return True
+
+# 6.2 计算关键指标
+plan_assets = asset_detail.asset_value  # 资产价值
+constant_profit_rate = asset_detail.constant_profit_rate  # 当前收益率
+on_way_transaction_count = asset_detail.on_way_transaction_count  # 在途交易数
+times = round(plan_assets / fund_amount, 2)  # 资产倍数
+
+# 6.3 计算预估收益率
+current_profit_rate = constant_profit_rate if constant_profit_rate is not None else 0.0
+estimated_change = fund_info.estimated_change if fund_info.estimated_change is not None else 0.0
+estimated_profit_rate = current_profit_rate + estimated_change  # 预估收益率
+```
+
+### 7. 周期匹配检查
+```python
+# 7.1 月定投延期检查
+if period_type == 3 and period_value != day_of_month:
+    logger.info("月定投延期检查 - 计划执行日期与当前日期不匹配，执行回撤")
+    for trade in trades:
+        revoke_order(user, trade.busin_serial_no, trade.business_code, 
+                   plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+    return True
+
+# 7.2 周定投延期检查  
+if period_type == 1 and period_value != day_of_week_number + 1:
+    logger.info("周定投延期检查 - 计划执行星期与当前星期不匹配，执行回撤")
+    for trade in trades:
+        revoke_order(user, trade.busin_serial_no, trade.business_code,
+                   plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+    return True
+```
+
+### 8. 技术分析风控
+```python
+# 8.1 5日均线守卫
+bypass_ma5 = (period_type != 3) and (times <= 1)  # 特殊情况绕过MA5检查
+gate_ok = True if bypass_ma5 else bool(nav5_gate(fund_info, fund_name, fund_code, logger))
+
+# 8.2 如果MA5检查未通过，回撤所有交易
+if not gate_ok:
+    logger.info("5日均线守卫未通过（估算净值≤5日均值）：撤回当天所有可回撤交易")
+    for trade in trades:
+        revoke_order(user, trade.busin_serial_no, trade.business_code,
+                   plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+    return True
+```
+
+### 9. 交易连续性检查
+```python
+# 9.1 检查昨日和今日是否有买入提交
+prev_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {prev_trade_day})
+today_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {today})
+
+# 9.2 如果存在连续交易，回撤并停止
+if prev_trade_pre is not None:
+    logger.info("同基金不连续守卫触发 - 昨日或今日存在买入/定投提交，执行回撤")
+    for trade in trades:
+        revoke_order(user, trade.busin_serial_no, trade.business_code,
+                   plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+    return True
+```
+
+### 10. 收益率条件判断
+```python
+# 10.1 首次定投例外
+is_first_investment = (times == 1.0)
+if is_first_investment:
+    return True  # 首次投资直接通过
+
+# 10.2 收益率过高检查
+if not is_first_investment and estimated_profit_rate > -1.0:
+    logger.info(f"预估收益率{estimated_profit_rate}% > -1.0%，执行回撤")
+    for trade in trades:
+        revoke_order(user, trade.busin_serial_no, trade.business_code,
+                   plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+    return True
+```
+
+### 11. 份额一致性检查
+```python
+# 11.1 计算总份额和可用份额
+totalVol = sum(share.totalVol for share in shares)
+availableVol = sum(share.availableVol for share in shares)
+
+# 11.2 如果份额不匹配，回撤交易
+if totalVol != availableVol:
+    logger.info("份额不匹配 - totalVol不等于availableVol，不进行加仓操作并回撤定投")
+    for trade in trades:
+        revoke_order(user, trade.busin_serial_no, trade.business_code,
+                   plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+    return True
+```
+
+### 12. 排名风控检查
+```python
+# 12.1 获取排名数据
+rank_100 = getattr(fund_info, "rank_100day", None)  # 100日排名
+rank_30 = getattr(fund_info, "rank_30day", None)    # 30日排名
+
+# 12.2 排名过低检查
+if rank_100 is not None and rank_100 < 20:
+    logger.info(f"100日排名过低({rank_100} < 20)，执行回撤")
+    for trade in trades:
+        revoke_order(user, trade.busin_serial_no, trade.business_code,
+                   plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+    return True
+
+# 12.3 排名过高检查
+if rank_100 is not None and rank_100 > 90:
+    logger.info(f"100日排名过高({rank_100} > 90)，执行回撤")
+    for trade in trades:
+        revoke_order(user, trade.busin_serial_no, trade.business_code,
+                   plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+    return True
+
+# 12.4 30日排名过低检查
+if rank_30 is not None and rank_30 < 5:
+    logger.info(f"30日排名过低({rank_30} < 5)，执行回撤")
+    for trade in trades:
+        revoke_order(user, trade.busin_serial_no, trade.business_code,
+                   plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+    return True
+```
+
+### 13. 最终加仓条件
+```python
+# 13.1 只有满足所有条件后，才允许加仓操作继续
+# 如果程序执行到这里，说明所有风控条件都通过了
+logger.info("所有风控条件通过，允许加仓操作")
+return True  # 允许加仓
+```
+
+## 📊 关键风控阈值
+
+### 收益率风控
+- 季度收益率 ≤ 0%：停止加仓
+- 半年收益率 ≤ 0%：停止加仓  
+- 年收益率 ≤ 0%：停止加仓
+- 预估收益率 > -1.0%：停止加仓
+
+### 排名风控
+- 100日排名 < 20：停止加仓
+- 100日排名 > 90：停止加仓
+- 30日排名 < 5：停止加仓
+
+### 技术分析风控
+- 估算净值 ≤ 5日均值：停止加仓
+- 交易连续性异常：停止加仓
+
+### 业务规则风控
+- 周期不匹配：停止加仓
+- 份额不一致：停止加仓
+- 首次投资：特殊处理
+
+## 🎯 算法特点
+
+1. **防御性强**：多重风控条件确保投资安全
+2. **实时性高**：基于最新市场数据进行决策
+3. **自动化程度高**：全自动执行加仓判断和交易回撤
+4. **可配置性强**：关键阈值可通过环境变量配置
+5. **日志详细**：完整的操作日志记录
+
+## ⚠️ 注意事项
+
+1. 该算法主要目的是**防止在不合适的时候加仓**
+2. 风控条件较为严格，可能会错过一些投资机会
+3. 需要确保基金信息接口的稳定性和准确性
+4. 建议定期回顾和优化风控阈值参数

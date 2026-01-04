@@ -101,13 +101,11 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         # 2) rank_100day > 80
       
       
-        cond3 = True
+        # 统一策略：所有基金（含指数）均需满足 cond3
         is_index = getattr(fund_info, 'fund_type', '') == '000'
-        if not is_index:
-            if month_rank_num is not None and quarter_rank_num is not None:
-                cond3 = quarter_rank_num < month_rank_num
-            else:
-                cond3 = False
+        cond3 = False
+        if month_rank_num is not None and quarter_rank_num is not None:
+            cond3 = quarter_rank_num < month_rank_num
 
         should_take_profit = (
             (estimated_profit_rate is not None and estimated_profit_rate > local_threshold) and
@@ -129,7 +127,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             bank_shares = get_bank_shares(user, sub_account_no, fund_code)
             logger.info(
                 f"{user.customer_name}的止盈操作开始：基金{fund_name}({fund_code})满足条件"
-                f"（收益率>{local_threshold}%、rank_100>80、非指数且Q_Rank<M_Rank）"
+                f"（收益率>{local_threshold}%、rank_100>80、Q_Rank<M_Rank）"
             )
             sell_result = sell_low_fee_shares(user, sub_account_no, fund_code, bank_shares)
             if sell_result and getattr(sell_result, "busin_serial_no", None):

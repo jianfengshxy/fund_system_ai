@@ -17,6 +17,7 @@ from src.service.基金信息.基金信息 import get_all_fund_info
 from src.service.交易管理.购买基金 import commit_order
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.service.大数据.低位加仓风向标筛选 import select_low_position_indicators
+from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 
 # 配置日志
 logger = get_logger(__name__)
@@ -91,6 +92,11 @@ def add_new_funds(
 
     logger.info("========== 开始执行见龙在田新增基金算法 ===========", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "jianlong_add_new"})
     logger.info(f"用户: {user.customer_name}，组合名称: {sub_account_name}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "jianlong_add_new"})
+
+    # 0) 全局风控检查：活期宝占比
+    if not check_hqb_risk_allowed(user):
+        logger.info("[见龙在田] 全局风控拦截：活期宝占比不足，退出新增流程")
+        return True
 
     try:
         # 1) 获取组合资产与持仓

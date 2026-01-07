@@ -24,6 +24,7 @@ from src.common.constant import DEFAULT_USER  # 添加导入，如果需要
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.common.errors import TradePasswordError  # 新增：捕获密码错误异常
 from src.service.公共服务.nav_gate_service import nav5_gate
+from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 
 # 配置日志
 logger = get_logger(__name__)
@@ -93,6 +94,11 @@ def add_new_funds(
 
     logger.info("========== 开始执行新增基金算法（最小落地版） ===========", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "wind_add_new"})
     logger.info(f"用户: {user.customer_name}，组合名称: {sub_account_name}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "wind_add_new"})
+
+    # 0) 全局风控检查：活期宝占比
+    if not check_hqb_risk_allowed(user):
+        logger.info("[加仓风向标] 全局风控拦截：活期宝占比不足，退出新增流程")
+        return True
 
     try:
         # 1) 获取组合资产与持仓

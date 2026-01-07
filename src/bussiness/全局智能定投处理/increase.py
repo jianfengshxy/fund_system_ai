@@ -37,7 +37,7 @@ from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.API.交易管理.trade import get_trades_list, get_bank_shares
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
 from src.service.公共服务.nav_gate_service import nav5_gate
-from src.API.资产管理.MyAsset import GetMyAssetMainPartAsync
+from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 
 logging.basicConfig(
     stream=sys.stdout,

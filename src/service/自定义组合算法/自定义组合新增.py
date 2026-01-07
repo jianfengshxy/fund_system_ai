@@ -20,6 +20,7 @@ from src.service.资产管理.get_fund_asset_detail import (
 from src.service.交易管理.购买基金 import commit_order
 from src.common.constant import DEFAULT_USER
 from src.service.公共服务.nav_gate_service import nav5_gate
+from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,6 +35,11 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
     """
     customer_name = user.customer_name
     logger.info(f"开始为用户 {customer_name} 执行新增操作，组合: {sub_account_name}")
+
+    # 0) 全局风控检查：活期宝占比
+    if not check_hqb_risk_allowed(user):
+        logger.info("[自定义组合] 全局风控拦截：活期宝占比不足，退出新增流程")
+        return False
 
     # 获取组合账号
     sub_account_no = getSubAccountNoByName(user, sub_account_name)

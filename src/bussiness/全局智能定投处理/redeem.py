@@ -121,6 +121,42 @@ def get_profit_threshold_for_low_balance():
 
 PROFIT_THRESHOLD_FOR_LOW_BALANCE = get_profit_threshold_for_low_balance()
 
+def get_hqb_ratio_threshold():
+    """
+    读取活期宝资产占比阈值：
+    - 优先读取环境变量 HQB_RATIO_THRESHOLD
+    - 其次尝试读取本地 s.yaml 配置文件
+    - 非法或未设置时回退为 20.0
+    """
+    # 1. 尝试从环境变量读取
+    env_val = os.environ.get('HQB_RATIO_THRESHOLD')
+    if env_val:
+        try:
+            val = float(env_val)
+            logger.info(f"Loaded HQB_RATIO_THRESHOLD from environment variable: {val}")
+            return val
+        except ValueError:
+            logger.warning(f"环境变量 HQB_RATIO_THRESHOLD 非法值: {env_val}，尝试从配置文件读取")
+
+    # 2. 尝试从 s.yaml 读取
+    try:
+        yaml_path = os.path.join(root_dir, 's.yaml')
+        if os.path.exists(yaml_path):
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+                val = config.get('vars', {}).get('common', {}).get('props', {}).get('environmentVariables', {}).get('HQB_RATIO_THRESHOLD')
+                if val:
+                    logger.info(f"Loaded HQB_RATIO_THRESHOLD from s.yaml: {val}")
+                    return float(val)
+    except Exception as e:
+        logger.warning(f"Failed to load s.yaml: {e}")
+    
+    # 3. 使用默认值
+    logger.info("Using default HQB_RATIO_THRESHOLD: 20.0")
+    return 20.0
+
+HQB_RATIO_THRESHOLD = get_hqb_ratio_threshold()
+
 def default_user_redeem_all_fund_plans():
     """默认用户批量止盈"""
     # 打印测试开始信息
@@ -250,35 +286,48 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             
         # 获取活期宝银行卡列表
         logger.info("开始检查银行卡余额相关条件...")
+        hqb_ratio_percent = 0.0
+        
         try:
             asset_response = GetMyAssetMainPartAsync(user)
             if asset_response.Success and asset_response.Data:
                 CurrentRealBalance = asset_response.Data.get('HqbValue', 0.0)
-                logger.info(f"从资产API获取HqbValue: {CurrentRealBalance}")
+                TotalAssetValue = asset_response.Data.get('TotalValue', 0.0)
+                
+                if TotalAssetValue > 0:
+                    hqb_ratio_percent = (CurrentRealBalance / TotalAssetValue) * 100.0
+                
+                logger.info(f"从资产API获取: HqbValue={CurrentRealBalance}, TotalValue={TotalAssetValue}, HqbRatio={hqb_ratio_percent:.2f}%")
             else:
                 raise Exception("资产API调用失败")
         except Exception as e:
-            logger.warning(f"获取HqbValue失败，回退到原银行卡信息: {str(e)}")
+            logger.warning(f"获取资产信息失败，回退到原银行卡信息(无法计算占比，默认0%): {str(e)}")
             bank_card_info = user.max_hqb_bank    
             CurrentRealBalance = bank_card_info.CurrentRealBalance
-            logger.info(f"银行卡余额：{CurrentRealBalance}")
+            hqb_ratio_percent = 0.0
+            logger.info(f"银行卡余额：{CurrentRealBalance}, 强制活期宝占比: 0.0%")
         
+        # 添加风控状态日志
+        if hqb_ratio_percent < HQB_RATIO_THRESHOLD:
+            logger.info(f"【风控状态】活期宝占比{hqb_ratio_percent:.2f}% < {HQB_RATIO_THRESHOLD}%阈值，强制启用{PROFIT_THRESHOLD_FOR_LOW_BALANCE}%止盈模式。")
+        else:
+            logger.info(f"【风控状态】活期宝占比{hqb_ratio_percent:.2f}% >= {HQB_RATIO_THRESHOLD}%阈值，启用波动率止盈模式。")
 
-        #检查银行卡余额,小于30万，且收益大于PROFIT_THRESHOLD_FOR_LOW_BALANCE，且投资次数小于5.0次，且当日估值增长率大于0.5%，立即卖出费率为0的份额
-        if estimated_profit_rate > PROFIT_THRESHOLD_FOR_LOW_BALANCE and CurrentRealBalance < BANK_BALANCE_THRESHOLD and fund_type == '000' and "QDII" not in fund_name and times < 5.0 and estimated_change > 0.5:
-            logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},阈值:{BANK_BALANCE_THRESHOLD},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:{PROFIT_THRESHOLD_FOR_LOW_BALANCE},投资次数:{times},估值增长率:{estimated_change}.")
+        #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于PROFIT_THRESHOLD_FOR_LOW_BALANCE，且投资次数小于5.0次，且当日估值增长率大于0.5%，立即卖出费率为0的份额
+        if estimated_profit_rate > PROFIT_THRESHOLD_FOR_LOW_BALANCE and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type == '000' and "QDII" not in fund_name and times < 5.0 and estimated_change > 0.5:
+            logger.info(f"{customer_name}的止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:{PROFIT_THRESHOLD_FOR_LOW_BALANCE},投资次数:{times},估值增长率:{estimated_change}.")
             sell_0_fee_shares(user,sub_account_no,fund_code,shares)
             return True
         else:
-            logger.info(f"指数基金余额条件检查未通过：预估收益{estimated_profit_rate} vs 阈值{PROFIT_THRESHOLD_FOR_LOW_BALANCE}，余额{CurrentRealBalance} vs 阈值{BANK_BALANCE_THRESHOLD}，基金类型{fund_type}，估值变化{fund_info.estimated_change}")
+            logger.info(f"指数基金余额条件检查未通过：预估收益{estimated_profit_rate} vs 阈值{PROFIT_THRESHOLD_FOR_LOW_BALANCE}，活期宝占比{hqb_ratio_percent:.2f}% vs 阈值{HQB_RATIO_THRESHOLD}%，基金类型{fund_type}，估值变化{fund_info.estimated_change}")
             
-        #检查银行卡余额,小于50万，且收益大于3.0，且投资次数小于5.0次，立即卖出费率为0的份额
-        if estimated_profit_rate > 3.0 and CurrentRealBalance < BANK_BALANCE_THRESHOLD and fund_type in ['001','002'] and rank_100 is not None and rank_100 > 80 and times < 5.0 and estimated_change > 0.5:
-            logger.info(f"{customer_name}的止盈操作开始：余额:{CurrentRealBalance},阈值:{BANK_BALANCE_THRESHOLD},基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0, 100日排名:{rank_100},投资次数:{times}.")
+        #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于3.0，且投资次数小于5.0次，立即卖出费率为0的份额
+        if estimated_profit_rate > 3.0 and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type in ['001','002'] and rank_100 is not None and rank_100 > 80 and times < 5.0 and estimated_change > 0.5:
+            logger.info(f"{customer_name}的止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0, 100日排名:{rank_100},投资次数:{times}.")
             sell_0_fee_shares(user,sub_account_no,fund_code,shares)
             return True
         else:
-            logger.info(f"主动基金余额条件检查未通过：预估收益{estimated_profit_rate} vs 3.0，余额{CurrentRealBalance} vs 阈值{BANK_BALANCE_THRESHOLD}，基金类型{fund_type}，排名{rank_100}")
+            logger.info(f"主动基金余额条件检查未通过：预估收益{estimated_profit_rate} vs 3.0，活期宝占比{hqb_ratio_percent:.2f}% vs 阈值{HQB_RATIO_THRESHOLD}%，基金类型{fund_type}，排名{rank_100}")
     logger.info("所有止盈条件都不满足，返回True")
     return True
 

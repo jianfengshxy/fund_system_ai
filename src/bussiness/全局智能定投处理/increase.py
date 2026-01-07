@@ -37,6 +37,7 @@ from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.API.交易管理.trade import get_trades_list, get_bank_shares
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
 from src.service.公共服务.nav_gate_service import nav5_gate
+from src.API.资产管理.MyAsset import GetMyAssetMainPartAsync
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -119,6 +120,19 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     half_year_val = float(half_year_return) if isinstance(half_year_return, (int, float)) else None
     year_val = float(year_return) if isinstance(year_return, (int, float)) else None
     
+    # 获取活期宝占比 (新风控)
+    hqb_ratio = 100.0
+    try:
+        asset_response = GetMyAssetMainPartAsync(user)
+        if asset_response.Success and asset_response.Data:
+            hqb_val = float(asset_response.Data.get('HqbValue', 0.0))
+            total_val = float(asset_response.Data.get('TotalValue', 0.0))
+            if total_val > 0:
+                hqb_ratio = (hqb_val / total_val) * 100.0
+            logger.info(f"风控检查 - 活期宝占比: {hqb_ratio:.2f}% (Hqb:{hqb_val}, Total:{total_val})")
+    except Exception as e:
+        logger.warning(f"获取资产占比失败，跳过此风控项: {e}")
+
     stop_reason = None
     
     if season_val is not None and season_val <= 0:
@@ -127,6 +141,8 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         stop_reason = f"半年收益率({half_year_val}%) <= 0"
     elif year_val is not None and year_val <= 0:
         stop_reason = f"年收益率({year_val}%) <= 0"
+    elif hqb_ratio < 10.0:
+        stop_reason = f"活期宝占比({hqb_ratio:.2f}%) < 10% (硬性风控)"
         
     if stop_reason:
         logger.info(f"最强风控触发 - {fund_name}{fund_code} {stop_reason}，执行回撤")

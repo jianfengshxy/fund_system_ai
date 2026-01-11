@@ -83,6 +83,25 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                     logger.info(f"净值未达条件，跳过候选：{fund_name}({fund_code})")
                     continue
 
+                # 增加条件：基金的100日净值排名 < 20 就 continue
+                rank_100 = getattr(fund_info, 'rank_100day', None)
+                if rank_100 is not None:
+                    try:
+                        if float(rank_100) < 20:
+                            logger.info(f"基金100日排名 {rank_100} < 20，跳过候选：{fund_name}({fund_code})")
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+
+                rank_30 = getattr(fund_info, 'rank_30day', None)
+                if rank_30 is not None:
+                    try:
+                        if float(rank_30) < 5:
+                            logger.info(f"基金30日排名 {rank_30} < 5，跳过候选：{fund_name}({fund_code})")
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+
                 logger.info(f"候选通过，准备购买：{fund_name}({fund_code})，金额: {fund_amount}")
                 try:
                     res = commit_order(user, sub_account_no, fund_code, float(fund_amount))

@@ -9,9 +9,13 @@ from typing import List, Dict, Any, Optional
 # 添加项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from common.constant import DEFAULT_USER
+from common.constant import DEFAULT_USER, SERVER_VERSION, PHONE_TYPE
 from domain.fund_plan import ApiResponse
 from domain.fund.fund_info import FundInfo
+import urllib3
+
+# 禁用SSL证书验证警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 噪音词列表，用于提取基金核心主题
 NOISE_WORDS = [
@@ -91,6 +95,83 @@ def filter_duplicate_funds(funds: List[FundInfo]) -> List[FundInfo]:
             
     return unique_funds
 
+def getBatchFundDetails(user, fund_codes: List[str]) -> Dict[str, FundInfo]:
+    """
+    批量获取基金详细信息
+    """
+    if not fund_codes:
+        return {}
+        
+    url = 'https://fundcomapi.tiantianfunds.com/mm/FundFavor/FundFavorInfo'
+    
+    headers = {
+        'Accept': '*/*',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Host': 'fundcomapi.tiantianfunds.com',
+        'User-Agent': 'okhttp/3.12.13',
+        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
+        'forceLog': '1',
+        'gtoken': 'ceaf-4a997831b1b3b90849f585f98ca6f30e',
+        'mp_instance_id': '32',
+        'traceparent': '00-0000000046aa4cae00000196718a8166-0000000000000000-01',
+        'tracestate': 'pid=0x6f96620,taskid=0xabc5123',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'validmark': 'Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZdVcHJ8J2NdZhXTNMQR9BMpxG3EMlqXyJoFeiMLZWZZtJ1DXqiIOSu/kLYsAt37vKDFhzWESfp9O5+28eHlMZFdAOKtOr630iFFehhF8ZZ2O0=',
+        'Referer': 'https://mpservice.com/770ddc37537896dae8ecd8160cb25336/release/pages/fundList/all-list/index'
+    }
+    
+    logger = logging.getLogger("FundBatchDetails")
+    result_map = {}
+    
+    # 分批处理，每次最多查询 50 个
+    batch_size = 50
+    for i in range(0, len(fund_codes), batch_size):
+        batch_codes = fund_codes[i:i+batch_size]
+        codes_str = ','.join(batch_codes)
+        
+        data = {
+            'FIELDS': 'MAXSG,FCODE,SHORTNAME,PDATE,NAV,ACCNAV,NAVCHGRT,NAVCHGRT100,GSZ,GSZZL,GZTIME,NEWPRICE,CHANGERATIO,ZJL,HQDATE,ISREDBAGS,SYL_Z,SYL_Y,SYL_3Y,SYL_6Y,SYL_JN,SYL_1N,SYL_2N,SYL_3N,SYL_5N,SYL_LN,RSBTYPE,RSFUNDTYPE,INDEXCODE,NEWINDEXTEXCH,TRKERROR1,ISBUY',
+            'product': 'EFund',
+            'APPID': 'FAVOR,FAVOR_ED,FAVOR_GS',
+            'pageSize': 200,
+            'passportctoken': user.passport_ctoken,
+            'SortColumn': '',
+            'passportutoken': user.passport_utoken,
+            'deviceid': '15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me',
+            'userid': user.customer_no,
+            'version': SERVER_VERSION,
+            'ctoken': user.c_token,
+            'uid': user.customer_no,
+            'CODES': codes_str,
+            'pageIndex': 1,
+            'utoken': user.u_token,
+            'Sort': '',
+            'plat': PHONE_TYPE,
+            'passportid': user.passport_id
+        }
+        
+        try:
+            response = requests.post(url, data=data, headers=headers, verify=False, timeout=10)
+            response.raise_for_status()
+            json_data = response.json()
+            
+            if json_data.get('success', False):
+                fund_data_list = json_data.get('data', [])
+                for item in fund_data_list:
+                    try:
+                        fund_info = FundInfo.from_dict(item)
+                        result_map[fund_info.fund_code] = fund_info
+                    except Exception as e:
+                        logger.warning(f"解析基金 {item.get('FCODE')} 详情失败: {e}")
+            else:
+                logger.warning(f"批量获取详情失败: {json_data.get('firstError')}")
+                
+        except Exception as e:
+            logger.error(f"批量请求异常: {e}")
+            
+    return result_map
+
 def getFundTodayTrend(user, page_size=30) -> ApiResponse[List[FundInfo]]:
     """
     获取今日基金走势信息
@@ -125,7 +206,7 @@ def getFundTodayTrend(user, page_size=30) -> ApiResponse[List[FundInfo]]:
         "DISCOUNT": "",
         "ENDNAV": "",
         "ESTABDATE": "",
-        "FIELDS": "bzdm,jjjc,IsExchg,isbuy,gsz,gszzl",
+        "FIELDS": "bzdm,jjjc,IsExchg,isbuy,gsz,gszzl,dwjz,jzrq,gztime,syl_1n,syl_jn",
         "PageIndex": "1",
         "PageSize": str(page_size),
         "RSBTYPE": "000001,000002,000003,000005",
@@ -181,10 +262,13 @@ def getFundTodayTrend(user, page_size=30) -> ApiResponse[List[FundInfo]]:
                 'GSZZL': item.get('gszzl'),
                 'ISBUY': item.get('isbuy'),
                 'RSFUNDTYPE': '未知', # API不返回类型
-                'NAV': 0.0, # 必填但未知
+                'NAV': item.get('dwjz'), 
                 'ACCNAV': 0.0, # 必填但未知
-                'PDATE': '', # 必填但未知
-                'NAVCHGRT': 0.0 # 必填但未知
+                'PDATE': item.get('jzrq'), 
+                'NAVCHGRT': 0.0, # 必填但未知
+                'GZTIME': item.get('gztime'),
+                'SYL_1N': item.get('syl_1n'),
+                'SYL_JN': item.get('syl_jn')
             }
             
             fund_info = FundInfo.from_dict(fund_data)
@@ -192,6 +276,33 @@ def getFundTodayTrend(user, page_size=30) -> ApiResponse[List[FundInfo]]:
             
         # 过滤重复主题的基金
         indicators = filter_duplicate_funds(indicators)
+        
+        # 批量获取详细信息并补充
+        if indicators:
+            fund_codes = [f.fund_code for f in indicators]
+            details_map = getBatchFundDetails(user, fund_codes)
+            
+            for fund in indicators:
+                if fund.fund_code in details_map:
+                    detail = details_map[fund.fund_code]
+                    # 更新详细信息，保留原有的估值信息（如果详情里没有或者旧的）
+                    # 注意：FundFavorInfo 返回的 GSZ/GSZZL 可能不如 FundValuationList 实时
+                    # 所以我们主要更新静态信息和历史收益率
+                    
+                    fund.fund_type = detail.fund_type
+                    fund.nav = detail.nav
+                    fund.nav_date = detail.nav_date
+                    fund.year_return = detail.year_return
+                    fund.this_year_return = detail.this_year_return
+                    fund.week_return = detail.week_return
+                    fund.month_return = detail.month_return
+                    fund.three_month_return = detail.three_month_return
+                    fund.six_month_return = detail.six_month_return
+                    # 如果详情里有估值时间且比当前的新，也可以更新估值
+                    if detail.estimated_time and (not fund.estimated_time or detail.estimated_time > fund.estimated_time):
+                         fund.estimated_value = detail.estimated_value
+                         fund.estimated_change = detail.estimated_change
+                         fund.estimated_time = detail.estimated_time
             
         return ApiResponse(
             Success=True,
@@ -248,8 +359,12 @@ if __name__ == "__main__":
             if result.Data:
                 for i, info in enumerate(result.Data, 1):
                     print(f"{i}. {info.fund_name} ({info.fund_code})")
+                    print(f"   类型: {info.fund_type}")
                     print(f"   估算涨跌幅: {info.estimated_change}%")
-                    print(f"   估算净值: {info.estimated_value}")
+                    print(f"   估算净值: {info.estimated_value} ({info.estimated_time})")
+                    print(f"   最新净值: {info.nav} ({info.nav_date})")
+                    print(f"   今年来收益: {info.this_year_return}%")
+                    print(f"   近一年收益: {info.year_return}%")
                     print(f"   是否可购买: {'是' if info.can_purchase else '否'}")
                     print("-----------------------------------")
             else:

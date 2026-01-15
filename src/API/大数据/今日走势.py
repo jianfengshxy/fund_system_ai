@@ -32,7 +32,7 @@ NOISE_WORDS = [
     "同济", "瑞达", "凯石", "湘财", "国融", "易米", "兴华", "尚正", "汇泉", "百嘉", "兴合",
     "泉果", "汇百", "国新", "国能", "苏新", "华商", "泓德", "中加", "国寿", "安邦", "太平",
     "人保", "泰康", "大家", "华富", "贝莱德", "富达", "路博迈", "施罗德", "联博",
-    "上银", "兴银", "加银",
+    "上银", "兴银", "加银", "兴证资管", "汇安", "中航",
     
     # 市场/类型/形式
     "中证", "国证", "上证", "深证", "创业板", "科创板", "港股通", "沪港深", "标普", "纳斯达克", "恒生",
@@ -41,7 +41,7 @@ NOISE_WORDS = [
     # 泛指修饰
     "主题", "产业", "行业", "细分", "龙头", "精选", "优选", "配置", "混合", "股票",
     "增强", "策略", "量化", "价值", "成长", "回报", "稳健", "灵活", "优势", "动力",
-    "机遇", "创新", "驱动", "先锋", "领先", "核心", "主要", 
+    "机遇", "创新", "驱动", "先锋", "领先", "核心", "主要", "金麒麟", "兴享", "优择", "领航", "智选", "睿恒",
     "持有", "滚动", "定开", "一年", "三年", "两年", "六个月", "三个月", "一周", "双周",
     "短债", "中短债", "中债", "信用", "纯债", "可转债", "转债", "货币", "理财",
     
@@ -76,15 +76,27 @@ def filter_duplicate_funds(funds: List[FundInfo]) -> List[FundInfo]:
     """过滤重复主题的基金，只保留排名靠前的"""
     unique_funds = []
     seen_cores = []
+    seen_types = set()
     
     for fund in funds:
+        # 1. 优先检查 API 返回的主题类型 (fund_type)
+        if fund.fund_type and fund.fund_type != '未知':
+            if fund.fund_type in seen_types:
+                continue # 跳过重复主题
+            seen_types.add(fund.fund_type)
+            unique_funds.append(fund)
+            # 同时也把核心名加入 seen_cores，以防万一
+            core_name = get_core_name(fund.fund_name)
+            seen_cores.append(core_name)
+            continue
+
+        # 2. 如果没有 API 主题，回退到基于名称的核心词去重
         core_name = get_core_name(fund.fund_name)
         
         # 检查是否重复
         is_duplicate = False
         for seen in seen_cores:
             # 相互包含即视为重复（保留先出现的那个，即涨幅高的）
-            # 例如 "卫星" 和 "商用卫星通信" -> 视为重复
             if core_name in seen or seen in core_name:
                 is_duplicate = True
                 break
@@ -208,7 +220,8 @@ def getFundTodayTrend(user, page_size=30) -> ApiResponse[List[FundInfo]]:
         "ESTABDATE": "",
         "FIELDS": "bzdm,jjjc,IsExchg,isbuy,gsz,gszzl,dwjz,jzrq,gztime,syl_1n,syl_jn",
         "PageIndex": "1",
-        "PageSize": str(page_size),
+        "PageSize": "100",
+        "PageSize": "100",
         "RSBTYPE": "000001,000002,000003,000005",
         "Sort": "desc",
         "SortColumn": "gszzl",
@@ -276,6 +289,9 @@ def getFundTodayTrend(user, page_size=30) -> ApiResponse[List[FundInfo]]:
             
         # 过滤重复主题的基金
         indicators = filter_duplicate_funds(indicators)
+        
+        # 只保留前10个
+        indicators = indicators[:10]
         
         # 批量获取详细信息并补充
         if indicators:

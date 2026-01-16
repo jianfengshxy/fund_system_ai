@@ -135,9 +135,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
 
     stop_reason = None
     
-    if season_val is not None and season_val <= 0:
-        stop_reason = f"季度收益率({season_val}%) <= 0"
-    elif half_year_val is not None and half_year_val <= 0:
+    if half_year_val is not None and half_year_val <= 0:
         stop_reason = f"半年收益率({half_year_val}%) <= 0"
     elif year_val is not None and year_val <= 0:
         stop_reason = f"年收益率({year_val}%) <= 0"

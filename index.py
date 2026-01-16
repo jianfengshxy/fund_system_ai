@@ -391,11 +391,13 @@ def add_new_custom(event, context):
             return
 
         # 获取全局默认金额
+        import os
+        env_amount = os.environ.get('DEFAULT_AMOUNT_GLOBAL', '10000.0')
         amount_global = payload.get('amount')
         try:
-            amount_global = float(amount_global) if amount_global is not None else 5000.0
+            amount_global = float(amount_global) if amount_global is not None else float(env_amount)
         except Exception:
-            amount_global = 5000.0
+            amount_global = 10000.0
 
         for group in sub_asset_response.Data.list_group:
             sub_account_name = group.group_name
@@ -475,11 +477,13 @@ def increase_custom(event, context):
             return
 
         # 获取全局默认金额
+        import os
+        env_amount = os.environ.get('DEFAULT_AMOUNT_GLOBAL', '10000.0')
         amount_global = payload.get('amount')
         try:
-            amount_global = float(amount_global) if amount_global is not None else 5000.0
+            amount_global = float(amount_global) if amount_global is not None else float(env_amount)
         except Exception:
-            amount_global = 5000.0
+            amount_global = 10000.0
 
         for group in sub_asset_response.Data.list_group:
             sub_account_name = group.group_name
@@ -558,11 +562,13 @@ def redeem_custom(event, context):
             return
 
         # 获取全局默认金额
+        import os
+        env_amount = os.environ.get('DEFAULT_AMOUNT_GLOBAL', '10000.0')
         amount_global = payload.get('amount')
         try:
-            amount_global = float(amount_global) if amount_global is not None else 5000.0
+            amount_global = float(amount_global) if amount_global is not None else float(env_amount)
         except Exception:
-            amount_global = 5000.0
+            amount_global = 10000.0
 
         for group in sub_asset_response.Data.list_group:
             sub_account_name = group.group_name
@@ -612,7 +618,7 @@ if __name__ == "__main__":
     payload = {
         "account": "13918199137",
         "password": "sWX15706",
-        "amount": 5000.0
+        "amount": 10000.0
         # "sub_account_list": [ ... ]  # 不再需要
     }
     # parse_fc_event 支持 dict 或 {"payload": "..."}；此处用 JSON 字符串更贴近 FC 触发
@@ -630,5 +636,7 @@ if __name__ == "__main__":
     # redeem(None, None)
     # create_period_smart_investment(None, None)
     # dissolve_period_smart_investment(None, None)
+    # create_period_smart_investment(None, None)
+    pass
     # create_period_smart_investment(None, None)
     pass

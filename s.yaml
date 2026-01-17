@@ -617,12 +617,12 @@ resources:
           cronExpression: "CRON_TZ=Asia/Shanghai 39 45 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
-  sync_investment_indicators:
+  daily_task:
       component: ${vars.common.component}
       actions: ${vars.common.actions}
       props:
-        handler: "index.sync_fund_investment_indicators"
-        functionName: "sync_investment_indicators"
+        handler: "index.daily_task"
+        functionName: "daily_task"
         logConfig: ${vars.common.props.logConfig}
         diskSize: ${vars.common.props.diskSize}
         code: ${vars.common.props.code}
@@ -637,21 +637,21 @@ resources:
         triggers:
         - qualifier: ${vars.common.props.triggerConfig.qualifier}
           triggerType: ${vars.common.props.triggerConfig.triggerType}
-          triggerName: "sync_investment_indicators_1120"
+          triggerName: "daily_task_1120"
           triggerConfig:
             payload: ${vars.common.props.triggerConfig.payload}
             cronExpression: "CRON_TZ=Asia/Shanghai 0 20 11 * * 1-5"
             enable: ${vars.common.props.triggerConfig.enable}  
         - qualifier: ${vars.common.props.triggerConfig.qualifier}
           triggerType: ${vars.common.props.triggerConfig.triggerType}
-          triggerName: "sync_investment_indicators_1430"
+          triggerName: "daily_task_1430"
           triggerConfig:
             payload: ${vars.common.props.triggerConfig.payload}
             cronExpression: "CRON_TZ=Asia/Shanghai 0 30 14 * * 1-5"
             enable: ${vars.common.props.triggerConfig.enable}
         - qualifier: ${vars.common.props.triggerConfig.qualifier}
           triggerType: ${vars.common.props.triggerConfig.triggerType}
-          triggerName: "sync_investment_indicators_2130"
+          triggerName: "daily_task_2130"
           triggerConfig:
             payload: ${vars.common.props.triggerConfig.payload}
             cronExpression: "CRON_TZ=Asia/Shanghai 0 30 21 * * 1-5"

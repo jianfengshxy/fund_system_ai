@@ -45,6 +45,10 @@ from src.common.errors import RetriableError, ValidationError, NonRetriableError
 # 新增：导入“见龙在田”业务层新增薄封装
 from src.bussiness.见龙在田.add_new import add_new_funds as jianlong_add_new_biz
 
+# 导入大数据服务相关函数
+from src.service.大数据.增加高频加仓基金到自选组合 import add_frequent_funds_to_fast_profit_group
+from src.service.大数据.删除高频加仓基金到自选组合 import remove_infrequent_funds_from_group
+
 # 初始化日志记录器
 from src.common.logger import get_logger
 logger = get_logger(__name__)
@@ -280,8 +284,11 @@ def redeem_all_fund_plans(event, context):
     redeem_all_fund_plans_biz(QIU_XIAOYU)
     pass
 
-def sync_fund_investment_indicators(event, context):
+#每日任务
+def daily_task(event, context):
     save_fund_investment_indicators(DEFAULT_USER)
+    add_frequent_funds_to_fast_profit_group(user=DEFAULT_USER, group_name="快速止盈")
+    remove_infrequent_funds_from_group(user=DEFAULT_USER, group_name="快速止盈")
     logger.info("同步加仓数据完成")
 
 def create_period_index_investment(event, context):
@@ -623,11 +630,11 @@ if __name__ == "__main__":
     }
     # parse_fc_event 支持 dict 或 {"payload": "..."}；此处用 JSON 字符串更贴近 FC 触发
     event = {"payload": json.dumps(payload)}
-
+    daily_task(event, None)
     # 选择调用新增/加仓/止盈中的一个（示例调用新增）
     # add_new_custom(event, None)
     # increase_custom(event, None)
-    redeem_custom(event, None)
+    # redeem_custom(event, None)
     # 根据需要调用 redeem 或 increase 函数
     # sync_fund_investment_indicators(None, None)
     # increase_all_fund_plans(None, None)

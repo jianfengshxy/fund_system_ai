@@ -198,6 +198,10 @@ def get_existing_monthly_day_map(
                 continue
             detail = resp.Data
             ration_plan = detail.rationPlan
+            # 将 shares 信息附加到 rationPlan 对象上，以便后续使用
+            if hasattr(detail, 'shares') and detail.shares:
+                ration_plan.shares = detail.shares
+            
             period_type = int(getattr(ration_plan, "periodType", 0) or 0)
             period_value = int(getattr(ration_plan, "periodValue", 0) or 0)
 

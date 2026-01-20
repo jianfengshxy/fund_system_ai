@@ -49,10 +49,24 @@ def test_get_existing_weekly_day_map():
         current_profit_pct = float(profit_rate) * 100.0 if profit_rate is not None else None
         profit_rate_str = f"{current_profit_pct:.2f}%" if current_profit_pct is not None else "未知"
         
+        # 获取份额信息
+        shares = 0.0
+        valid_shares = 0.0
+        if hasattr(plan, 'shares') and plan.shares:
+            for share in plan.shares:
+                valid_shares += getattr(share, 'availableVol', 0.0)
+                shares += getattr(share, 'totalVol', 0.0)
+        else:
+            # Fallback
+            unit_price = getattr(plan, 'unitPrice', 0)
+            if asset is not None and unit_price and float(unit_price) > 0:
+                shares = float(asset) / float(unit_price)
+                valid_shares = shares
+
         output_line = (
             f"  每周{day} -> 计划ID: {plan.planId}, "
             f"定投金额: {plan.amount:.2f}, 子账户: {getattr(plan, 'subAccountName', '-')}, "
-            f"计划资产: {asset_str}, 盈亏率: {profit_rate_str}"
+            f"计划资产: {asset_str}, 有效份额: {valid_shares:.2f}, 总份额: {shares:.2f}, 盈亏率: {profit_rate_str}"
         )
         
         if estimated_change_pct is not None and current_profit_pct is not None:

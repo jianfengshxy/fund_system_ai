@@ -66,6 +66,11 @@ def get_existing_weekly_day_map(
                 continue
             detail: FundPlanDetail = resp.Data
             rp: FundPlan = detail.rationPlan
+            
+            # 将 shares 信息附加到 rationPlan 对象上，以便后续使用
+            if hasattr(detail, 'shares') and detail.shares:
+                rp.shares = detail.shares
+
             period_type = int(getattr(rp, "periodType", 0) or 0)
             period_value = int(getattr(rp, "periodValue", 0) or 0)
 

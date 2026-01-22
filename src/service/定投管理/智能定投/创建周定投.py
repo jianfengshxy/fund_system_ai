@@ -2,7 +2,6 @@
 import os
 import sys
 import logging
-from src.common.logger import get_logger
 from typing import Dict, Any, Optional, List, Union
 import time
 
@@ -10,6 +9,8 @@ import time
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
+
+from src.common.logger import get_logger
 
 from src.domain.user.User import User
 from src.common.constant import DEFAULT_USER
@@ -232,7 +233,7 @@ def create_weekly_smart_investment_plans(
 if __name__ == "__main__":
     info = create_weekly_smart_investment_plans(
         user=DEFAULT_USER,
-        fund_code="011707",
+        fund_code="020412",
         amount="10000.0",
         days=[1, 2, 3, 4, 5],
         sub_account_name=None,

@@ -195,7 +195,8 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                   
     logger.info(f"当前计划:{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}的周期类型{period_type},period_type:{period_value},当前月的值:{day_of_month},当前资产:{plan_assets},计划类型:{plan_type}")
     # 5日均线守卫：对所有可回撤的买入/定投交易生效
-    bypass_ma5 = (period_type != 3) and (times <= 1)
+    # 如果是周定投(1)或月定投(3)，即使是第一次(times<=1)也要检查；其他类型第一次不检查
+    bypass_ma5 = (period_type not in [1, 3]) and (times <= 1)
     gate_ok = True if bypass_ma5 else bool(nav5_gate(fund_info, fund_name, fund_code, logger))
     if not gate_ok:
         logger.info(f"5日均线守卫未通过（估算净值≤5日均值）：撤回当天所有可回撤交易。资产={plan_assets} 定投金额={fund_amount}")
@@ -209,12 +210,37 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         return True
     else:
         if bypass_ma5:
-            logger.info(f"触发口子：非月定投且 资产/定投金额≤1（{times}），跳过5日均线判断，并直接结束本次处理。")
+            logger.info(f"触发口子：非月/周定投且 资产/定投金额≤1（{times}），跳过5日均线判断，并直接结束本次处理。")
             return True  # 口子开启时直接通过并早停
         else:
             logger.info(f"5日均线守卫通过（估算净值>5日均值）：继续执行后续判断。")
-            if period_type == 3 and times <= 1:
-                logger.info(f"月定投首次且通过5日均线：直接结束本次处理。资产={plan_assets} 定投金额={fund_amount}")
+            if period_type in [1, 3] and times <= 1:
+                # 首次定投额外检查：避免追高 (Rank过低代表排名靠前，净值低，没有摆脱底部)
+                rank_100 = getattr(fund_info, "rank_100day", None)
+                rank_30 = getattr(fund_info, "rank_30day", None)
+                
+                should_revoke = False
+                revoke_reason = ""
+                
+                if isinstance(rank_100, (int, float)) and rank_100 < 20:
+                    should_revoke = True
+                    revoke_reason = f"100日排名过低({rank_100} < 20，处于低位)"
+                elif isinstance(rank_30, (int, float)) and rank_30 < 5:
+                    should_revoke = True
+                    revoke_reason = f"30日排名过低({rank_30} < 5，处于极低位)"
+                    
+                if should_revoke:
+                    logger.info(f"首次定投Rank检查未通过 - {revoke_reason}，执行回撤")
+                    for i, trade in enumerate(trades):
+                        logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+                        try:
+                            revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+                            logger.info("交易回撤成功")
+                        except Exception as e:
+                            logger.error(f"交易回撤失败: {e}")
+                    return True
+
+                logger.info(f"月/周定投首次且通过5日均线及Rank检查：直接结束本次处理。资产={plan_assets} 定投金额={fund_amount}")
                 return True
 
     #判断是否是周定投延期交易

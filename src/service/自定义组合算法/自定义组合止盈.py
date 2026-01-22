@@ -26,7 +26,8 @@ from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
 from src.service.定投管理.定投查询.定投查询 import get_all_fund_plan_details
-from src.common.constant import DEFAULT_USER
+from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
+from src.common.constant import DEFAULT_USER, HQB_RATIO_THRESHOLD, PROFIT_THRESHOLD_FOR_LOW_BALANCE
 
 logging.basicConfig(
     level=logging.INFO,
@@ -109,6 +110,44 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             if shares == []:
                 logger.info("份额为空，跳过该计划")
                 continue
+            
+            # --- 现金流紧张时的紧急止盈逻辑 ---
+            # 获取活期宝占比 (此处需要调用公共服务或直接计算，为了保持一致性建议调用 risk_control_service 中的逻辑)
+            # 但 check_hqb_risk_allowed 只返回 bool，我们需要具体的比率。
+            # 这里先手动计算一下 hqb_ratio_percent，或者假设 check_hqb_risk_allowed 内部逻辑
+            # 为了更准确，我们重新获取资产总额计算占比
+            from src.API.资产管理.AssetManager import GetMyAssetMainPart
+            my_asset = GetMyAssetMainPart(user)
+            total_asset = float(my_asset.TotalAsset) if my_asset and my_asset.TotalAsset else 1.0
+            hqb_asset = float(my_asset.HqbAsset) if my_asset and my_asset.HqbAsset else 0.0
+            hqb_ratio_percent = (hqb_asset / total_asset) * 100
+            
+            # 指数基金且非QDII，当现金流紧张(活期宝占比低)时，若有盈利且今日上涨，立即止盈
+            # 条件: 
+            # 1. 盈利 > PROFIT_THRESHOLD_FOR_LOW_BALANCE
+            # 2. 活期宝占比 < HQB_RATIO_THRESHOLD (20%)
+            # 3. 类型为指数 (000) 且非 QDII
+            # 4. 投资次数 < 5.0 (仓位还不重)
+            # 5. 今日估值上涨 > 0.5% (趁反弹跑路)
+            if (estimated_profit_rate > PROFIT_THRESHOLD_FOR_LOW_BALANCE and 
+                hqb_ratio_percent < HQB_RATIO_THRESHOLD and 
+                fund_type == '000' and 
+                "QDII" not in fund_name and 
+                times < 5.0 and 
+                estimated_change > 0.5):
+                
+                logger.info(f"{customer_name}的紧急止盈操作(现金流紧张)：活期宝占比:{hqb_ratio_percent:.2f}% < {HQB_RATIO_THRESHOLD}%, "
+                            f"基金{fund_name}({fund_code})预估收益{estimated_profit_rate:.2f}% > {PROFIT_THRESHOLD_FOR_LOW_BALANCE}%, "
+                            f"投资次数:{times}, 估值增长率:{estimated_change}%.")
+                res = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
+                if res is not None and getattr(res, 'busin_serial_no', None):
+                    success_count += 1
+                continue
+            else:
+                 # 仅记录日志方便调试
+                 if hqb_ratio_percent < HQB_RATIO_THRESHOLD:
+                     logger.info(f"现金流紧张但未达紧急止盈条件: {fund_name}({fund_code}), 收益{estimated_profit_rate:.2f}, 类型{fund_type}, QDII:{'QDII' in fund_name}")
+
             # 取消对小额资产的止盈保护
             # if times < 0.98 and times > 0.0:
             #     logger.info(f"组合{sub_account_no}，基金{fund_name}({fund_code})资产{plan_assets:.2f}，当前资产倍数{times},满足限购保护，停止止盈。")

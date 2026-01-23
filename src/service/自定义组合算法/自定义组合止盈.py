@@ -111,42 +111,80 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
                 logger.info("份额为空，跳过该计划")
                 continue
             
-            # --- 现金流紧张时的紧急止盈逻辑 ---
+            # --- 止盈逻辑更新：对齐全局智能定投 (redeem.py) ---
+            
+            # 1. 趋势门槛：只有净值低于5日均值时才允许止盈 (防止卖飞)
+            est_nav = getattr(fund_info, 'estimated_value', None)
+            prev_nav = getattr(fund_info, 'nav', None)
+            nav5 = getattr(fund_info, 'nav_5day_avg', None)
+            try:
+                est_val = float(est_nav) if est_nav is not None else (float(prev_nav) if prev_nav is not None else None)
+                nav5_val = float(nav5) if nav5 is not None else None
+            except Exception:
+                est_val = None
+                nav5_val = None
+
+            if est_val is None or nav5_val is None:
+                # 如果缺少净值数据，为安全起见跳过止盈，或者根据策略决定
+                logger.info(f"止盈趋势门槛检查：缺少用于对比的净值（estimated_value={est_nav}, prev_nav={prev_nav}, nav_5day_avg={nav5}），跳过止盈")
+                continue
+            
+            # 2. 计算动态止盈点：max(30日年化波动率, 3.0%)
+            stop_rate = max(float(volatility), 3.0)
+            logger.info(f"组合{sub_account_name}的{fund_name}{fund_code}波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（不低于3.0）")
+
+            # 3. 检查基本止盈条件
+            if estimated_profit_rate > stop_rate:
+                logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},实际止盈点:{stop_rate}")
+                res = sell_low_fee_shares(user, sub_account_no, fund_code, shares)
+                if res is not None and getattr(res, 'busin_serial_no', None):
+                    success_count += 1
+                continue # 命中基本止盈后跳过后续检查
+            else:
+                logger.info(f"基本止盈条件检查：预估收益{estimated_profit_rate} <= 止盈点{stop_rate}，不满足条件")
+            
+            # 4. 现金流紧张时的紧急止盈逻辑
             # 获取活期宝占比 (此处需要调用公共服务或直接计算，为了保持一致性建议调用 risk_control_service 中的逻辑)
             # 但 check_hqb_risk_allowed 只返回 bool，我们需要具体的比率。
             # 这里先手动计算一下 hqb_ratio_percent，或者假设 check_hqb_risk_allowed 内部逻辑
             # 为了更准确，我们重新获取资产总额计算占比
             from src.API.资产管理.AssetManager import GetMyAssetMainPart
-            my_asset = GetMyAssetMainPart(user)
-            total_asset = float(my_asset.TotalAsset) if my_asset and my_asset.TotalAsset else 1.0
-            hqb_asset = float(my_asset.HqbAsset) if my_asset and my_asset.HqbAsset else 0.0
+            try:
+                my_asset = GetMyAssetMainPart(user)
+                if my_asset.Success and my_asset.Data:
+                    # 兼容不同API返回结构，尝试获取 TotalValue/HqbValue 或 TotalAsset/HqbAsset
+                    total_asset = float(my_asset.Data.get('TotalValue', 0.0) or my_asset.Data.get('TotalAsset', 0.0) or 1.0)
+                    hqb_asset = float(my_asset.Data.get('HqbValue', 0.0) or my_asset.Data.get('HqbAsset', 0.0) or 0.0)
+                else:
+                    # 获取失败回退逻辑
+                    total_asset = 1.0
+                    hqb_asset = 0.0
+                    logger.warning(f"获取资产失败: {my_asset.FirstError}，使用默认值")
+            except Exception as e:
+                logger.warning(f"获取资产异常: {e}，使用默认值")
+                total_asset = 1.0
+                hqb_asset = 0.0
+                
             hqb_ratio_percent = (hqb_asset / total_asset) * 100
             
-            # 指数基金且非QDII，当现金流紧张(活期宝占比低)时，若有盈利且今日上涨，立即止盈
-            # 条件: 
-            # 1. 盈利 > PROFIT_THRESHOLD_FOR_LOW_BALANCE
-            # 2. 活期宝占比 < HQB_RATIO_THRESHOLD (20%)
-            # 3. 类型为指数 (000) 且非 QDII
-            # 4. 投资次数 < 5.0 (仓位还不重)
-            # 5. 今日估值上涨 > 0.5% (趁反弹跑路)
-            if (estimated_profit_rate > PROFIT_THRESHOLD_FOR_LOW_BALANCE and 
-                hqb_ratio_percent < HQB_RATIO_THRESHOLD and 
+            # 指数基金且非QDII，若仓位不重且今日上涨，立即止盈
+            # 条件:
+            # 1. 类型为指数 (000) 且非 QDII
+            # 2. 投资次数 < 5.0 (仓位还不重)
+            # 3. 今日估值上涨 > 0.5% (趁反弹跑路)
+            if (
                 fund_type == '000' and 
                 "QDII" not in fund_name and 
                 times < 5.0 and 
                 estimated_change > 0.5):
                 
-                logger.info(f"{customer_name}的紧急止盈操作(现金流紧张)：活期宝占比:{hqb_ratio_percent:.2f}% < {HQB_RATIO_THRESHOLD}%, "
-                            f"基金{fund_name}({fund_code})预估收益{estimated_profit_rate:.2f}% > {PROFIT_THRESHOLD_FOR_LOW_BALANCE}%, "
+                logger.info(f"{customer_name}的指数基金快速止盈操作：基金{fund_name}({fund_code})预估收益{estimated_profit_rate:.2f}%，"
                             f"投资次数:{times}, 估值增长率:{estimated_change}%.")
                 res = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
                 if res is not None and getattr(res, 'busin_serial_no', None):
                     success_count += 1
                 continue
-            else:
-                 # 仅记录日志方便调试
-                 if hqb_ratio_percent < HQB_RATIO_THRESHOLD:
-                     logger.info(f"现金流紧张但未达紧急止盈条件: {fund_name}({fund_code}), 收益{estimated_profit_rate:.2f}, 类型{fund_type}, QDII:{'QDII' in fund_name}")
+
 
             # 取消对小额资产的止盈保护
             # if times < 0.98 and times > 0.0:
@@ -156,31 +194,10 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
                 logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}的收益率{estimated_profit_rate}小于1.0.")
                 continue
 
-            logger.info("开始检查止盈条件...")
-            stop_rate = 5.0
-            # 指数基金：排名>90 且 >1% 即止盈（赎回低费率）
-            # if fund_type == '000' and estimated_profit_rate > 1.0 and rank_100 > 90 and fund_info.estimated_change != 0.0:
-            #     logger.info(f"{customer_name}的止盈操作开始：指数基金{fund_name}{fund_code}预估收益{estimated_profit_rate},100日排名:{rank_100},实际止盈点:1.0")
-            #     res = sell_low_fee_shares(user, sub_account_no, fund_code, shares)
-            #     if res is not None and getattr(res, 'busin_serial_no', None):
-            #         success_count += 1
-            #     continue
-
-            # 赎回 0 费率份额
-            if  estimated_profit_rate > 3.0:
-                logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},赎回0费率份额,实际止盈点:3.0")
-                sell_0_fee_shares(user, sub_account_no, fund_code, shares)
-
-            # 基本止盈：预估收益率 > 动态止盈点 -> 赎回低费率份额
-            if estimated_profit_rate > stop_rate:
-                logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},实际止盈点:{stop_rate}")
-                res = sell_low_fee_shares(user, sub_account_no, fund_code, shares)
-                if res is not None and getattr(res, 'busin_serial_no', None):
-                    success_count += 1
-                # 与业务层一致：命中基本止盈后直接继续
-                continue
-            else:
-                logger.info(f"基本止盈条件检查：预估收益{estimated_profit_rate} <= 止盈点{stop_rate}，不满足条件")
+            # 赎回 0 费率份额 (额外补充逻辑，针对QDII)
+            if fund_type == 'a' and estimated_profit_rate > 3.0: # 参照 redeem.py 逻辑: QDII基金 > 3.0% 赎回0费率
+                 logger.info(f"{customer_name}的止盈操作开始：QDII基金{fund_name}{fund_code}预估收益{estimated_profit_rate},赎回0费率份额,实际止盈点:3.0")
+                 sell_0_fee_shares(user, sub_account_no, fund_code, shares)
 
         except Exception as e:
             logger.error(f"处理 {fund_code} 失败: {e}")
@@ -193,7 +210,7 @@ if __name__ == "__main__":
     try:
         redeem_funds(
             DEFAULT_USER,
-            "海外基金组合",
+            "快速止盈",
             fund_list=[
                 {"fund_code": "016702", "fund_name": "银华海外数字经济量化选股混合发起式(QDII)C", "amount": 5000.0},
                 {"fund_code": "006105", "fund_name": "宏利印度股票(QDII)", "amount": 5000.0},

@@ -25,7 +25,7 @@ from src.API.交易管理.trade import get_trades_list, get_bank_shares
 from src.API.交易管理.revokMrg import revoke_order
 from src.service.交易管理.购买基金 import commit_order
 from src.domain.trade.TradeResult import TradeResult
-from src.common.constant import DEFAULT_USER
+from src.common.constant import DEFAULT_USER, BANK_BALANCE_THRESHOLD, PROFIT_THRESHOLD_FOR_LOW_BALANCE, HQB_RATIO_THRESHOLD
 from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
 from src.service.资产管理.get_fund_asset_detail import get_fund_asset_detail
 import datetime
@@ -48,114 +48,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-def get_bank_balance_threshold():
-    """
-    读取银行卡余额阈值：
-    - 优先读取环境变量 BANK_BALANCE_THRESHOLD
-    - 其次尝试读取本地 s.yaml 配置文件
-    - 非法或未设置时回退为 300000.0
-    """
-    # 1. 尝试从环境变量读取
-    env_val = os.environ.get('BANK_BALANCE_THRESHOLD')
-    if env_val:
-        try:
-            val = float(env_val)
-            logger.info(f"Loaded BANK_BALANCE_THRESHOLD from environment variable: {val}")
-            return val
-        except ValueError:
-            logger.warning(f"环境变量 BANK_BALANCE_THRESHOLD 非法值: {env_val}，尝试从配置文件读取")
-
-    # 2. 尝试从 s.yaml 读取
-    try:
-        yaml_path = os.path.join(root_dir, 's.yaml')
-        if os.path.exists(yaml_path):
-            with open(yaml_path, 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
-                val = config.get('vars', {}).get('common', {}).get('props', {}).get('environmentVariables', {}).get('BANK_BALANCE_THRESHOLD')
-                if val:
-                    logger.info(f"Loaded BANK_BALANCE_THRESHOLD from s.yaml: {val}")
-                    return float(val)
-    except Exception as e:
-        logger.warning(f"Failed to load s.yaml: {e}")
-    
-    # 3. 使用默认值
-    logger.info("Using default BANK_BALANCE_THRESHOLD: 300000.0")
-    return 300000.0
-
-BANK_BALANCE_THRESHOLD = get_bank_balance_threshold()
-
-def get_profit_threshold_for_low_balance():
-    """
-    读取低余额止盈收益率阈值：
-    - 优先读取环境变量 PROFIT_THRESHOLD_FOR_LOW_BALANCE
-    - 其次尝试读取本地 s.yaml 配置文件
-    - 非法或未设置时回退为 1.0
-    """
-    # 1. 尝试从环境变量读取
-    env_val = os.environ.get('PROFIT_THRESHOLD_FOR_LOW_BALANCE')
-    if env_val:
-        try:
-            val = float(env_val)
-            logger.info(f"Loaded PROFIT_THRESHOLD_FOR_LOW_BALANCE from environment variable: {val}")
-            return val
-        except ValueError:
-            logger.warning(f"环境变量 PROFIT_THRESHOLD_FOR_LOW_BALANCE 非法值: {env_val}，尝试从配置文件读取")
-
-    # 2. 尝试从 s.yaml 读取
-    try:
-        yaml_path = os.path.join(root_dir, 's.yaml')
-        if os.path.exists(yaml_path):
-            with open(yaml_path, 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
-                val = config.get('vars', {}).get('common', {}).get('props', {}).get('environmentVariables', {}).get('PROFIT_THRESHOLD_FOR_LOW_BALANCE')
-                if val:
-                    logger.info(f"Loaded PROFIT_THRESHOLD_FOR_LOW_BALANCE from s.yaml: {val}")
-                    return float(val)
-    except Exception as e:
-        logger.warning(f"Failed to load s.yaml: {e}")
-    
-    # 3. 使用默认值
-    logger.info("Using default PROFIT_THRESHOLD_FOR_LOW_BALANCE: 1.0")
-    return 1.0
-
-PROFIT_THRESHOLD_FOR_LOW_BALANCE = get_profit_threshold_for_low_balance()
-
-def get_hqb_ratio_threshold():
-    """
-    读取活期宝资产占比阈值：
-    - 优先读取环境变量 HQB_RATIO_THRESHOLD
-    - 其次尝试读取本地 s.yaml 配置文件
-    - 非法或未设置时回退为 20.0
-    """
-    # 1. 尝试从环境变量读取
-    env_val = os.environ.get('HQB_RATIO_THRESHOLD')
-    if env_val:
-        try:
-            val = float(env_val)
-            logger.info(f"Loaded HQB_RATIO_THRESHOLD from environment variable: {val}")
-            return val
-        except ValueError:
-            logger.warning(f"环境变量 HQB_RATIO_THRESHOLD 非法值: {env_val}，尝试从配置文件读取")
-
-    # 2. 尝试从 s.yaml 读取
-    try:
-        yaml_path = os.path.join(root_dir, 's.yaml')
-        if os.path.exists(yaml_path):
-            with open(yaml_path, 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
-                val = config.get('vars', {}).get('common', {}).get('props', {}).get('environmentVariables', {}).get('HQB_RATIO_THRESHOLD')
-                if val:
-                    logger.info(f"Loaded HQB_RATIO_THRESHOLD from s.yaml: {val}")
-                    return float(val)
-    except Exception as e:
-        logger.warning(f"Failed to load s.yaml: {e}")
-    
-    # 3. 使用默认值
-    logger.info("Using default HQB_RATIO_THRESHOLD: 20.0")
-    return 20.0
-
-HQB_RATIO_THRESHOLD = get_hqb_ratio_threshold()
 
 def default_user_redeem_all_fund_plans():
     """默认用户批量止盈"""

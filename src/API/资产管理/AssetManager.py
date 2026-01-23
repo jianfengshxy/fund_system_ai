@@ -101,22 +101,25 @@ def GetMyAssetMainPartAsync(user) -> ApiResponse:
                         FirstError=json_data.get('FirstError'),
                         DebugError=json_data.get('DebugError')
                     )
-                raise Exception('解析响应数据失败: Data字段为空')
-
-            api_response = ApiResponse(
+            return ApiResponse(
                 Success=json_data.get('Success', False),
                 ErrorCode=json_data.get('ErrorCode'),
                 Data=data,
                 FirstError=json_data.get('FirstError'),
                 DebugError=json_data.get('DebugError')
             )
-            return api_response
         except Exception as e:
-            logger.error(f'解析响应数据失败: {str(e)}', extra=extra)
-            raise ValidationError(str(e))
-    except requests.exceptions.RequestException as e:
-        logger.error(f'请求失败: {str(e)}', extra=extra)
-        raise RetriableError(str(e))
+            logger.error(f"解析资产信息失败: {e}", extra=extra)
+            return ApiResponse(Success=False, ErrorCode=-1, FirstError=str(e))
+    except Exception as e:
+        logger.error(f"请求资产信息失败: {e}", extra=extra)
+        return ApiResponse(Success=False, ErrorCode=-1, FirstError=str(e))
+
+def GetMyAssetMainPart(user) -> ApiResponse:
+    """
+    GetMyAssetMainPartAsync 的同步别名，用于兼容旧代码
+    """
+    return GetMyAssetMainPartAsync(user)
 
 
 if __name__ == "__main__":

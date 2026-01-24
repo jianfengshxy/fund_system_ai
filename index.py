@@ -399,7 +399,7 @@ def add_new_custom(event, context):
 
         # 获取全局默认金额
         import os
-        env_amount = os.environ.get('DEFAULT_AMOUNT_GLOBAL', '10000.0')
+        env_amount = os.environ.get('DEFAULT_AMOUNT_ADD_NEW', '10000.0')
         amount_global = payload.get('amount')
         try:
             amount_global = float(amount_global) if amount_global is not None else float(env_amount)
@@ -485,7 +485,7 @@ def increase_custom(event, context):
 
         # 获取全局默认金额
         import os
-        env_amount = os.environ.get('DEFAULT_AMOUNT_GLOBAL', '10000.0')
+        env_amount = os.environ.get('DEFAULT_AMOUNT_INCREASE', '10000.0')
         amount_global = payload.get('amount')
         try:
             amount_global = float(amount_global) if amount_global is not None else float(env_amount)
@@ -570,7 +570,7 @@ def redeem_custom(event, context):
 
         # 获取全局默认金额
         import os
-        env_amount = os.environ.get('DEFAULT_AMOUNT_GLOBAL', '10000.0')
+        env_amount = os.environ.get('DEFAULT_AMOUNT_REDEEM', '10000.0')
         amount_global = payload.get('amount')
         try:
             amount_global = float(amount_global) if amount_global is not None else float(env_amount)
@@ -632,7 +632,7 @@ if __name__ == "__main__":
     event = {"payload": json.dumps(payload)}
     daily_task(event, None)
     # 选择调用新增/加仓/止盈中的一个（示例调用新增）
-    # add_new_custom(event, None)
+    add_new_custom(event, None)
     # increase_custom(event, None)
     # redeem_custom(event, None)
     # 根据需要调用 redeem 或 increase 函数

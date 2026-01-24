@@ -51,7 +51,9 @@ vars:
         EXTERNAL_HOST: ${vars.common.database.external_host}
         VPC_ID: ${vars.common.database.vpc_id}
         CIDR: ${vars.common.database.cidr}
-        DEFAULT_AMOUNT_GLOBAL: "10000.0"
+        DEFAULT_AMOUNT_ADD_NEW: "50000.0"
+        DEFAULT_AMOUNT_INCREASE: "10000.0"
+        DEFAULT_AMOUNT_REDEEM: "10000.0"
         BANK_BALANCE_THRESHOLD: "1000000"
         PROFIT_THRESHOLD_FOR_LOW_BALANCE: "3.0"
         HQB_RATIO_THRESHOLD: "20.0"

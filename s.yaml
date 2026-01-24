@@ -58,12 +58,7 @@ vars:
         PROFIT_THRESHOLD_FOR_LOW_BALANCE: "3.0"
         HQB_RATIO_THRESHOLD: "20.0"
   # 自定义组合共享 payload（避免三处重复维护）
-  custom_portfolio_payload: >
-    {"account": "13918199137", "password": "sWX15706",
-     "sub_account_list": [
-       {"sub_account_name": "海外基金组合", "amount": 5000.0}
-     ]
-    }
+  custom_portfolio_payload: '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 5000.0}]}'
 
 resources:
   add_new_jianlong:

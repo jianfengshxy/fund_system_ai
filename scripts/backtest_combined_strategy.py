@@ -292,7 +292,7 @@ class StrategyRunner:
 def run_combined_backtest():
     # 1. Setup
     runner_gold = StrategyRunner("004253", "国泰黄金ETF联接C", 50000.0)
-    runner_dongwu = StrategyRunner("011707", "东吴优化配置C", 50000.0)
+    runner_dongwu = StrategyRunner("011707", "东吴优化配置C", 10000.0)
     
     if not runner_gold.load_data() or not runner_dongwu.load_data():
         logger.error("Failed to load data")

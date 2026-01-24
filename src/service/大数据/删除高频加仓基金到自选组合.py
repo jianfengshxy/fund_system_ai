@@ -12,6 +12,7 @@ from src.db.database_connection import DatabaseConnection
 from src.common.constant import DEFAULT_USER
 from src.API.自选基金.FavorFund import get_favor_groups, remove_from_favorites, get_favor_group
 from src.common.logger import get_logger
+from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 
 logger = get_logger(__name__)
 
@@ -162,6 +163,23 @@ def remove_infrequent_funds_from_group(user, group_name: str, days: int = 30, mi
     # 1. Get frequent index funds (The "Keep" list)
     frequent_funds_set = get_frequent_index_funds(user, days=days, min_appear=min_appear)
     
+    # 活期宝余额风控检查：如果HQB余额大于总资产的 20%，则跳过清理
+    # 逻辑：因为活期宝超过限额，所以要扩大投资目标，不删除过期的基金，只有当小于阀值的时候，才清理过期的加仓风向标基金
+    # 注意：check_hqb_risk_allowed(user, threshold=20.0) 返回 True 表示余额充足（>20%），返回 False 表示余额不足（<20%）。
+    # 但这里的逻辑反过来了：
+    # 如果余额 > 20% (充足) -> 不删除 (跳过清理)
+    # 如果余额 < 20% (不足) -> 删除 (清理过期基金)
+    # check_hqb_risk_allowed 的默认行为是：如果 余额/总资产 < 阈值，返回 False (拦截买入/风险高)。如果 >= 阈值，返回 True (允许买入/风险低)。
+    # 所以：
+    # check_hqb_risk_allowed(user, 20.0) == True  => 余额 >= 20% => 跳过清理
+    # check_hqb_risk_allowed(user, 20.0) == False => 余额 < 20%  => 执行清理
+    
+    if check_hqb_risk_allowed(user, threshold=20.0):
+        logger.info("[风控检查] 活期宝余额充足(>20%)，为扩大投资目标，跳过清理过期风向标基金流程。")
+        return {'total_checked': 0, 'removed': 0, 'failed': 0}
+    else:
+        logger.info("[风控检查] 活期宝余额较低(<20%)，执行清理过期风向标基金流程，以聚焦核心标的。")
+
     # 2. Get group info
     group_id, existing_funds_dict = get_group_info(user, group_name)
     

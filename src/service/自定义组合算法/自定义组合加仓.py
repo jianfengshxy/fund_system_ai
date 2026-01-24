@@ -203,6 +203,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
 
 if __name__ == "__main__":
     try:
+        # 测试1：海外基金组合
         increase_funds(
             DEFAULT_USER,
             "海外基金组合",
@@ -214,6 +215,17 @@ if __name__ == "__main__":
                 {"fund_code": "100055", "fund_name": "富国全球科技互联网股票(QDII)A", "amount": 5000.0}
             ]
         )
+        
+        # 测试2：快速止盈组合（针对用户反馈的鹏华空天军工）
+        # 用户反馈：资产5000多，fund_amount=10000，应触发加仓
+        increase_funds(
+            DEFAULT_USER,
+            "快速止盈",
+            fund_list=[
+                {"fund_code": "010364", "fund_name": "鹏华空天军工指数(LOF)C", "amount": 10000.0}
+            ]
+        )
+        
         logging.info(f"用户 {DEFAULT_USER.customer_name} 加仓操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

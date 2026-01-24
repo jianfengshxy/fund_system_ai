@@ -135,7 +135,7 @@ resources:
         triggerConfig:
           payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "马丁格尔plus","total_budget": 1000000.0,"fund_type": "index"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 47 14 * * 1-5"
-          enable: false
+          enable: true
   
       # 最优止盈（optimal_take_profit）账户清单（去重后仅保留首个定义）
       - qualifier: ${vars.common.props.triggerConfig.qualifier}

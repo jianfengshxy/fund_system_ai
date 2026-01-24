@@ -37,7 +37,7 @@ from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.API.交易管理.trade import get_trades_list, get_bank_shares
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
 from src.service.公共服务.nav_gate_service import nav5_gate
-from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
+from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -120,27 +120,22 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     half_year_val = float(half_year_return) if isinstance(half_year_return, (int, float)) else None
     year_val = float(year_return) if isinstance(year_return, (int, float)) else None
     
-    # 获取活期宝占比 (新风控)
-    hqb_ratio = 100.0
-    try:
-        asset_response = GetMyAssetMainPartAsync(user)
-        if asset_response.Success and asset_response.Data:
-            hqb_val = float(asset_response.Data.get('HqbValue', 0.0))
-            total_val = float(asset_response.Data.get('TotalValue', 0.0))
-            if total_val > 0:
-                hqb_ratio = (hqb_val / total_val) * 100.0
-            logger.info(f"风控检查 - 活期宝占比: {hqb_ratio:.2f}% (Hqb:{hqb_val}, Total:{total_val})")
-    except Exception as e:
-        logger.warning(f"获取资产占比失败，跳过此风控项: {e}")
-
+    # 获取活期宝占比 (新风控 - 统一调用公共服务)
+    # 使用 check_hqb_risk_allowed 获取布尔值结果，如果返回 False，说明余额不足（< 阈值）
+    # 但此处逻辑是：如果 check_hqb_risk_allowed(user, threshold=10.0) 返回 False，则 hqb_ratio_ok 为 False
+    hqb_risk_passed = check_hqb_risk_allowed(user, threshold=10.0)
+    
+    # 注意：check_hqb_risk_allowed 内部已经打日志了，这里主要为了拿到状态用于后续 stop_reason 判断
+    # 如果 hqb_risk_passed 为 False，说明 占比 < 10%
+    
     stop_reason = None
     
     if half_year_val is not None and half_year_val <= 0:
         stop_reason = f"半年收益率({half_year_val}%) <= 0"
     elif year_val is not None and year_val <= 0:
         stop_reason = f"年收益率({year_val}%) <= 0"
-    elif hqb_ratio < 10.0:
-        stop_reason = f"活期宝占比({hqb_ratio:.2f}%) < 10% (硬性风控)"
+    elif not hqb_risk_passed:
+        stop_reason = f"活期宝占比不足 10% (硬性风控)"
         
     if stop_reason:
         logger.info(f"最强风控触发 - {fund_name}{fund_code} {stop_reason}，执行回撤")

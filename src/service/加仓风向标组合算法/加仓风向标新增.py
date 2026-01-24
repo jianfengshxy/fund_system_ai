@@ -95,9 +95,9 @@ def add_new_funds(
     logger.info("========== 开始执行新增基金算法（最小落地版） ===========", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "wind_add_new"})
     logger.info(f"用户: {user.customer_name}，组合名称: {sub_account_name}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "wind_add_new"})
 
-    # 0) 全局风控检查：活期宝占比
-    if not check_hqb_risk_allowed(user):
-        logger.info("[加仓风向标] 全局风控拦截：活期宝占比不足，退出新增流程")
+    # 0) 全局风控检查：活期宝占比（增加阈值参数）
+    if not check_hqb_risk_allowed(user, threshold=20.0):
+        logger.info("[加仓风向标] 全局风控拦截：活期宝占比不足(20%)，退出新增流程")
         return True
 
     try:

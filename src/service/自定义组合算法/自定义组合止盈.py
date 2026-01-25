@@ -176,7 +176,8 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
                 fund_type == '000' and 
                 "QDII" not in fund_name and 
                 times < 5.0 and 
-                estimated_change > 0.5):
+                estimated_change > 0.5 and
+                estimated_profit_rate > 3.0):
                 
                 logger.info(f"{customer_name}的指数基金快速止盈操作：基金{fund_name}({fund_code})预估收益{estimated_profit_rate:.2f}%，"
                             f"投资次数:{times}, 估值增长率:{estimated_change}%.")

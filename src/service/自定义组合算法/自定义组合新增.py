@@ -78,9 +78,24 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
 
             # 若基金不在资产列表中，则直接购买（新增前加净值门槛）
             if fund_code not in held_codes:
+
                 # 候选阶段先应用五日均值过滤
                 if not nav5_gate(fund_info, fund_name, fund_code, logger):
                     logger.info(f"净值未达条件，跳过候选：{fund_name}({fund_code})")
+                    continue
+                
+                # 增加过滤条件：基金的1年收益率和半年收益率有一个小于0就跳过
+                # 参考increase.py中的风控逻辑
+                year_return = getattr(fund_info, "year_return", None)
+                half_year_return = getattr(fund_info, "six_month_return", None)
+                
+                # 转换为浮点数进行比较
+                year_val = float(year_return) if isinstance(year_return, (int, float)) else None
+                half_year_val = float(half_year_return) if isinstance(half_year_return, (int, float)) else None
+                
+                # 如果年收益率 <= 0 或 半年收益率 <= 0，则跳过
+                if (year_val is not None and year_val <= 0) or (half_year_val is not None and half_year_val <= 0):
+                    logger.info(f"基金1年收益率({year_val})或半年收益率({half_year_val})小于等于0，跳过候选：{fund_name}({fund_code})")
                     continue
 
                 # 增加条件：基金的100日净值排名 < 20 就 continue

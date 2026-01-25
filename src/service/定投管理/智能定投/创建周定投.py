@@ -233,7 +233,7 @@ def create_weekly_smart_investment_plans(
 if __name__ == "__main__":
     info = create_weekly_smart_investment_plans(
         user=DEFAULT_USER,
-        fund_code="004433",
+        fund_code="020412",
         amount="10000.0",
         days=[1, 2, 3, 4, 5],
         sub_account_name=None,

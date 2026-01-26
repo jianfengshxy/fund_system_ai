@@ -1,17 +1,21 @@
 import sys
 import os
 import logging
-from src.common.logger import get_logger
-from src.common.errors import RetriableError, ValidationError
 import urllib.parse
 import urllib3
 import warnings
 import json
 import time
+import random
 
 # 添加项目根目录到路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from common.constant import SERVER_VERSION, PHONE_TYPE
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.append(root_dir)
+sys.path.append(os.path.join(root_dir, "src"))
+
+from src.common.logger import get_logger
+from src.common.errors import RetriableError, ValidationError
+from src.common.constant import SERVER_VERSION, PHONE_TYPE
 
 # 禁用SSL证书验证警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -137,14 +141,12 @@ def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
         更新后的FundInfo对象，如果更新失败返回None
     """
     url = f'https://fundgz.1234567.com.cn/js/{fund_info.fund_code}.js'
-    params = {
-        'rt': int(time.time() * 1000)  # 添加时间戳防止缓存
-    }
     
     headers = {
         'Connection': 'keep-alive',
         'Host': 'fundgz.1234567.com.cn',
-        'User-Agent': 'Apache-HttpClient/4.5.14 (Java/17.0.10)'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://fund.eastmoney.com/'
     }
     
     logger = get_logger("FundInfo")
@@ -155,6 +157,12 @@ def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
     retry_delay = 2  # 初始延迟2秒
     
     while retry_count < max_retries:
+        # 动态生成参数，避免被识别为重复请求
+        params = {
+            'rt': int(time.time() * 1000),      # 时间戳
+            '_': random.randint(100000, 999999) # 随机数
+        }
+        
         try:
             if retry_count > 0:
                 logger.debug(f"正在进行第 {retry_count} 次重试获取基金估值数据，基金代码: {fund_info.fund_code}")
@@ -242,7 +250,13 @@ if __name__ == "__main__":
         fund_info = getFundInfo(DEFAULT_USER, '011707')
         
         if fund_info:
-            print("\n基金信息获取成功:")
+            print(f"基础信息获取成功: {fund_info.fund_name}")
+            
+            # 测试实时估值更新
+            print("正在获取实时估值...")
+            updateFundEstimatedValue(fund_info)
+            
+            print("\n最终基金信息:")
             print(f"基金代码: {fund_info.fund_code}")
             print(f"基金名称: {fund_info.fund_name}")
             print(f"基金类型: {fund_info.fund_type}")

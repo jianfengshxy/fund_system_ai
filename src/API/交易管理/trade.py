@@ -152,7 +152,7 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
     
     headers = {
         "Connection": "keep-alive",
-        "Host": f"tradeapilvs{user.index}.95021.com",
+        "Host": f"tradeapilvs{u.index}.1234567.com.cn",
         "Accept": "*/*",
         "GTOKEN": "4474AFD3E15F441E937647556C01C174",
         "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.6",
@@ -187,6 +187,26 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
              "sub_account_no": sub_account_no}
     try:
         response = requests.post(url, headers=headers, data=data, verify=False)
+        
+        # 403 Forbidden 重试逻辑
+        if response.status_code == 403:
+            logger.warning(f"获取银行份额信息返回403 Forbidden, 尝试刷新token重试", extra=extra)
+            u2 = ensure_user_fresh(u, force_refresh=True)
+            data["CToken"] = u2.c_token
+            data["CustomerNo"] = u2.customer_no
+            data["Passportid"] = u2.passport_id
+            data["UToken"] = u2.u_token
+            data["UserId"] = u2.customer_no
+            
+            url2 = f"https://tradeapilvs{u2.index}.1234567.com.cn/User/home/GetShareDetail"
+            if not u2.index:
+                url2 = "https://tradeapilvs1.1234567.com.cn/User/home/GetShareDetail"
+            
+            # 更新Host头
+            headers["Host"] = f"tradeapilvs{u2.index}.1234567.com.cn"
+            
+            response = requests.post(url2, headers=headers, data=data, verify=False)
+
         response.raise_for_status()
         response_data = response.json()
         # logger.info(f"响应数据: {response_data}")

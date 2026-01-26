@@ -28,6 +28,7 @@ from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
 from src.service.定投管理.定投查询.定投查询 import get_all_fund_plan_details
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 from src.common.constant import DEFAULT_USER, HQB_RATIO_THRESHOLD, PROFIT_THRESHOLD_FOR_LOW_BALANCE
+from src.service.公共服务.nav_gate_service import nav5_fall_gate
 
 logging.basicConfig(
     level=logging.INFO,
@@ -113,28 +114,13 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             
             # --- 止盈逻辑更新：对齐全局智能定投 (redeem.py) ---
             
-            # 1. 趋势门槛：只有净值低于5日均值时才允许止盈 (防止卖飞)
-            est_nav = getattr(fund_info, 'estimated_value', None)
-            prev_nav = getattr(fund_info, 'nav', None)
-            nav5 = getattr(fund_info, 'nav_5day_avg', None)
-            try:
-                est_val = float(est_nav) if est_nav is not None else (float(prev_nav) if prev_nav is not None else None)
-                nav5_val = float(nav5) if nav5 is not None else None
-            except Exception:
-                est_val = None
-                nav5_val = None
-
-            if est_val is None or nav5_val is None:
-                # 如果缺少净值数据，为安全起见跳过止盈，或者根据策略决定
-                logger.info(f"止盈趋势门槛检查：缺少用于对比的净值（estimated_value={est_nav}, prev_nav={prev_nav}, nav_5day_avg={nav5}），跳过止盈")
-                continue
-            
             # 2. 计算动态止盈点：max(30日年化波动率, 3.0%)
             stop_rate = max(float(volatility), 3.0)
             logger.info(f"组合{sub_account_name}的{fund_name}{fund_code}波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（不低于3.0）")
 
             # 3. 检查基本止盈条件
-            if estimated_profit_rate > stop_rate:
+            # 增加 nav < nav5 趋势判断，只有跌破5日均线才止盈
+            if estimated_profit_rate > stop_rate and nav5_fall_gate(fund_info, fund_name, fund_code, logger):
                 logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},实际止盈点:{stop_rate}")
                 res = sell_low_fee_shares(user, sub_account_no, fund_code, shares)
                 if res is not None and getattr(res, 'busin_serial_no', None):
@@ -170,7 +156,7 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             # 指数基金且非QDII，若仓位不重且今日上涨，立即止盈
             # 条件:
             # 1. 类型为指数 (000) 且非 QDII
-            # 2. 投资次数 < 3.0 (仓位还不重)
+            # 2. 投资次数 < 5.0 (仓位还不重)
             # 3. 今日估值上涨 > 0.5% (趁反弹跑路)
             if (
                 fund_type == '000' and 

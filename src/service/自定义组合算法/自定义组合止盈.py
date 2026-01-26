@@ -170,12 +170,12 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             # 指数基金且非QDII，若仓位不重且今日上涨，立即止盈
             # 条件:
             # 1. 类型为指数 (000) 且非 QDII
-            # 2. 投资次数 < 5.0 (仓位还不重)
+            # 2. 投资次数 < 3.0 (仓位还不重)
             # 3. 今日估值上涨 > 0.5% (趁反弹跑路)
             if (
                 fund_type == '000' and 
                 "QDII" not in fund_name and 
-                times < 5.0 and 
+                times < 3.0 and 
                 estimated_change > 0.5 and
                 estimated_profit_rate > 3.0):
                 

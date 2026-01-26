@@ -175,7 +175,7 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             if (
                 fund_type == '000' and 
                 "QDII" not in fund_name and 
-                times < 3.0 and 
+                times < 5.0 and 
                 estimated_change > 0.5 and
                 estimated_profit_rate > 3.0):
                 

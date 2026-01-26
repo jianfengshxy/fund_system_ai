@@ -15,6 +15,7 @@ if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
 from src.common.constant import DEFAULT_USER
+from src.service.公共服务.nav_gate_service import nav5_gate
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -226,7 +227,7 @@ class CustomStrategyBacktestAccount:
             return 0.0
         total_profit = self.get_total_profit(nav)
         return (total_profit / self.total_invested) * 100
-    
+
     def get_holding_profit_rate(self, nav: float) -> float:
         """获取当前持仓收益率（仅基于当前持仓成本）"""
         if self.avg_cost <= 0:
@@ -462,192 +463,226 @@ def should_sell(account: CustomStrategyBacktestAccount, nav: float, indicators: 
     return False, "未达到止盈条件"
 
 
-def run_combined_backtest(funds: List[Dict], start_date: str, end_date: str):
-    """运行组合回测"""
-    logger.info(f"开始组合回测，时间范围: {start_date} - {end_date}")
-    
-    # 1. 获取所有基金数据
-    fund_data = {}
-    for fund in funds:
-        fund_code = fund['fund_code']
-        df = get_historical_data(fund_code)
-        if df.empty:
-            logger.error(f"基金 {fund_code} 数据为空，跳过")
-            continue
-            
-        # 筛选时间
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-        df = df[(df['date'] >= start_dt) & (df['date'] <= end_dt)]
-        
-        # 计算指标
-        df = calculate_technical_indicators(df)
-        fund_data[fund_code] = df
-        
-    if not fund_data:
-        logger.error("没有有效的基金数据")
+def run_backtest(fund_code: str, fund_name: str, amount: float, start_date: str, end_date: str):
+    """运行回测"""
+    logger.info(f"开始回测基金 {fund_code} ({fund_name}), 投资金额: {amount}, 时间范围: {start_date} - {end_date}")
+
+    # 获取历史数据
+    df = get_historical_data(fund_code)
+    if df.empty:
+        logger.error(f"无法获取基金 {fund_code} 的历史数据")
         return None
 
-    # 2. 初始化账户
-    accounts = {}
-    for fund in funds:
-        accounts[fund['fund_code']] = CustomStrategyBacktestAccount(
-            fund['fund_code'], 
-            fund['fund_name'], 
-            fund['amount']
-        )
-        
-    # 3. 生成完整的日期序列（取并集）
-    all_dates = set()
-    for df in fund_data.values():
-        all_dates.update(df['date'].dt.strftime("%Y-%m-%d").tolist())
-    sorted_dates = sorted(list(all_dates))
-    
-    # 4. 按日回测
-    portfolio_daily_records = []
-    
-    for current_date in sorted_dates:
-        daily_portfolio_value = 0.0
-        daily_total_invested = 0.0
-        daily_total_profit = 0.0
-        
-        # 对每个基金执行当日操作
-        for fund_code, account in accounts.items():
-            df = fund_data.get(fund_code)
-            if df is None:
-                continue
-                
-            # 查找当日数据
-            day_data = df[df['date'] == current_date]
-            if day_data.empty:
-                # 如果当日无数据（如停牌），保持上日状态
-                if account.shares > 0:
-                     # 尝试获取最近一次的净值
-                     last_nav = account.daily_positions[-1]['nav'] if account.daily_positions else 1.0
-                     daily_portfolio_value += account.get_asset_value(last_nav)
-                     daily_total_invested += account.total_invested
-                     daily_total_profit += account.get_total_profit(last_nav)
-                continue
-                
-            row = day_data.iloc[0]
-            nav = row['nav']
-            indicators = row.to_dict()
-            indicators['date'] = row['date']
-            
-            # --- 交易逻辑 ---
-            # 检查买入
-            if account.shares <= 0:
-                should_buy, reason = should_buy_new(account, nav, indicators)
-                if should_buy:
-                    account.buy(nav, current_date, "NEW_BUY", reason)
-            else:
-                should_add, reason = should_buy_increase(account, nav, indicators)
-                if should_add:
-                    account.buy(nav, current_date, "INCREASE", reason)
-                    
-            # 检查卖出
-            should_sell_flag, sell_reason = should_sell(account, nav, indicators)
-            if should_sell_flag:
-                account.sell(nav, current_date, additional_info=sell_reason)
-                
-            # 记录个基持仓
-            account.record_daily_position(current_date, nav)
-            
-            # 累加组合数据
-            daily_portfolio_value += account.get_asset_value(nav)
-            daily_total_invested += account.total_invested
-            daily_total_profit += account.get_total_profit(nav)
-            
-        # 记录组合当日状态
-        portfolio_daily_records.append({
-            'date': current_date,
-            'asset_value': daily_portfolio_value,
-            'total_invested': daily_total_invested,
-            'total_profit': daily_total_profit,
-            'profit_rate': (daily_total_profit / daily_total_invested * 100) if daily_total_invested > 0 else 0
-        })
-        
-    # 5. 回测结束强制平仓
-    for fund_code, account in accounts.items():
-        if account.shares > 0:
-            df = fund_data[fund_code]
-            if not df.empty:
-                final_row = df.iloc[-1]
-                account.sell(final_row['nav'], final_row['date'].strftime("%Y-%m-%d"), additional_info="回测结束强制卖出")
+    # 筛选时间范围内的数据
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+    df = df[(df['date'] >= start_dt) & (df['date'] <= end_dt)]
 
-    # 6. 计算组合统计指标
-    # 最大回撤
-    max_drawdown = 0
-    max_val = float('-inf')
-    daily_drawdowns = []
-    
-    for record in portfolio_daily_records:
-        # 净值曲线 = 累计盈亏 (简单近似，或者用 total_asset - total_invested)
-        # 更准确的是计算资金曲线的回撤
-        # 这里用 (资产市值 - 投入本金) 即 累计盈利金额 的回撤
-        current_profit = record['total_profit']
-        if current_profit > max_val:
-            max_val = current_profit
-        drawdown = max_val - current_profit
-        if drawdown > max_drawdown:
-            max_drawdown = drawdown
-        daily_drawdowns.append(drawdown)
-        
-    total_profit = sum([acc.realized_profit + acc.get_unrealized_profit(acc.daily_positions[-1]['nav'] if acc.daily_positions else 0) for acc in accounts.values()])
-    
-    return {
-        'accounts': accounts,
-        'daily_records': portfolio_daily_records,
-        'total_profit': total_profit,
-        'max_drawdown': max_drawdown,
-        'final_invested': sum(acc.total_invested for acc in accounts.values()),
-        'max_occupied': max(r['total_invested'] for r in portfolio_daily_records) if portfolio_daily_records else 0
-    }
+    if df.empty:
+        logger.error(f"在指定时间范围内没有基金 {fund_code} 的数据")
+        return None
+
+    # 计算技术指标
+    df = calculate_technical_indicators(df)
+
+    # 初始化账户
+    account = CustomStrategyBacktestAccount(fund_code, fund_name, amount)
+
+    # 模拟交易
+    for idx, row in df.iterrows():
+        current_date = row['date'].strftime("%Y-%m-%d")
+        nav = row['nav']
+
+        # 获取当日指标
+        indicators = row.to_dict()
+        indicators['date'] = row['date']  # 保留日期对象用于计算间隔
+
+        # 检查是否新增买入（无持仓时）
+        if account.shares <= 0:
+            should_buy_new_flag, buy_new_reason = should_buy_new(account, nav, indicators)
+            if should_buy_new_flag:
+                account.buy(nav, current_date, "NEW_BUY", buy_new_reason)
+        else:
+            # 有持仓时检查是否加仓
+            should_buy_increase_flag, buy_increase_reason = should_buy_increase(account, nav, indicators)
+            if should_buy_increase_flag:
+                account.buy(nav, current_date, "INCREASE", buy_increase_reason)
+
+        # 检查是否卖出
+        should_sell_flag, sell_reason = should_sell(account, nav, indicators)
+        if should_sell_flag:
+            account.sell(nav, current_date, additional_info=sell_reason)
+
+        # 记录每日持仓
+        account.record_daily_position(current_date, nav)
+
+    # 回测结束时，如果有持仓则全部卖出
+    if account.shares > 0:
+        final_row = df.iloc[-1]
+        final_nav = final_row['nav']
+        account.sell(final_nav, final_row['date'].strftime("%Y-%m-%d"), additional_info="回测结束强制卖出")
+
+    # 计算最终统计
+    if account.daily_positions:
+        final_nav = account.daily_positions[-1]['nav']
+        # 计算总收益：已实现盈利 + 未实现盈利
+        total_profit = account.realized_profit + account.get_unrealized_profit(final_nav)
+
+        # 计算最大回撤
+        daily_values = [pos['asset_value'] for pos in account.daily_positions]
+        cumulative_invested = [pos['total_invested'] for pos in account.daily_positions]
+        daily_profits = [v - i for v, i in zip(daily_values, cumulative_invested)]
+
+        max_value = float('-inf')
+        max_drawdown = 0
+        for profit in daily_profits:
+            if profit > max_value:
+                max_value = profit
+            drawdown = max_value - profit
+            if drawdown > max_drawdown:
+                max_drawdown = drawdown
+
+        # 计算资金占用情况
+        daily_invested = [pos['total_invested'] for pos in account.daily_positions]
+        max_occupied = max(daily_invested) if daily_invested else 0
+        avg_occupied = np.mean(daily_invested) if daily_invested else 0
+
+        # 计算买入和卖出金额
+        total_buy_amount = sum(trade['amount'] for trade in account.trades if trade['action'] in ['BUY', 'NEW_BUY', 'INCREASE'])
+        total_sell_amount = sum(trade['amount'] for trade in account.trades if trade['action'] == 'SELL')
+
+        # 统计止盈次数
+        sell_count = len([t for t in account.trades if t['action'] == 'SELL'])
+
+        result = {
+            'account': account,
+            'total_profit': total_profit,
+            'max_drawdown': max_drawdown,
+            'max_occupied': max_occupied,
+            'avg_occupied': avg_occupied,
+            'final_asset_value': account.get_asset_value(final_nav),
+            'total_invested': account.total_invested,
+            'total_redeemed': account.total_redeemed,
+            'total_buy_amount': total_buy_amount,
+            'total_sell_amount': total_sell_amount,
+            'sell_count': sell_count,
+            'realized_profit': account.realized_profit,
+            'unrealized_profit': account.get_unrealized_profit(final_nav)
+        }
+
+        return result
+
+    return None
+
+
+def save_backtest_report(result: Dict, fund_code: str, fund_name: str, amount: float):
+    """保存回测报告"""
+    reports_dir = os.path.join(root_dir, "reports")
+    os.makedirs(reports_dir, exist_ok=True)
+
+    # 生成报告内容
+    report_content = f"""# 基金 {fund_code} ({fund_name}) 自定义策略回测报告
+
+## 基本信息
+- 基金代码: {fund_code}
+- 基金名称: {fund_name}
+- 每次投资金额: {amount:,.2f} 元
+- 回测时间: 2025-01-01 至 2025-12-31
+
+## 回测结果
+- 总收益金额: {result['total_profit']:,.2f} 元
+  - 已实现盈利: {result['realized_profit']:,.2f} 元
+  - 未实现盈利: {result['unrealized_profit']:,.2f} 元
+- 最大回撤: {result['max_drawdown']:,.2f} 元
+- 最大占用金额: {result['max_occupied']:,.2f} 元
+- 平均占用金额: {result['avg_occupied']:,.2f} 元
+- 总买入金额: {result['total_buy_amount']:,.2f} 元
+- 总止盈金额: {result['total_sell_amount']:,.2f} 元
+- 止盈次数: {result['sell_count']} 次
+- 最终资产价值: {result['final_asset_value']:,.2f} 元
+- 总投入金额: {result['total_invested']:,.2f} 元
+- 总赎回金额: {result['total_redeemed']:,.2f} 元
+
+## 每次止盈记录
+"""
+
+    # 添加每次止盈记录
+    for i, record in enumerate(result['account'].sell_profit_records, 1):
+        report_content += f"- 第{i}次止盈: {record['date']} - 卖出金额: {record['sold_amount']:,.2f}, 成本: {record['cost']:,.2f}, 盈利: {record['profit']:,.2f}, 原因: {record['additional_info']}\n"
+
+    report_content += "\n## 交易记录\n"
+
+    for trade in result['account'].trades:
+        if trade['action'] == 'SELL':
+            realized_profit = trade.get('realized_profit', 0)
+            report_content += f"- {trade['date']}: {trade['action']} - 金额: {trade['amount']:,.2f}, 净值: {trade['nav']:.4f}, 盈利: {realized_profit:.2f}, 原因: {trade['additional_info']}\n"
+        else:
+            report_content += f"- {trade['date']}: {trade['action']} - 金额: {trade['amount']:,.2f}, 净值: {trade['nav']:.4f}, 原因: {trade['additional_info']}\n"
+
+    # 保存报告
+    report_filename = f"custom_strategy_backtest_{fund_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+    report_path = os.path.join(reports_dir, report_filename)
+
+    with open(report_path, 'w', encoding='utf-8') as f:
+        f.write(report_content)
+
+    logger.info(f"回测报告已保存至: {report_path}")
+
 
 def main():
-    funds = [
-        {"fund_code": "011103", "fund_name": "天弘中证光伏产业指数C", "amount": 50000.0},
-        {"fund_code": "008888", "fund_name": "华夏国证半导体芯片ETF联接C", "amount": 50000.0}
-    ]
-    
-    result = run_combined_backtest(funds, "2025-01-01", "2025-12-31")
-    
-    if result:
-        print("\n" + "="*60)
-        print("组合策略回测结果 (光伏 + 芯片)")
-        print("="*60)
-        print(f"总收益金额: {result['total_profit']:,.2f} 元")
-        print(f"组合最大回撤: {result['max_drawdown']:,.2f} 元")
-        print(f"最大资金占用: {result['max_occupied']:,.2f} 元")
-        
-        # 分别打印个基表现用于对比
-        print("-" * 60)
-        for code, acc in result['accounts'].items():
-            last_nav = acc.daily_positions[-1]['nav'] if acc.daily_positions else 0
-            profit = acc.realized_profit + acc.get_unrealized_profit(last_nav)
-            print(f"基金 {acc.fund_name} ({code}):")
-            print(f"  收益: {profit:,.2f}")
-            print(f"  止盈次数: {len([t for t in acc.trades if t['action'] == 'SELL'])}")
+    # 设置参数
+    fund_code = "008888"
+    fund_name = "华夏国证半导体芯片ETF联接C"
+    amount = 50000.0
+    start_date = "2025-01-01"
+    end_date = "2025-12-31"
 
-        # 简单的相关性分析 (基于每日收益率)
-        # 这里我们简单计算两者每日盈亏的相关性
-        # ... (略，直接看结果分析)
-        
-        # 保存组合报告
-        report_path = os.path.join(root_dir, "reports", f"combined_backtest_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md")
-        with open(report_path, 'w') as f:
-            f.write("# 组合策略回测报告 (光伏 + 芯片)\n\n")
-            f.write(f"## 总体表现\n")
-            f.write(f"- 总收益: {result['total_profit']:,.2f}\n")
-            f.write(f"- 最大回撤: {result['max_drawdown']:,.2f}\n")
-            f.write(f"- 最大资金占用: {result['max_occupied']:,.2f}\n\n")
-            f.write("## 每日资金曲线\n")
-            f.write("| 日期 | 总资产 | 总投入 | 总盈利 | 收益率 |\n")
-            f.write("|---|---|---|---|---|\n")
-            for r in result['daily_records']:
-                f.write(f"| {r['date']} | {r['asset_value']:.2f} | {r['total_invested']:.2f} | {r['total_profit']:.2f} | {r['profit_rate']:.2f}% |\n")
-                
-        print(f"\n详细报告已保存至: {report_path}")
+    # 运行回测
+    result = run_backtest(fund_code, fund_name, amount, start_date, end_date)
+
+    if result:
+        # 打印结果摘要
+        print("\n" + "="*60)
+        print("回测结果摘要")
+        print("="*60)
+        print(f"基金代码: {fund_code}")
+        print(f"基金名称: {fund_name}")
+        print(f"每次投资金额: {amount:,.2f} 元")
+        print(f"总收益金额: {result['total_profit']:,.2f} 元")
+        print(f"  - 已实现盈利: {result['realized_profit']:,.2f} 元")
+        print(f"  - 未实现盈利: {result['unrealized_profit']:,.2f} 元")
+        print(f"最大回撤: {result['max_drawdown']:,.2f} 元")
+        print(f"最大占用金额: {result['max_occupied']:,.2f} 元")
+        print(f"平均占用金额: {result['avg_occupied']:,.2f} 元")
+        print(f"总买入金额: {result['total_buy_amount']:,.2f} 元")
+        print(f"总止盈金额: {result['total_sell_amount']:,.2f} 元")
+        print(f"止盈次数: {result['sell_count']} 次")
+        print(f"最终资产价值: {result['final_asset_value']:,.2f} 元")
+        print(f"总投入金额: {result['total_invested']:,.2f} 元")
+        print(f"总赎回金额: {result['total_redeemed']:,.2f} 元")
+        print("="*60)
+
+        # 保存详细报告
+        save_backtest_report(result, fund_code, fund_name, amount)
+
+        # 打印每次止盈记录
+        print("\n每次止盈记录:")
+        for i, record in enumerate(result['account'].sell_profit_records, 1):
+            print(f"  第{i}次止盈: {record['date']} - 卖出: {record['sold_amount']:.2f}, 成本: {record['cost']:.2f}, 盈利: {record['profit']:.2f}, 原因: {record['additional_info']}")
+
+        # 打印交易记录
+        print("\n交易记录:")
+        for trade in result['account'].trades:
+            if trade['action'] == 'SELL':
+                realized_profit = trade.get('realized_profit', 0)
+                print(f"  {trade['date']}: {trade['action']} - 金额: {trade['amount']:,.2f}, "
+                      f"净值: {trade['nav']:.4f}, 盈利: {realized_profit:.2f}, 原因: {trade['additional_info']}")
+            else:
+                print(f"  {trade['date']}: {trade['action']} - 金额: {trade['amount']:,.2f}, "
+                      f"净值: {trade['nav']:.4f}, 原因: {trade['additional_info']}")
+    else:
+        print("回测失败")
+
 
 if __name__ == "__main__":
     main()

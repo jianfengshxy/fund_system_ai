@@ -174,11 +174,11 @@ def remove_infrequent_funds_from_group(user, group_name: str, days: int = 30, mi
     # check_hqb_risk_allowed(user, 20.0) == True  => 余额 >= 20% => 跳过清理
     # check_hqb_risk_allowed(user, 20.0) == False => 余额 < 20%  => 执行清理
     
-    if check_hqb_risk_allowed(user, threshold=20.0):
-        logger.info("[风控检查] 活期宝余额充足(>20%)，为扩大投资目标，跳过清理过期风向标基金流程。")
-        return {'total_checked': 0, 'removed': 0, 'failed': 0}
-    else:
-        logger.info("[风控检查] 活期宝余额较低(<20%)，执行清理过期风向标基金流程，以聚焦核心标的。")
+    # if check_hqb_risk_allowed(user, threshold=20.0):
+    #     logger.info("[风控检查] 活期宝余额充足(>20%)，为扩大投资目标，跳过清理过期风向标基金流程。")
+    #     return {'total_checked': 0, 'removed': 0, 'failed': 0}
+    # else:
+    #     logger.info("[风控检查] 活期宝余额较低(<20%)，执行清理过期风向标基金流程，以聚焦核心标的。")
 
     # 2. Get group info
     group_id, existing_funds_dict = get_group_info(user, group_name)

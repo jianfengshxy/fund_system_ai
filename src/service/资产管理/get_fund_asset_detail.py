@@ -23,6 +23,7 @@ from src.API.交易管理.trade import get_trades_list
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.common.errors import RetriableError, ValidationError
 from src.API.登录接口.login import ensure_user_fresh
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def get_fund_asset_detail(user: User, sub_account_no: str,fund_code: str) -> Optional[AssetDetails]:
     """
@@ -80,7 +81,8 @@ def get_sub_account_asset_by_name(user: User, sub_account_name: str) -> Optional
     
     if asset_details_list:
         logger.info(f"获取到组合 {sub_account_name} 的资产详情:", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "sub_account_name": sub_account_name, "action": "get_assets"})
-        for asset in asset_details_list:
+        
+        def process_log_asset(asset):
             try:
                 fund_info = get_all_fund_info(user, asset.fund_code)
             except RetriableError as e:
@@ -96,6 +98,9 @@ def get_sub_account_asset_by_name(user: User, sub_account_name: str) -> Optional
                        f"可用份额={asset.available_vol}, "
                        f"收益率={asset.constant_profit_rate or asset.hold_profit_rate}, "
                        f"预估收益率={estimated_profit_rate}", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "sub_account_name": sub_account_name, "fund_code": asset.fund_code, "action": "get_assets"})
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            executor.map(process_log_asset, asset_details_list)
     else:
         logger.warning(f"组合 {sub_account_name} 没有资产详情", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "sub_account_name": sub_account_name, "action": "get_assets"})
     

@@ -5,6 +5,7 @@ from src.common.errors import RetriableError, ValidationError
 import requests
 import urllib3
 import numpy as np
+from src.common.requests_session import session
 from domain.fund.fund_info import FundInfo
 from common.constant import SERVER_VERSION, PHONE_TYPE, MOBILE_KEY, DEVICE_ID
 
@@ -62,7 +63,7 @@ def get_nav_rank(user, fund_info: FundInfo, N: int, nav: Optional[float] = None)
     logger = get_logger("FundRank")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_nav_rank", "fund_code": fund_info.fund_code}
     try:
-        response = requests.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
         response.raise_for_status()
         
         json_data = response.json()

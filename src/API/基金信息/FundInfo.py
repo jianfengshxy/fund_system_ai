@@ -23,8 +23,13 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # 禁用 urllib3 的警告信息
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from typing import Optional
+from src.common.requests_session import session
 from domain.fund.fund_info import FundInfo
+
+# 移除本地Session配置，使用全局共享Session
 
 def getFundInfo(user,fund_code) -> Optional[FundInfo]:
     """
@@ -82,8 +87,8 @@ def getFundInfo(user,fund_code) -> Optional[FundInfo]:
     logger = get_logger("FundInfo")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_fund_info", "fund_code": fund_code}
     try:
-        # 直接使用原始数据，不进行额外编码
-        response = requests.post(
+        # 使用全局session发送请求
+        response = session.post(
             url,
             data=data,
             headers=headers,
@@ -170,7 +175,8 @@ def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
                 time.sleep(retry_delay)
                 retry_delay *= 2
                 
-            response = requests.get(url, params=params, headers=headers, verify=False, timeout=10)
+            # 使用全局session发送请求
+            response = session.get(url, params=params, headers=headers, verify=False, timeout=10)
             response.raise_for_status()
             
             # 响应格式为: jsonpgz({...});，需要提取JSON部分

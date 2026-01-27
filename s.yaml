@@ -60,7 +60,42 @@ vars:
   # 自定义组合共享 payload（避免三处重复维护）
   custom_portfolio_payload: '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 5000.0}]}'
 
+  # 定投固定比率止盈配置
+  fixed_ratio_redeem_payload: '{"account": "13918199137", "password": "sWX15706", "fundcodelist": [{"fundcode": "011707", "stoprate": "5.0"}, {"fundcode": "021740", "stoprate": "3.0"}]}'
+
 resources:
+  fixed_ratio_redeem:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.fixed_ratio_redeem"
+      functionName: "fixed_ratio_redeem"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables:
+        DB_USER: ${vars.common.database.DB_USER}
+        DB_PASSWORD: ${vars.common.database.DB_PASSWORD}
+        DB_PORT: ${vars.common.database.DB_PORT}
+        DB_NAME: ${vars.common.database.DB_NAME}
+        EXTERNAL_HOST: ${vars.common.database.external_host}
+        VPC_ID: ${vars.common.database.vpc_id}
+        CIDR: ${vars.common.database.cidr}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "fixed_ratio_redeem_trigger"
+        triggerConfig:
+          payload: ${vars.fixed_ratio_redeem_payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 50 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
   add_new_jianlong:
     component: ${vars.common.component}
     actions: ${vars.common.actions}

@@ -158,19 +158,20 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             # 1. 类型为指数 (000) 且非 QDII
             # 2. 投资次数 < 5.0 (仓位还不重)
             # 3. 今日估值上涨 > 0.5% (趁反弹跑路)
-            if (
-                fund_type == '000' and 
-                "QDII" not in fund_name and 
-                times < 5.0 and 
-                estimated_change > 0.5 and
-                estimated_profit_rate > 3.0):
-                
-                logger.info(f"{customer_name}的指数基金快速止盈操作：基金{fund_name}({fund_code})预估收益{estimated_profit_rate:.2f}%，"
-                            f"投资次数:{times}, 估值增长率:{estimated_change}%.")
-                res = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
-                if res is not None and getattr(res, 'busin_serial_no', None):
-                    success_count += 1
-                continue
+            if fund_type == '000' and "QDII" not in fund_name:
+                if (times < 5.0 and 
+                    estimated_change > 0.5 and
+                    estimated_profit_rate > 3.0):
+                    
+                    logger.info(f"{customer_name}的指数基金快速止盈操作：基金{fund_name}({fund_code})预估收益{estimated_profit_rate:.2f}%，"
+                                f"投资次数:{times}, 估值增长率:{estimated_change}%.")
+                    res = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
+                    if res is not None and getattr(res, 'busin_serial_no', None):
+                        success_count += 1
+                    continue
+                else:
+                    logger.info(f"指数基金快速止盈条件未满足: 基金{fund_name}({fund_code}) "
+                                f"投资次数:{times}(需<5.0), 估值增长:{estimated_change:.2f}%(需>0.5%), 收益率:{estimated_profit_rate:.2f}%(需>3.0%)")
 
 
             # 取消对小额资产的止盈保护

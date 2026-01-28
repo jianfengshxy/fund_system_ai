@@ -177,10 +177,10 @@ if __name__ == "__main__":
     # 示例：解散基金 001595 的所有月定投（仅资产为空或0），不限定子账户
     summary = dissolve_monthly_plans_for_fund(
         user=DEFAULT_USER,
-        fund_code="021740",
+        fund_code="001595",
         target_days=None,          # 传 {1,2,3} 可限定日期
         sub_account_name=None,     # 传入组合名称可限定子账户
-        dry_run=False,             # True 仅预览，不执行
+        dry_run=True,             # True 仅预览，不执行
         allow_nonzero_assets=False, # False 表示资产>0不解散
         sleep_sec=0.15
     )

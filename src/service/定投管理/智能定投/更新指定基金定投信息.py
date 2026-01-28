@@ -361,9 +361,9 @@ def update_smart_investment_info(
 if __name__ == "__main__":
     info = update_smart_investment_info(
         user=DEFAULT_USER,
-        fund_code="021740",
+        fund_code="020412",
         buy_strategy_switch=True,
-        amount="50000.0",            # 更新金额
+        amount="10000.0",            # 更新金额
         profit_percent="5.0%",      # 更新目标止盈
         period_type_filter=None,       # 仅更新月定投；传 None 则所有周期
         

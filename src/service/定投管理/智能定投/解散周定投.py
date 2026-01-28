@@ -168,7 +168,7 @@ if __name__ == "__main__":
     # 示例：解散基金 001595 的周定投（解散“资产不为0或者为空”的计划）
     summary = dissolve_weekly_plans_for_fund(
         user=DEFAULT_USER,
-        fund_code="002112",
+        fund_code="001595",
         target_days=None,          # 传 {1,2,3,4,5} 可限定周几
         sub_account_name=None,     # 传入组合名称可限定子账户
         dry_run=False,             # True 仅预览，不执行

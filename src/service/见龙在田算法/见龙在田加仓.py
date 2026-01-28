@@ -221,6 +221,11 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             if not _nav5_gate(fi, fund_name, fund_code):
                 continue
 
+            r100 = _safe_float(getattr(fi, 'rank_100day', None), 0.0)
+            if r100 and r100 < 20:
+                logger.info(f"100日排名过低 - {fund_name} rank_100 {int(r100)} < 20, 跳过加仓")
+                continue
+
             # 基础加仓
             res1 = commit_order(user, sub_account_no, fund_code, buy_amount)
             if res1:

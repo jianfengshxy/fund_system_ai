@@ -50,6 +50,12 @@ from src.service.大数据.增加高频加仓基金到自选组合 import add_fr
 from src.service.大数据.删除高频加仓基金到自选组合 import remove_infrequent_funds_from_group
 from src.bussiness.特殊止盈.定投固定比率止盈 import process_fixed_ratio_redeem
 
+# 新增：导入见龙在田止盈、自定义组合相关业务函数
+from src.bussiness.见龙在田.redeem import redeem as jianlong_redeem_biz
+from src.bussiness.自定义组合.add_new import add_new as custom_add_new_biz
+from src.bussiness.自定义组合.increase import increase as custom_increase_biz
+from src.bussiness.自定义组合.redeem import redeem as custom_redeem_biz
+
 # 初始化日志记录器
 from src.common.logger import get_logger
 logger = get_logger(__name__)
@@ -328,3 +334,345 @@ def fixed_ratio_redeem(event, context):
 
     except Exception as e:
         logger.error(f"执行固定比率止盈时发生异常: {e}", extra={"action": "fixed_ratio_redeem"})
+
+def redeem_jianlong(event, context):
+    try:
+        evt, payload = parse_fc_event(event)
+        account = payload.get('account')
+        password = payload.get('password')
+        sub_account_name = payload.get('sub_account_name')
+        total_budget = payload.get('total_budget')
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "jianlong_redeem"}
+        
+        if not all([account, password, sub_account_name]):
+             logger.error("Payload缺少必填参数")
+             return
+
+        user = get_user_all_info(account, password)
+        if not user:
+             logger.error(f"获取用户 {account} 信息失败")
+             return
+
+        logger.info(f"[见龙在田] 开始执行止盈...", extra=extra)
+        success = jianlong_redeem_biz(user, sub_account_name, total_budget)
+        if success:
+             logger.info(f"[见龙在田] 止盈成功", extra=extra)
+        else:
+             logger.error(f"[见龙在田] 止盈失败", extra=extra)
+
+    except Exception as e:
+        logger.error(f"redeem_jianlong 异常: {e}", extra={"action": "jianlong_redeem"})
+
+def add_new_custom(event, context):
+    try:
+        evt, payload = parse_fc_event(event)
+        account = payload.get('account')
+        password = payload.get('password')
+        
+        if not all([account, password]):
+            logger.error("Payload缺少必填参数: account, password")
+            return
+        user = get_user_all_info(account, password)
+        if not user:
+            logger.error(f"获取用户 {account} 信息失败")
+            return
+        from src.service.自选基金.自选组合服务 import get_all_group_names, get_group_funds_by_name
+        from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
+        from src.bussiness.自定义组合.add_new import add_new as biz_add_new
+        from src.API.组合管理.SubAccountMrg import getSubAssetMultList
+        # 先拿到用户所有自选组合名字
+        all_favorite_groups = get_all_group_names(user)
+        if not all_favorite_groups:
+            logger.warning("该用户下无任何自选组合，直接返回")
+            return
+        favorite_set = {g for g in all_favorite_groups}
+        # 获取用户所有资产组合
+        sub_asset_response = getSubAssetMultList(user)
+        if not sub_asset_response.Success or not sub_asset_response.Data:
+            logger.warning("获取用户资产组合列表失败或为空")
+            return
+        # 解析 sub_account_list，构建 amount 映射
+        sub_account_list = payload.get('sub_account_list', [])
+        sub_account_config = {}
+        if isinstance(sub_account_list, list):
+            for item in sub_account_list:
+                name = item.get('sub_account_name')
+                amt = item.get('amount')
+                if name:
+                    sub_account_config[name] = amt
+
+        for group in sub_asset_response.Data.list_group:
+            sub_account_name = group.group_name
+            extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_add_new"}
+            if not sub_account_name:
+                continue
+            # 只在自选组合名集合里才继续
+            if sub_account_name not in favorite_set:
+                continue
+            
+            # 确定 amount: 优先使用 payload 中对应组合的 amount，否则使用默认值 10000.0
+            amount_val = 10000.0
+            if sub_account_name in sub_account_config:
+                cfg_amt = sub_account_config.get(sub_account_name)
+                if cfg_amt is not None:
+                    try:
+                        amount_val = float(cfg_amt)
+                    except (ValueError, TypeError):
+                        pass
+
+            logger.info(f"组合 {sub_account_name} 准备新增，使用金额: {amount_val}", extra=extra)
+
+            assets = get_sub_account_asset_by_name(user, sub_account_name)
+            if not assets:
+                logger.warning(f"资产组合未找到详细资产信息，跳过：{sub_account_name}", extra=extra)
+                continue
+            funds = get_group_funds_by_name(sub_account_name, user)
+            if not funds:
+                logger.warning(f"自选组合基金为空，跳过：{sub_account_name}", extra=extra)
+                continue
+            fund_list = []
+            for item in funds:
+                code = item.get("fcode") or item.get("FundCode") or item.get("fund_code") or item.get("FCODE") or item.get("code")
+                name_val = item.get("shortname") or item.get("fname") or item.get("FundName") or item.get("fund_name") or item.get("name")
+                if not code:
+                    continue
+                fund_list.append({"fund_code": code, "fund_name": name_val, "amount": amount_val})
+            logger.info(f"[自定义组合-新增] 开始为用户 {user.customer_name} 执行新增，组合：{sub_account_name}，基金数：{len(fund_list)}", extra=extra)
+            success = biz_add_new(user, sub_account_name, fund_list)
+            if success:
+                logger.info(f"[自定义组合-新增] 用户 {user.customer_name} 新增完成：{sub_account_name}", extra=extra)
+            else:
+                logger.info(f"[自定义组合-新增] 无新增交易或候选未达条件（非失败）：{sub_account_name}", extra=extra)
+    except RetriableError as e:
+        logger.warning(f"[自定义组合-新增] 异常可重试：{e}", extra={"action": "custom_add_new"})
+    except ValidationError as e:
+        logger.error(f"[自定义组合-新增] 异常参数错误：{e}", extra={"action": "custom_add_new"})
+    except NonRetriableError as e:
+        logger.error(f"[自定义组合-新增] 异常不可重试：{e}", extra={"action": "custom_add_new"})
+    except Exception as e:
+        logger.error(f"[自定义组合-新增] 入口异常：{e}", extra={"action": "custom_add_new"})
+
+def increase_custom(event, context):
+    try:
+        evt, payload = parse_fc_event(event)
+        account = payload.get('account')
+        password = payload.get('password')
+        if not all([account, password]):
+            logger.error("Payload缺少必填参数: account, password")
+            return
+        user = get_user_all_info(account, password)
+        if not user:
+            logger.error(f"获取用户 {account} 信息失败")
+            return
+        from src.service.自选基金.自选组合服务 import get_all_group_names, get_group_funds_by_name
+        from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
+        from src.bussiness.自定义组合.increase import increase as biz_increase
+        from src.API.组合管理.SubAccountMrg import getSubAssetMultList
+        all_favorite_groups = get_all_group_names(user)
+        if not all_favorite_groups:
+            logger.warning("该用户下无任何自选组合，直接返回")
+            return
+        favorite_set = {g for g in all_favorite_groups}
+        # 获取用户所有资产组合
+        sub_asset_response = getSubAssetMultList(user)
+        if not sub_asset_response.Success or not sub_asset_response.Data:
+            logger.warning("获取用户资产组合列表失败或为空")
+            return
+        # 解析 sub_account_list，构建 amount 映射
+        sub_account_list = payload.get('sub_account_list', [])
+        sub_account_config = {}
+        if isinstance(sub_account_list, list):
+            for item in sub_account_list:
+                name = item.get('sub_account_name')
+                amt = item.get('amount')
+                if name:
+                    sub_account_config[name] = amt
+
+        for group in sub_asset_response.Data.list_group:
+            sub_account_name = group.group_name
+            extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_increase"}
+            if not sub_account_name:
+                continue
+            if sub_account_name not in favorite_set:
+                continue
+            
+            # 确定 amount: 优先使用 payload 中对应组合的 amount，否则使用默认值 10000.0
+            amount_val = 10000.0
+            if sub_account_name in sub_account_config:
+                cfg_amt = sub_account_config.get(sub_account_name)
+                if cfg_amt is not None:
+                    try:
+                        amount_val = float(cfg_amt)
+                    except (ValueError, TypeError):
+                        pass
+
+            logger.info(f"组合 {sub_account_name} 准备加仓，使用金额: {amount_val}", extra=extra)
+
+            assets = get_sub_account_asset_by_name(user, sub_account_name)
+            if not assets:
+                logger.warning(f"资产组合未找到详细资产信息，跳过：{sub_account_name}", extra=extra)
+                continue
+            funds = get_group_funds_by_name(sub_account_name, user)
+            if not funds:
+                logger.warning(f"自选组合基金为空，跳过：{sub_account_name}", extra=extra)
+                continue
+            fund_list = []
+            for item in funds:
+                code = item.get("fcode") or item.get("FundCode") or item.get("fund_code") or item.get("FCODE") or item.get("code")
+                name_val = item.get("shortname") or item.get("fname") or item.get("FundName") or item.get("fund_name") or item.get("name")
+                if not code:
+                    continue
+                fund_list.append({"fund_code": code, "fund_name": name_val, "amount": amount_val})
+            logger.info(f"[自定义组合-加仓] 开始为用户 {user.customer_name} 执行加仓，组合：{sub_account_name}，基金数：{len(fund_list)}", extra=extra)
+            success = biz_increase(user, sub_account_name, fund_list)
+            if success:
+                logger.info(f"[自定义组合-加仓] 用户 {user.customer_name} 加仓完成：{sub_account_name}", extra=extra)
+            else:
+                logger.info(f"[自定义组合-加仓] 无加仓交易或候选未达条件（非失败）：{sub_account_name}", extra=extra)
+    except RetriableError as e:
+        logger.warning(f"[自定义组合-加仓] 异常可重试：{e}", extra={"action": "custom_increase"})
+    except ValidationError as e:
+        logger.error(f"[自定义组合-加仓] 异常参数错误：{e}", extra={"action": "custom_increase"})
+    except NonRetriableError as e:
+        logger.error(f"[自定义组合-加仓] 异常不可重试：{e}", extra={"action": "custom_increase"})
+    except Exception as e:
+        logger.error(f"[自定义组合-加仓] 入口异常：{e}", extra={"action": "custom_increase"})
+        
+
+def redeem_custom(event, context):
+    try:
+        evt, payload = parse_fc_event(event)
+        account = payload.get('account')
+        password = payload.get('password')
+        if not all([account, password]):
+            logger.error("Payload缺少必填参数: account, password")
+            return
+        user = get_user_all_info(account, password)
+        if not user:
+            logger.error(f"获取用户 {account} 信息失败")
+            return
+        from src.service.自选基金.自选组合服务 import get_all_group_names, get_group_funds_by_name
+        from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
+        from src.bussiness.自定义组合.redeem import redeem as biz_redeem
+        from src.API.组合管理.SubAccountMrg import getSubAssetMultList
+        all_favorite_groups = get_all_group_names(user)
+        if not all_favorite_groups:
+            logger.warning("该用户下无任何自选组合，直接返回")
+            return
+        favorite_set = {g for g in all_favorite_groups}
+        # 获取用户所有资产组合
+        sub_asset_response = getSubAssetMultList(user)
+        if not sub_asset_response.Success or not sub_asset_response.Data:
+            logger.warning("获取用户资产组合列表失败或为空")
+            return
+        
+        # 解析 sub_account_list，构建 amount 映射
+        sub_account_list = payload.get('sub_account_list', [])
+        sub_account_config = {}
+        if isinstance(sub_account_list, list):
+            for item in sub_account_list:
+                name = item.get('sub_account_name')
+                amt = item.get('amount')
+                if name:
+                    sub_account_config[name] = amt
+
+        for group in sub_asset_response.Data.list_group:
+            sub_account_name = group.group_name
+            extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_redeem"}
+            if not sub_account_name:
+                continue
+            if sub_account_name not in favorite_set:
+                continue
+            
+            # 确定 amount: 优先使用 payload 中对应组合的 amount，否则使用默认值 10000.0
+            amount_val = 10000.0
+            if sub_account_name in sub_account_config:
+                cfg_amt = sub_account_config.get(sub_account_name)
+                if cfg_amt is not None:
+                    try:
+                        amount_val = float(cfg_amt)
+                    except (ValueError, TypeError):
+                        pass
+
+            logger.info(f"组合 {sub_account_name} 准备止盈，使用金额: {amount_val}", extra=extra)
+
+            assets = get_sub_account_asset_by_name(user, sub_account_name)
+            if not assets:
+                logger.warning(f"资产组合未找到详细资产信息，跳过：{sub_account_name}", extra=extra)
+                continue
+            funds = get_group_funds_by_name(sub_account_name, user)
+            if not funds:
+                logger.warning(f"自选组合基金为空，跳过：{sub_account_name}", extra=extra)
+                continue
+            fund_list = []
+            for item in funds:
+                code = item.get("fcode") or item.get("FundCode") or item.get("fund_code") or item.get("FCODE") or item.get("code")
+                name_val = item.get("shortname") or item.get("fname") or item.get("FundName") or item.get("fund_name") or item.get("name")
+                if not code:
+                    continue
+                fund_list.append({"fund_code": code, "fund_name": name_val, "amount": amount_val})
+            logger.info(f"[自定义组合-止盈] 开始为用户 {user.customer_name} 执行止盈，组合：{sub_account_name}，基金数：{len(fund_list)}", extra=extra)
+            success = biz_redeem(user, sub_account_name, fund_list)
+            if success:
+                logger.info(f"[自定义组合-止盈] 用户 {user.customer_name} 止盈完成：{sub_account_name}", extra=extra)
+            else:
+                logger.info(f"[自定义组合-止盈] 无止盈交易或候选未达条件（非失败）：{sub_account_name}", extra=extra)
+    except RetriableError as e:
+        logger.warning(f"[自定义组合-止盈] 异常可重试：{e}", extra={"action": "custom_redeem"})
+    except ValidationError as e:
+        logger.error(f"[自定义组合-止盈] 异常参数错误：{e}", extra={"action": "custom_redeem"})
+    except NonRetriableError as e:
+        logger.error(f"[自定义组合-止盈] 异常不可重试：{e}", extra={"action": "custom_redeem"})
+    except Exception as e:
+        logger.error(f"[自定义组合-止盈] 入口异常：{e}", extra={"action": "custom_redeem"})
+
+if __name__ == "__main__":
+    def invoke(func, payload_str, name):
+        print(f"\n--- Invoking {name} ---")
+        try:
+            event = {"payload": payload_str}
+            func(event, None)
+        except Exception as e:
+            print(f"Error invoking {name}: {e}")
+
+    # 1. fixed_ratio_redeem
+    # p_fixed = '{"account": "13918199137", "password": "sWX15706", "fundcodelist": [{"fundcode": "011707", "stoprate": "5.0"}, {"fundcode": "021740", "stoprate": "3.0"}]}'
+    # invoke(fixed_ratio_redeem, p_fixed, "fixed_ratio_redeem")
+
+    # 2. add_new_jianlong
+    # p_add_jianlong = '{"account": "13918199137","password": "sWX15706","sub_account_name": "见龙在田","total_budget": 1000000.0,"amount": 100000.0,"fund_type": "all"}'
+    # invoke(add_new_jianlong, p_add_jianlong, "add_new_jianlong")
+
+    # 3. add_new
+    # p_add_new = '{"account": "13918199137","password": "sWX15706","sub_account_name": "飞龙在天","total_budget": 1000000.0,"fund_type": "non_index"}'
+    # invoke(add_new, p_add_new, "add_new")
+
+    # 4. increase_jianlong
+    # p_inc_jianlong = '{"account": "13918199137","password": "sWX15706","sub_account_name": "见龙在田","total_budget": 1000000.0,"fund_type": "all"}'
+    # invoke(increase_jianlong, p_inc_jianlong, "increase_jianlong")
+
+    # 5. increase
+    # p_increase = '{"account": "13918199137","password": "sWX15706","sub_account_name": "飞龙在天","total_budget": 1000000.0,"fund_type": "non_index"}'
+    # invoke(increase, p_increase, "increase")
+    
+    # 6. redeem_jianlong
+    # p_red_jianlong = '{"account": "13918199137","password": "sWX15706","sub_account_name": "见龙在田","total_budget":1000000.0}'
+    # invoke(redeem_jianlong, p_red_jianlong, "redeem_jianlong")
+
+    # 7. redeem
+    # p_redeem = '{"account": "13918199137","password": "sWX15706","sub_account_name": "飞龙在天","total_budget":1000000.0}'
+    # invoke(redeem, p_redeem, "redeem")
+
+    # 8. Custom Portfolio
+    p_custom = '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 5000.0},{"sub_account_name": "快速止盈", "amount": 50000.0}]}'
+    # invoke(add_new_custom, p_custom, "add_new_custom")
+    # invoke(increase_custom, p_custom, "increase_custom")
+    invoke(redeem_custom, p_custom, "redeem_custom")
+
+    # 9. Daily Task
+    # p_daily = '{"account": "13918199137","password": "sWX15706","sub_account_name": "飞龙在天","total_budget": 1000000.0,"fund_type": "non_index"}'
+    # invoke(daily_task, p_daily, "daily_task")
+
+    # 10. Batch Operations
+    # invoke(increase_all_fund_plans, p_daily, "increase_all_fund_plans")
+    # invoke(redeem_all_fund_plans, p_daily, "redeem_all_fund_plans")

@@ -207,19 +207,19 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
 
         #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于PROFIT_THRESHOLD_FOR_LOW_BALANCE，且投资次数小于5.0次，且当日估值增长率大于0.5%，立即卖出费率为0的份额
         if estimated_profit_rate > PROFIT_THRESHOLD_FOR_LOW_BALANCE and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type == '000' and "QDII" not in fund_name and times < 5.0 and estimated_change > 0.5:
-            logger.info(f"{customer_name}的止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:{PROFIT_THRESHOLD_FOR_LOW_BALANCE},投资次数:{times},估值增长率:{estimated_change}.")
+            logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:{PROFIT_THRESHOLD_FOR_LOW_BALANCE},投资次数:{times},估值增长率:{estimated_change}.")
             sell_0_fee_shares(user,sub_account_no,fund_code,shares)
             return True
         else:
-            logger.info(f"指数基金余额条件检查未通过：预估收益{estimated_profit_rate} vs 阈值{PROFIT_THRESHOLD_FOR_LOW_BALANCE}，活期宝占比{hqb_ratio_percent:.2f}% vs 阈值{HQB_RATIO_THRESHOLD}%，基金类型{fund_type}，估值变化{fund_info.estimated_change}")
+            logger.info(f"{fund_name}{fund_code}余额条件检查未通过：预估收益{estimated_profit_rate} vs 阈值{PROFIT_THRESHOLD_FOR_LOW_BALANCE}，活期宝占比{hqb_ratio_percent:.2f}% vs 阈值{HQB_RATIO_THRESHOLD}%，基金类型{fund_type}，估值变化{fund_info.estimated_change}")
             
         #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于3.0，且投资次数小于5.0次，立即卖出费率为0的份额
         if estimated_profit_rate > 3.0 and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type in ['001','002'] and rank_100 is not None and rank_100 > 80 and times < 5.0 and estimated_change > 0.5:
-            logger.info(f"{customer_name}的止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0, 100日排名:{rank_100},投资次数:{times}.")
+            logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0, 100日排名:{rank_100},投资次数:{times}.")
             sell_0_fee_shares(user,sub_account_no,fund_code,shares)
             return True
         else:
-            logger.info(f"主动基金余额条件检查未通过：预估收益{estimated_profit_rate} vs 3.0，活期宝占比{hqb_ratio_percent:.2f}% vs 阈值{HQB_RATIO_THRESHOLD}%，基金类型{fund_type}，排名{rank_100}")
+            logger.info(f"{fund_name}{fund_code}余额条件检查未通过：预估收益{estimated_profit_rate} vs 3.0，活期宝占比{hqb_ratio_percent:.2f}% vs 阈值{HQB_RATIO_THRESHOLD}%，基金类型{fund_type}，排名{rank_100}")
     logger.info("所有止盈条件都不满足，返回True")
     return True
 

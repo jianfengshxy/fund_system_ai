@@ -107,6 +107,9 @@ dmypy.json
 .DS_Store
 .AppleDouble
 .LSOverride
+# Icon files
+Icon?
+Icon
 
 # IDE
 .vscode/
@@ -150,3 +153,6 @@ test/service/基金信息/test_基金信息.py
 test/service/基金信息/test_基金信息.py
 logs/*
 .tmp.driveupload/*
+.trae/*
+cmd/*
+test/API/组合管理/*

@@ -149,3 +149,4 @@ dist
 test/service/基金信息/test_基金信息.py
 test/service/基金信息/test_基金信息.py
 logs/*
+.tmp.driveupload/*

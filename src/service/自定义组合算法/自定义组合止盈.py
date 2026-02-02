@@ -127,7 +127,10 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
                     success_count += 1
                 continue # 命中基本止盈后跳过后续检查
             else:
-                logger.info(f"基本止盈条件检查：预估收益{estimated_profit_rate} <= 止盈点{stop_rate}，不满足条件")
+                if estimated_profit_rate <= stop_rate:
+                    logger.info(f"基本止盈条件检查：预估收益{estimated_profit_rate} <= 止盈点{stop_rate}，不满足收益率条件")
+                else:
+                    logger.info(f"基本止盈条件检查：预估收益{estimated_profit_rate} > 止盈点{stop_rate}，但未满足趋势条件（未跌破5日均线）")
             
             # 4. 现金流紧张时的紧急止盈逻辑
             # 获取活期宝占比 (此处需要调用公共服务或直接计算，为了保持一致性建议调用 risk_control_service 中的逻辑)

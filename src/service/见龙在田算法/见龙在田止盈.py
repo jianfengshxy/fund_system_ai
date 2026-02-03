@@ -96,9 +96,10 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         except Exception as e:
             logger.info(f"获取排名数据异常: {e}")
 
-        # 三条件统一止盈：
+        # 四条件统一止盈：
         # 1) 预估收益率 > 动态阈值 local_threshold
         # 2) rank_100day > 80
+        # 3) 估值涨跌幅 > 0.5 (避免大跌日卖出)
       
       
         # 统一策略：所有基金（含指数）均需满足 cond3
@@ -110,12 +111,13 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         should_take_profit = (
             (estimated_profit_rate is not None and estimated_profit_rate > local_threshold) and
             (r100 is not None and r100 > 80.0) and
+            (estimated_change > 0.5) and
             cond3
         )
 
         logger.info(
             f"{user.customer_name}的基金{fund_name}({fund_code}) "
-            f"预估收益率={estimated_profit_rate:.2f}%，rank_100day={r100 if r100 is not None else 'N/A'}, "
+            f"预估收益率={estimated_profit_rate:.2f}%，估值涨跌={estimated_change:.2f}%，rank_100day={r100 if r100 is not None else 'N/A'}, "
             f"Q_Rank={quarter_rank_num}, M_Rank={month_rank_num}, IsIndex={is_index}"
         )
 
@@ -127,7 +129,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             bank_shares = get_bank_shares(user, sub_account_no, fund_code)
             logger.info(
                 f"{user.customer_name}的止盈操作开始：基金{fund_name}({fund_code})满足条件"
-                f"（收益率>{local_threshold}%、rank_100>80、Q_Rank<M_Rank）"
+                f"（收益率>{local_threshold}%、估值涨跌>0.5%、rank_100>80、Q_Rank<M_Rank）"
             )
             sell_result = sell_low_fee_shares(user, sub_account_no, fund_code, bank_shares)
             if sell_result and getattr(sell_result, "busin_serial_no", None):

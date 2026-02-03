@@ -117,7 +117,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             estimated_profit_rate = current_profit_rate + estimated_change
             safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
             times = round(safe_asset_value / float(fund_amount), 2)
-            if times < 0.98 and times > 0.0:
+            if times < 0.95 and times > 0.0:
                 logger.info(f"组合{sub_account_no}，基金{fund_name}({fund_code})资产{safe_asset_value:.2f}，当前资产倍数{times},满足加仓条件。")
                 res0 = commit_order(user, sub_account_no, fund_code, float(fund_amount))
                 if res0 and getattr(res0, 'busin_serial_no', None):

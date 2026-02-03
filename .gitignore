@@ -102,3 +102,15 @@ venv.bak/
 Icon?
 Icon
 .DS_Store
+
+# IDE and Editor
+.idea/
+.vscode/
+.trae/
+
+# Cloud Drive Temp
+.tmp.drivedownload/
+.tmp.driveupload/
+
+# Vercel
+.vercel/

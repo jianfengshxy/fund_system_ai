@@ -114,13 +114,12 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             
             # --- 止盈逻辑更新：对齐全局智能定投 (redeem.py) ---
             
-            # 2. 计算动态止盈点：max(30日年化波动率, 3.0%)
-            stop_rate = max(float(volatility), 3.0)
-            logger.info(f"组合{sub_account_name}的{fund_name}{fund_code}波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（不低于3.0）")
+            # 2. 计算动态止盈点：min(max(30日年化波动率, 3.0%), 10.0%)
+            stop_rate = min(max(float(volatility), 3.0), 10.0)
+            logger.info(f"组合{sub_account_name}的{fund_name}{fund_code}波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（3.0~10.0之间）")
 
             # 3. 检查基本止盈条件
-            # 增加 nav < nav5 趋势判断，只有跌破5日均线才止盈
-            if estimated_profit_rate > stop_rate and nav5_fall_gate(fund_info, fund_name, fund_code, logger):
+            if estimated_profit_rate > stop_rate:
                 logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},实际止盈点:{stop_rate}")
                 res = sell_low_fee_shares(user, sub_account_no, fund_code, shares)
                 if res is not None and getattr(res, 'busin_serial_no', None):
@@ -176,7 +175,7 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
                     logger.info(f"指数基金快速止盈条件未满足: 基金{fund_name}({fund_code}) "
                                 f"投资次数:{times}(需<5.0), 估值增长:{estimated_change:.2f}%(需>0.5%), 收益率:{estimated_profit_rate:.2f}%(需>3.0%)")
 
-
+        
             # 取消对小额资产的止盈保护
             # if times < 0.98 and times > 0.0:
             #     logger.info(f"组合{sub_account_no}，基金{fund_name}({fund_code})资产{plan_assets:.2f}，当前资产倍数{times},满足限购保护，停止止盈。")

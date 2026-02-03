@@ -98,61 +98,7 @@ venv.bak/
 # mkdocs documentation
 /site
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
 # macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-# Icon files
 Icon?
 Icon
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Project specific
-*.log
-
-# Cache directories
-cache/
-.cache/
-tmp/
-temp/
-*.tmp
-*.temp
-
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
-coverage/
-.nyc_output
-
-# Frontend tools cache
-.parcel-cache
-.next
-.nuxt
-dist
-.vuepress/dist
-.serverless/
-.fusebox/
-.dynamodb/
-.tern-port
-test/service/基金信息/test_基金信息.py
-test/service/基金信息/test_基金信息.py
-logs/*
-.tmp.driveupload/*
-.trae/*
-cmd/*
-test/API/组合管理/*
+.DS_Store

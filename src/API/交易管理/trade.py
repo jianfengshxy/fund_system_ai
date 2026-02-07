@@ -14,7 +14,7 @@ from src.API.登录接口.login import ensure_user_fresh
 
 logger = get_logger("Trade")
 
-def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="", page_index=1, page_size=100):
+def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="", page_index=1, page_size=50, date_type="3"):
     """
     获取交易列表
     Args:
@@ -25,6 +25,11 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
         status: 状态，默认为空
         page_index: 页码，默认为1
         page_size: 每页数量，默认为100
+        date_type: 时间范围类型，默认为"3"。
+                   "5": 近1周
+                   "1": 近1月
+                   "2": 近3月
+                   "3": 近1年 (推荐，能获取较长历史记录)
     Returns:
         List[TradeResult]: 交易结果列表
     """
@@ -61,7 +66,7 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
             "PageIndex": page_index,
             "PageSize": page_size,
             "FundCode": fund_code,
-            "DateType": "3",
+            "DateType": date_type,
             "BusType": bus_type,
             "Statu": status,
             "Account": "",

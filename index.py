@@ -58,6 +58,9 @@ from src.bussiness.自定义组合.redeem import redeem as custom_redeem_biz
 # 新增：黄金多利组合业务函数
 from src.bussiness.黄金多利组合.increase import increase as gold_increase_biz
 from src.bussiness.黄金多利组合.redeem import redeem as gold_redeem_biz
+# 新增：黄金异次元组合业务函数
+from src.bussiness.黄金异次元.increase import increase as gold_dimension_increase_biz
+from src.bussiness.黄金异次元.redeem import redeem as gold_dimension_redeem_biz
 
 # 初始化日志记录器
 from src.common.logger import get_logger
@@ -685,6 +688,63 @@ def redeem_gold_portfolio(event, context):
 
     except Exception as e:
         logger.error(f"redeem_gold_portfolio 异常: {e}", extra={"action": "gold_redeem"})
+
+def increase_gold_dimension_portfolio(event, context):
+    try:
+        evt, payload = parse_fc_event(event)
+        account = payload.get('account')
+        password = payload.get('password')
+        sub_account_name = payload.get('sub_account_name')
+        amount = payload.get('amount', 50000.0) # Default 50000.0 if not specified
+        
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_dimension_increase"}
+        
+        if not all([account, password, sub_account_name]):
+            logger.error("Payload缺少必填参数")
+            return
+
+        user = get_user_all_info(account, password)
+        if not user:
+            logger.error(f"获取用户 {account} 信息失败")
+            return
+
+        logger.info(f"[黄金异次元组合] 开始执行加仓检查...", extra=extra)
+        success = gold_dimension_increase_biz(user, sub_account_name, amount)
+        if success:
+            logger.info(f"[黄金异次元组合] 加仓检查/执行成功", extra=extra)
+        else:
+            logger.info(f"[黄金异次元组合] 未触发加仓或执行失败", extra=extra)
+
+    except Exception as e:
+        logger.error(f"increase_gold_dimension_portfolio 异常: {e}", extra={"action": "gold_dimension_increase"})
+
+def redeem_gold_dimension_portfolio(event, context):
+    try:
+        evt, payload = parse_fc_event(event)
+        account = payload.get('account')
+        password = payload.get('password')
+        sub_account_name = payload.get('sub_account_name')
+        
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_dimension_redeem"}
+        
+        if not all([account, password, sub_account_name]):
+            logger.error("Payload缺少必填参数")
+            return
+
+        user = get_user_all_info(account, password)
+        if not user:
+            logger.error(f"获取用户 {account} 信息失败")
+            return
+
+        logger.info(f"[黄金异次元组合] 开始执行止盈检查...", extra=extra)
+        success = gold_dimension_redeem_biz(user, sub_account_name)
+        if success:
+            logger.info(f"[黄金异次元组合] 止盈检查/执行成功", extra=extra)
+        else:
+            logger.info(f"[黄金异次元组合] 未触发止盈或执行失败", extra=extra)
+
+    except Exception as e:
+        logger.error(f"redeem_gold_dimension_portfolio 异常: {e}", extra={"action": "gold_dimension_redeem"})
 
 if __name__ == "__main__":
     def invoke(func, payload_str, name):

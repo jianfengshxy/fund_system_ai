@@ -306,3 +306,53 @@ resources:
           payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "黄金多利"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 55 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
+
+  increase_gold_dimension_portfolio:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.increase_gold_dimension_portfolio"
+      functionName: "increase_gold_dimension_portfolio"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "increase_gold_dimension_portfolio_13918199137"
+        triggerConfig:
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "黄金异次元","amount": 50000.0}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 53 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+  redeem_gold_dimension_portfolio:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.redeem_gold_dimension_portfolio"
+      functionName: "redeem_gold_dimension_portfolio"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "redeem_gold_dimension_portfolio_13918199137"
+        triggerConfig:
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "黄金异次元"}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 53 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}

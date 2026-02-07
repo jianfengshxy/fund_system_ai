@@ -1,5 +1,4 @@
 import logging
-from src.common.logger import get_logger
 import os
 import sys
 import math
@@ -12,6 +11,8 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
+from src.common.logger import get_logger
+
 from src.domain.user.User import User
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
@@ -23,6 +24,7 @@ from src.common.constant import DEFAULT_USER
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
+from src.service.公共服务.nav_gate_service import nav5_gate
 
 import datetime
 
@@ -135,26 +137,6 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
     orders_made = 0
     logger.info("本次加仓处理顺序：风向标基金优先")
 
-    # 抽取：估算净值 > 5日均值 判定（复用于两条路径）
-    def _nav5_gate(fi, fund_name: str, fund_code: str, label: str = "") -> bool:
-        prefix = "风向标 " if label == "wind_vane" else ""
-        est_nav = getattr(fi, "estimated_value", None)
-        nav5 = getattr(fi, "nav_5day_avg", None)
-        try:
-            est_val = float(est_nav) if est_nav is not None else None
-            nav5_val = float(nav5) if nav5 is not None else None
-        except Exception:
-            est_val = None
-            nav5_val = None
-
-        if est_val is None or nav5_val is None:
-            logger.info(f"跳过{prefix}{fund_name}({fund_code}): 缺少估算净值或5日均值（estimated_value={est_nav}, nav_5day_avg={nav5}）")
-            return False
-        if not (est_val > nav5_val):
-            logger.info(f"跳过{prefix}{fund_name}({fund_code}): 估算净值 {est_val:.4f} <= 5日均值 {nav5_val:.4f}，暂不加仓")
-            return False
-        return True
-
     for asset, fi, in_wind_vane, estimated_profit_rate in enriched:
         if orders_made >= fund_num:
             logger.info(f"已达本次下单上限 {fund_num} 笔，提前结束")
@@ -163,39 +145,20 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
         fund_code = asset.fund_code
         fund_name = fi.fund_name
 
-        # 先尝试风向标路径（仅对风向标标的）
-        if in_wind_vane:
-            try:
-                safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
-                if safe_asset_value < float(total_budget):
-                    # 使用抽取的 5日均值判定
-                    if not _nav5_gate(fi, fund_name, fund_code, label="wind_vane"):
-                        continue
-
-                    res = commit_order(user, sub_account_no, fund_code, buy_amount)
-                    if res:
-                        logger.info(f"风向标加仓成功: {fund_name}({fund_code}) - 金额: {buy_amount} - 订单号: {res.busin_serial_no}")
-                        orders_made += 1
-                        success_count += 1
-                    if orders_made >= fund_num:
-                        break
-                else:
-                    logger.info(f"跳过风向标 {fund_name}({fund_code}): 持仓资产 {safe_asset_value} >= 本次预算阈值 {total_budget}，不重复加仓")
-                # 对风向标标的，不走后续“排名/收益率规则路径”
-                continue
-            except Exception as e:
-                logger.error(f"风向标加仓失败 {fund_name}({fund_code}): {e}")
-                # 不中断，继续其他标的
-                continue
-
-        # 非风向标：沿用原“排名/收益率规则路径”（增加空值与分母校验）
+        # 统一处理逻辑：风向标与普通基金使用相同的检查条件
         try:
-            # 提取收益率（需要月收益率进行判定）
+            # 1. 预算检查（统一应用）
+            safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
+            if safe_asset_value >= float(total_budget):
+                logger.info(f"跳过 {fund_name}({fund_code}): 持仓资产 {safe_asset_value} >= 本次预算阈值 {total_budget}，不重复加仓")
+                continue
+
+            # 2. 提取收益率（需要月收益率进行判定）
             season_growth_rate = _safe_float(getattr(fi, "three_month_return", None), 0.0)
             month_growth_rate = _safe_float(getattr(fi, "month_return", None), 0.0)
             week_growth_rate = _safe_float(getattr(fi, "week_return", None), 0.0)
 
-            # 提取百分位排名（近3年 vs 近1年）
+            # 3. 提取百分位排名（近3年 vs 近1年）
             try:
                 _, season_item_rank, season_item_sc = get_fund_growth_rate(fi, '3Y')
                 _, month_item_rank, month_item_sc = get_fund_growth_rate(fi, 'Y')
@@ -203,13 +166,23 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                 logger.info(f"跳过 {fund_name}({fund_code}): 获取排名数据异常 {e}")
                 continue
 
-            # 基本有效性校验（空值与分母为0）
+            # 4. 基本有效性校验（空值与分母为0）
             if not season_item_rank or not season_item_sc or season_item_sc == 0 \
                or not month_item_rank or not month_item_sc or month_item_sc == 0:
                 logger.info(f"跳过 {fund_name}({fund_code}): 百分位排名数据不可用（season: rank={season_item_rank}, sc={season_item_sc}; month: rank={month_item_rank}, sc={month_item_sc}）")
                 continue
 
-            # 新逻辑：仅当月收益率为正，且近1个月排名优于近3个月（排名数值小表示更靠前）时才通过
+            # 增加排名在前3/4的校验 (0.75)
+            season_percentile = float(season_item_rank) / float(season_item_sc)
+            month_percentile = float(month_item_rank) / float(month_item_sc)
+            if season_percentile > 0.75 or month_percentile > 0.75:
+                logger.info(
+                    f"跳过 {fund_name}({fund_code}): 排名靠后（>75%）"
+                    f"（season: {season_percentile:.2%}, month: {month_percentile:.2%}）"
+                )
+                continue
+
+            # 5. 核心过滤逻辑：仅当月收益率为正，且近1个月排名优于近3个月（排名数值小表示更靠前）时才通过
             if not (month_growth_rate > 0.0 and float(month_item_rank) < float(season_item_rank)):
                 logger.info(
                     f"跳过 {fund_name}({fund_code}): 月收益率不为正或近1年排名未优于近3年"
@@ -217,24 +190,26 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                 )
                 continue
 
-            # 使用抽取的 5日均值判定（非风向标同样要求）
-            if not _nav5_gate(fi, fund_name, fund_code):
+            # 6. 使用抽取的 5日均值判定
+            if not nav5_gate(fi, fund_name, fund_code, logger):
                 continue
 
+            # 7. 100日排名检查
             r100 = _safe_float(getattr(fi, 'rank_100day', None), 0.0)
             if r100 and r100 < 20:
                 logger.info(f"100日排名过低 - {fund_name} rank_100 {int(r100)} < 20, 跳过加仓")
                 continue
 
+            # 8. 执行加仓
             # 基础加仓
             res1 = commit_order(user, sub_account_no, fund_code, buy_amount)
             if res1:
-                logger.info(f"基础加仓成功: {fund_name}({fund_code}) - 金额: {buy_amount} - 订单号: {res1.busin_serial_no}")
+                logger.info(f"基础加仓成功({'风向标' if in_wind_vane else '普通'}): {fund_name}({fund_code}) - 金额: {buy_amount} - 订单号: {res1.busin_serial_no}")
                 orders_made += 1
                 success_count += 1
             if orders_made >= fund_num:
                 break
-            # -5% 额外加仓
+            # -5% 额外加仓 (统一应用)
             if estimated_profit_rate < -5.0 and orders_made < fund_num:
                 res2 = commit_order(user, sub_account_no, fund_code, buy_amount)
                 if res2:
@@ -242,7 +217,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                     orders_made += 1
                     success_count += 1
         except Exception as e:
-            logger.error(f"处理非风向标 {fund_name}({fund_code}) 失败: {e}")
+            logger.error(f"处理 {fund_name}({fund_code}) 失败: {e}")
             continue
 
     logger.info(f"加仓完成，本次共下单 {orders_made} 笔，成功 {success_count} 笔")
@@ -253,7 +228,7 @@ if __name__ == "__main__":
     # 测试单个用户的加仓流程
     try:
         # 执行加仓操作
-        increase_funds(DEFAULT_USER, "见龙在田", 1000000.0, None, 'non_index')  # 使用 DEFAULT_USER，并假设参数合适
+        increase_funds(DEFAULT_USER, "见龙在田", 1000000.0, None, 'all')  # 使用 DEFAULT_USER，并假设参数合适
         logging.info(f"用户 {DEFAULT_USER.customer_name} 加仓操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

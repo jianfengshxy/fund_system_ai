@@ -11,7 +11,7 @@ if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
 from src.domain.user.User import User
-from src.API.定投计划管理.SmartPlan import getFundPlanList
+from src.API.定投计划管理.SmartPlan import getFundPlanList, getPlanDetailPro
 from src.service.交易管理.赎回基金 import sell_0_fee_shares
 from src.service.资产管理.get_fund_asset_detail import get_fund_asset_detail
 from src.service.基金信息.基金信息 import get_all_fund_info
@@ -78,9 +78,34 @@ def process_fixed_ratio_redeem(user: User, config: Dict):
         
         try:
             # 获取该基金的所有定投计划
-            plans = getFundPlanList(fund_code, user)
-            if not plans:
+            all_plans = getFundPlanList(fund_code, user)
+            if not all_plans:
                 logger.info(f"基金 {fund_code} 没有找到定投计划")
+                continue
+
+            # 过滤出周定投计划
+            plans = []
+            for plan in all_plans:
+                try:
+                    # 查询定投计划详情以获取准确的周期类型
+                    # 列表接口返回的 periodType 往往为 0，必须通过详情接口获取
+                    detail_resp = getPlanDetailPro(plan.planId, user)
+                    if detail_resp.Success and detail_resp.Data and detail_resp.Data.rationPlan:
+                        ration_plan = detail_resp.Data.rationPlan
+                        # periodType: 1-周
+                        if str(ration_plan.periodType) == "1":
+                            plans.append(plan)
+                            # logger.info(f"计划 {plan.planId} 确认为周定投")
+                        # else:
+                        #     logger.info(f"计划 {plan.planId} 周期类型为 {ration_plan.periodType}，跳过")
+                    else:
+                        logger.warning(f"无法获取计划 {plan.planId} 的详情，跳过")
+                except Exception as e:
+                    logger.error(f"获取计划 {plan.planId} 详情失败: {e}")
+
+            logger.info(f"基金 {fund_code} 共找到 {len(all_plans)} 个计划，其中周定投计划 {len(plans)} 个")
+            
+            if not plans:
                 continue
                 
             # 遍历每个计划进行检查

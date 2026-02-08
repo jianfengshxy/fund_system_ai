@@ -353,6 +353,9 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
         fund_plans = []
         for plan_data in plans_data:
             try:
+                # 打印 plan_data 原始数据以排查字段名
+                # logger.info(f"plan_data: {plan_data}", extra=extra) # 调试用，生产环境可注释
+                
                 # 解析executedAmount字段
                 executed_amount_str = plan_data.get('executedAmount', '0')
                 if executed_amount_str:
@@ -371,8 +374,11 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
                     pauseType=None,
                     planExtendStatus=str(plan_data.get('planExtendStatus', '')),
                     planType=str(plan_data.get('planType', '')),
-                    periodType=0,
-                    periodValue=0,
+                    # periodType: 0-日, 1-周, 2-双周, 3-月
+                    # API返回的字段可能是 periodType，也可能是其他
+                    # 尝试从原始数据中获取更多可能的字段
+                    periodType=parse_int(plan_data.get('periodType', 0)), 
+                    periodValue=parse_int(plan_data.get('periodValue', 0)),
                     amount=0.0,
                     bankAccountNo='',
                     payType=0,

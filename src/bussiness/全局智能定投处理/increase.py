@@ -123,7 +123,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     # 获取活期宝占比 (新风控 - 统一调用公共服务)
     # 使用 check_hqb_risk_allowed 获取布尔值结果，如果返回 False，说明余额不足（< 阈值）
     # 但此处逻辑是：如果 check_hqb_risk_allowed(user, threshold=10.0) 返回 False，则 hqb_ratio_ok 为 False
-    hqb_risk_passed = check_hqb_risk_allowed(user, threshold=10.0)
+    hqb_risk_passed = check_hqb_risk_allowed(user, threshold=20.0)
     
     # 注意：check_hqb_risk_allowed 内部已经打日志了，这里主要为了拿到状态用于后续 stop_reason 判断
     # 如果 hqb_risk_passed 为 False，说明 占比 < 10%
@@ -135,7 +135,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     elif year_val is not None and year_val <= 0:
         stop_reason = f"年收益率({year_val}%) <= 0"
     elif not hqb_risk_passed:
-        stop_reason = f"活期宝占比不足 10% (硬性风控)"
+        stop_reason = f"活期宝占比不足 20% (硬性风控)"
         
     if stop_reason:
         logger.info(f"最强风控触发 - {fund_name}{fund_code} {stop_reason}，执行回撤")

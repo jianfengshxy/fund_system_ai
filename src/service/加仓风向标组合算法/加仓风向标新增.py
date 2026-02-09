@@ -24,10 +24,31 @@ from src.common.constant import DEFAULT_USER  # 添加导入，如果需要
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.common.errors import TradePasswordError  # 新增：捕获密码错误异常
 from src.service.公共服务.nav_gate_service import nav5_gate
-from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 
 # 配置日志
 logger = get_logger(__name__)
+
+def _check_wind_vane_hqb_risk(user: User, total_budget: float, threshold: float = 20.0) -> bool:
+    """
+    加仓风向标策略专用风控：
+    判断 活期宝余额 是否小于 预算 * threshold%
+    如果小于，返回 False (表示风险过高，不通过)
+    否则返回 True (通过)
+    """
+    try:
+        current_hqb = float(getattr(user, 'hqb_value', 0) or 0)
+        min_req = total_budget * (threshold / 100.0)
+        
+        if current_hqb < min_req:
+            logger.info(
+                f"[加仓风向标] 风控拦截：活期宝余额({current_hqb:.2f}) "
+                f"小于总预算({total_budget})的{threshold}%({min_req:.2f})"
+            )
+            return False
+        return True
+    except Exception as e:
+        logger.warning(f"[加仓风向标] 活期宝检查异常: {e}，默认通过")
+        return True
 
 def _get_max_funds_threshold() -> int:
     """
@@ -95,9 +116,9 @@ def add_new_funds(
     logger.info("========== 开始执行新增基金算法（最小落地版） ===========", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "wind_add_new"})
     logger.info(f"用户: {user.customer_name}，组合名称: {sub_account_name}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "wind_add_new"})
 
-    # 0) 全局风控检查：活期宝占比（增加阈值参数）
-    if not check_hqb_risk_allowed(user, threshold=20.0):
-        logger.info("[加仓风向标] 全局风控拦截：活期宝占比不足(20%)，退出新增流程")
+    # 0) 策略特定风控：活期宝余额 vs 总预算（要求 >= 预算的20%）
+    if not _check_wind_vane_hqb_risk(user, total_budget, threshold=20.0):
+        logger.info("[加仓风向标] 活期宝储备不足，退出新增流程")
         return True
 
     try:

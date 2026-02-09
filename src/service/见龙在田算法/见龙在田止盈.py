@@ -24,6 +24,8 @@ from src.service.交易管理.赎回基金 import sell_low_fee_shares, sell_0_fe
 
 logger = get_logger(__name__)
 
+from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
+
 def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float] = None, profit_threshold: Optional[float] = 10.0) -> bool:
     # 统一日志前缀与风格（保持原有）
     customer_name = user.customer_name
@@ -139,6 +141,64 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                 logger.warning(f"{user.customer_name}的基金{fund_name}({fund_code})止盈失败")
         except Exception as e:
             logger.error(f"止盈 {fund_code} {fund_name} 失败: {e}")
+
+    # 新增出口：如果活期宝不足（<总资产20%），执行紧急赎回逻辑
+    # 紧急赎回条件：预估收益率 > 5.0 且 今日预估增长率 > 0.5 的资产最大基金，卖出0费率份额
+    if not check_hqb_risk_allowed(user, threshold=20.0):
+        logger.info(f"{user.customer_name} 活期宝占比不足20%，触发紧急赎回检查")
+        
+        # 寻找符合条件的候选基金：(asset, estimated_profit_rate, estimated_change)
+        candidates = []
+        for asset in user_assets:
+            fund_code = getattr(asset, "fund_code", None)
+            if not fund_code: continue
+            
+            fund_info = get_all_fund_info(user, fund_code)
+            if not fund_info: continue
+            
+            # 计算指标
+            current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
+            estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
+            estimated_profit_rate = current_profit_rate + estimated_change
+            
+            # 条件判断：预估收益率 > 5.0 且 估值涨跌幅 > 0.5
+            if estimated_profit_rate > 5.0 and estimated_change > 0.5:
+                current_value = _safe_float(getattr(asset, "current_value", 0.0), 0.0) # 市值
+                candidates.append({
+                    "asset": asset,
+                    "profit_rate": estimated_profit_rate,
+                    "change": estimated_change,
+                    "market_value": current_value
+                })
+        
+        if candidates:
+            # 按市值降序排列，取最大的一个
+            candidates.sort(key=lambda x: x["market_value"], reverse=True)
+            target = candidates[0]
+            target_asset = target["asset"]
+            target_fund_code = target_asset.fund_code
+            target_fund_name = target_asset.fund_name
+            
+            logger.info(
+                f"紧急赎回选中目标: {target_fund_name}({target_fund_code}) "
+                f"市值:{target['market_value']:.2f}, 预估收益:{target['profit_rate']:.2f}%, 估值涨跌:{target['change']:.2f}%"
+            )
+            
+            try:
+                # 获取可用份额
+                bank_shares = get_bank_shares(user, sub_account_no, target_fund_code)
+                # 尝试卖出0费率份额
+                # 注意：这里只卖出0费率份额，如果不满足持有时间可能不会全部卖出
+                sell_result = sell_0_fee_shares(user, sub_account_no, target_fund_code, bank_shares)
+                if sell_result and getattr(sell_result, "busin_serial_no", None):
+                    logger.info(f"紧急赎回成功: {target_fund_name}({target_fund_code})")
+                    success_count += 1
+                else:
+                    logger.warning(f"紧急赎回失败: {target_fund_name}({target_fund_code}) (可能无0费率份额)")
+            except Exception as e:
+                logger.error(f"紧急赎回执行异常: {e}")
+        else:
+            logger.info("未找到符合紧急赎回条件（预估收益>5%且涨幅>0.5%）的基金")
 
     logger.info(f"止盈操作完成，成功处理 {success_count} 个基金")
     return success_count > 0

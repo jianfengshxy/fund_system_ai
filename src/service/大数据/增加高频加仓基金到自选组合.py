@@ -137,6 +137,8 @@ def get_group_info(user, group_name: str) -> Tuple[int, Set[str]]:
                     
     return target_group_id, existing_funds
 
+from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
+
 def add_frequent_funds_to_fast_profit_group(user, days: int = 30, min_appear: int = 10, group_name: str = "快速止盈") -> Dict[str, int]:
     """
     Main service function to add frequent funds to the specified group.
@@ -175,6 +177,12 @@ def add_frequent_funds_to_fast_profit_group(user, days: int = 30, min_appear: in
         'added': 0,
         'skipped': 0
     }
+    
+    # Check Huoqi Bao risk (Must be > 20.0 to proceed)
+    if not check_hqb_risk_allowed(user, threshold=20.0):
+        logger.info(f"Huoqi Bao check failed (Risk threshold: 20.0). Skipping addition.")
+        return stats
+    
     
     for fund in frequent_funds:
         fund_code = fund['fund_code']

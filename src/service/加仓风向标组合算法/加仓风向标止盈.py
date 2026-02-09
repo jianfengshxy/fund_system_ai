@@ -27,6 +27,8 @@ from src.service.公共服务.nav_gate_service import nav5_gate, nav5_fall_gate
 
 logger = get_logger(__name__)
 
+from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
+
 def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float] = None) -> bool:
     customer_name = user.customer_name
     logger.info(f"开始为用户 {customer_name} 执行止盈操作，组合: {sub_account_name}")
@@ -237,8 +239,17 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         asset_budget_ratio = None
         logger.warning(f"计算持仓占比失败，第三轮止盈触发条件跳过：异常={e}")
 
-    if asset_budget_ratio is not None and asset_budget_ratio > 80.0:
-        logger.info("满足第三轮触发条件：持仓比率>80%，指数止盈点3%，非指数5%（分别赎回C类0费率与非C低费率份额）")
+    # 第三轮触发条件：持仓比率 > 80.0 OR 活期宝余额 < 预算 * 20%
+    hqb_risk_triggered = not check_hqb_risk_allowed(user, threshold=20.0)
+    
+    if (asset_budget_ratio is not None and asset_budget_ratio > 80.0) or hqb_risk_triggered:
+        trigger_reason = []
+        if asset_budget_ratio is not None and asset_budget_ratio > 80.0:
+            trigger_reason.append(f"持仓比率({asset_budget_ratio:.2f}%)>80%")
+        if hqb_risk_triggered:
+            trigger_reason.append("活期宝占比不足20%")
+            
+        logger.info(f"满足第三轮触发条件（{' | '.join(trigger_reason)}）：指数止盈点3%，非指数5%（分别赎回C类0费率与非C低费率份额）")
         for asset in user_assets:
             fund_code = asset.fund_code
             fund_info = get_all_fund_info(user, fund_code)
@@ -284,7 +295,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                     f"第三轮跳过：{fund_name}({fund_code}) 预估收益率≤止盈点({threshold:.2f}%) 预估={estimated_profit_rate:.2f}%"
                 )
     else:
-        logger.info("第三轮未触发：持仓比率≤80% 或预算未设置")
+        logger.info("第三轮未触发：持仓比率≤80% 且 活期宝占比≥20% (或预算未设置)")
 
     logger.info(f"止盈完成：{user.customer_name} 成功执行 {success_count} 次赎回操作（最多3个）")
     return True

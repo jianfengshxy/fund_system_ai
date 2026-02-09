@@ -14,6 +14,8 @@ from src.domain.user.User import User
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.service.交易管理.赎回基金 import sell_0_fee_shares
+from src.service.基金信息.基金信息 import get_all_fund_info
+from src.API.交易管理.trade import get_bank_shares
 
 logger = get_logger(__name__)
 
@@ -44,16 +46,31 @@ def redeem_gold_dimension_funds(user: User, sub_account_name: str) -> bool:
             fund_code = asset.fund_code
             fund_name = asset.fund_name
 
-            if current_profit_rate > 1.0:
-                logger.info(f"基金 {fund_name}({fund_code}) 收益率 {current_profit_rate}% > 1.0%，尝试赎回0费率份额")
+            # 获取基金估值信息
+            fund_info = get_all_fund_info(user, fund_code)
+            estimated_change = fund_info.estimated_change if fund_info and fund_info.estimated_change is not None else 0.0
+            
+            # 计算预估收益率 = 当前收益率 + 估值涨跌幅
+            estimated_profit_rate = current_profit_rate + estimated_change
+            
+            logger.info(f"基金 {fund_name}({fund_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%")
+
+            if estimated_profit_rate > 1.0:
+                logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% > 1.0%，尝试赎回0费率份额")
                 
+                # 获取可用份额
+                shares = get_bank_shares(user, sub_account_no, fund_code)
+                if not shares:
+                    logger.info(f"基金 {fund_name}({fund_code}) 无可用份额，跳过赎回")
+                    continue
+
                 # 执行0费率赎回
-                result = sell_0_fee_shares(user, sub_account_no, fund_code)
+                result = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
                 
                 if result: 
                     redeem_count += 1
             else:
-                 logger.info(f"基金 {fund_name}({fund_code}) 收益率 {current_profit_rate}% <= 1.0%，不满足止盈条件")
+                 logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% <= 1.0%，不满足止盈条件")
 
         except Exception as e:
             logger.error(f"处理基金 {asset.fund_code} 止盈时发生错误: {e}")

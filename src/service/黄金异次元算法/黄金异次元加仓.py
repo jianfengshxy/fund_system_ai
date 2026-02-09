@@ -86,10 +86,15 @@ def increase_gold_dimension_funds(user: User, sub_account_name: str, amount: flo
     else:
         # Case 2: 有持仓
         current_profit_rate = float(getattr(target_asset, "constant_profit_rate", 0.0) or 0.0)
-        logger.info(f"当前持仓收益率: {current_profit_rate}%")
         
-        if current_profit_rate >= -1.0:
-            logger.info(f"持仓盈利中 ({current_profit_rate}%)，不触发加仓")
+        # 计算预估收益率
+        estimated_change = fi.estimated_change if fi.estimated_change is not None else 0.0
+        estimated_profit_rate = current_profit_rate + estimated_change
+        
+        logger.info(f"当前持仓收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%")
+        
+        if estimated_profit_rate >= -1.0:
+            logger.info(f"预估收益率 ({estimated_profit_rate:.2f}%) >= -1.0%，不触发加仓")
             return True
             
         # 亏损状态，进行严格检查
@@ -129,13 +134,13 @@ def increase_gold_dimension_funds(user: User, sub_account_name: str, amount: flo
         final_amount = amount
         logger.info(f"基础加仓条件满足，初始金额: {final_amount}")
         
-        if current_profit_rate < -3.0:
+        if estimated_profit_rate < -3.0:
             final_amount += amount
-            logger.info(f"收益率 < -3.0%，追加 {amount}，当前: {final_amount}")
+            logger.info(f"预估收益率 < -3.0%，追加 {amount}，当前: {final_amount}")
             
-        if current_profit_rate < -5.0:
+        if estimated_profit_rate < -5.0:
             final_amount += amount
-            logger.info(f"收益率 < -5.0%，追加 {amount}，当前: {final_amount}")
+            logger.info(f"预估收益率 < -5.0%，追加 {amount}，当前: {final_amount}")
 
     # 6. 执行交易
     if final_amount > 0:

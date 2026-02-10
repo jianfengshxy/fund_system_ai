@@ -175,6 +175,21 @@ def getFundRations(user, page_index=1, page_size=1000, planTypes=None, fundTypes
             plans = []
             for item in data.get('data', []):
                 # 在 getFundRations 函数中修改 FundPlan 初始化
+                # 尝试从多个可能的字段获取金额
+                # API 可能返回 'amount', 'businBalance', 'targetAmount', 'payAmount' 等
+                raw_amount = item.get('amount', 0)
+                if not raw_amount or str(raw_amount) == '0' or str(raw_amount) == '0.0':
+                    # 尝试从 nextDeductDescription 提取 (格式: 下个扣款日 2026-02-12，扣款 1000.00 元)
+                    desc = item.get('nextDeductDescription', '')
+                    if desc:
+                        import re
+                        try:
+                            match = re.search(r"扣款\D*([\d\.]+)\D*元", desc)
+                            if match:
+                                raw_amount = match.group(1)
+                        except:
+                            pass
+                
                 plan = FundPlan(
                     planId=item.get('planId', ''),
                     fundCode=item.get('productCode', ''),
@@ -187,7 +202,7 @@ def getFundRations(user, page_index=1, page_size=1000, planTypes=None, fundTypes
                     planType=str(item.get('planType', '')),
                     periodType=parse_int(item.get('periodType', 0)),
                     periodValue=parse_int(item.get('periodValue', 0)),
-                    amount=parse_amount(item.get('amount', 0)),
+                    amount=parse_amount(raw_amount),
                     bankAccountNo='',
                     payType=parse_int(item.get('payType', 0)),
                     subAccountNo='',
@@ -364,6 +379,21 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
                 else:
                     executed_amount = 0.0
 
+                # 尝试从多个可能的字段获取金额
+                # API 可能返回 'amount', 'businBalance', 'targetAmount', 'payAmount' 等
+                raw_amount = plan_data.get('amount', 0)
+                if not raw_amount or str(raw_amount) == '0' or str(raw_amount) == '0.0':
+                    # 尝试从 nextDeductDescription 提取
+                    desc = plan_data.get('nextDeductDescription', '')
+                    if desc:
+                        import re
+                        try:
+                            match = re.search(r"扣款\D*([\d\.]+)\D*元", desc)
+                            if match:
+                                raw_amount = match.group(1)
+                        except:
+                            pass
+
                 plan = FundPlan(
                     planId=plan_data.get('planId', ''),
                     fundCode=fund_code_val,
@@ -379,7 +409,7 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
                     # 尝试从原始数据中获取更多可能的字段
                     periodType=parse_int(plan_data.get('periodType', 0)), 
                     periodValue=parse_int(plan_data.get('periodValue', 0)),
-                    amount=0.0,
+                    amount=parse_amount(raw_amount),
                     bankAccountNo='',
                     payType=0,
                     subAccountNo=plan_data.get('subAcctId', ''),

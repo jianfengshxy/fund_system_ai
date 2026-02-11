@@ -31,6 +31,10 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
         fund_info = fund_info_cache[fund_code]
         # 即便从缓存取，也要刷新估值信息
         try:
+            if not hasattr(fund_info, "_baseline_nav_date"):
+                refreshed = getFundInfo(user, fund_code)
+                if refreshed:
+                    fund_info = refreshed
             updated_fund_info = updateFundEstimatedValue(fund_info)
             if updated_fund_info:
                 fund_info = updated_fund_info

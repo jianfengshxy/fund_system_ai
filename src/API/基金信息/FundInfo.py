@@ -196,19 +196,36 @@ def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
                 fund_info.estimated_change = float(data.get('gszzl', 0))  # GSZZL - 估算涨跌幅
                 fund_info.estimated_time = data.get('gztime', '')  # GZTIME - 估算时间                
                 
-                # 更新收益率信息 - 原有收益率加上估算涨跌幅                
-                if fund_info.week_return is not None:
-                    fund_info.week_return = fund_info.week_return + fund_info.estimated_change
-                if fund_info.month_return is not None:
-                    fund_info.month_return = fund_info.month_return + fund_info.estimated_change
-                if fund_info.three_month_return is not None:
-                    fund_info.three_month_return = fund_info.three_month_return + fund_info.estimated_change
-                if fund_info.six_month_return is not None:
-                    fund_info.six_month_return = fund_info.six_month_return + fund_info.estimated_change
-                if fund_info.year_return is not None:
-                    fund_info.year_return = fund_info.year_return + fund_info.estimated_change
-                if fund_info.this_year_return is not None:
-                    fund_info.this_year_return = fund_info.this_year_return + fund_info.estimated_change
+                baseline_nav_date = getattr(fund_info, "_baseline_nav_date", None)
+                if baseline_nav_date != getattr(fund_info, "nav_date", None):
+                    fund_info._baseline_nav_date = getattr(fund_info, "nav_date", None)
+                    fund_info._baseline_week_return = fund_info.week_return
+                    fund_info._baseline_month_return = fund_info.month_return
+                    fund_info._baseline_three_month_return = fund_info.three_month_return
+                    fund_info._baseline_six_month_return = fund_info.six_month_return
+                    fund_info._baseline_year_return = fund_info.year_return
+                    fund_info._baseline_this_year_return = fund_info.this_year_return
+
+                est = fund_info.estimated_change or 0.0
+                base_week = getattr(fund_info, "_baseline_week_return", None)
+                base_month = getattr(fund_info, "_baseline_month_return", None)
+                base_three = getattr(fund_info, "_baseline_three_month_return", None)
+                base_six = getattr(fund_info, "_baseline_six_month_return", None)
+                base_year = getattr(fund_info, "_baseline_year_return", None)
+                base_this_year = getattr(fund_info, "_baseline_this_year_return", None)
+
+                if base_week is not None:
+                    fund_info.week_return = base_week + est
+                if base_month is not None:
+                    fund_info.month_return = base_month + est
+                if base_three is not None:
+                    fund_info.three_month_return = base_three + est
+                if base_six is not None:
+                    fund_info.six_month_return = base_six + est
+                if base_year is not None:
+                    fund_info.year_return = base_year + est
+                if base_this_year is not None:
+                    fund_info.this_year_return = base_this_year + est
                        
                 # 请求成功，返回更新后的基金信息
                 if retry_count > 0:
@@ -282,5 +299,4 @@ if __name__ == "__main__":
             
     except Exception as e:
         print(f"\n程序执行出错: {str(e)}")
-
 

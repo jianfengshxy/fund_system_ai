@@ -138,25 +138,29 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         stop_reason = f"活期宝占比不足 20% (硬性风控)"
         
     if stop_reason:
-        logger.info(f"最强风控触发 - {fund_name}{fund_code} {stop_reason}，执行回撤")
+        logger.info(f"[风控拦截] 最强风控触发 - {fund_name}({fund_code}) 触发原因: {stop_reason}")
         # 回撤所有交易
         for i, trade in enumerate(trades):
-            logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+            logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
             try:
                 revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                logger.info("交易回撤成功")
+                logger.info("     回撤成功")
             except Exception as e:
-                logger.error(f"交易回撤失败: {e}")
-        logger.info(f"最强风控触发完成. Skip......")
+                logger.error(f"     回撤失败: {e}")
+        logger.info(f"[风控拦截] 处理完毕，已跳过后续加仓")
         return True
     
     try:
         asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
         if asset_detail is not None:
             constant_profit_rate = asset_detail.constant_profit_rate  # 移除 * 100
-            logger.info(f"{fund_name}资产详情获取成功 - 资产价值: {asset_detail.asset_value}, 收益率: {constant_profit_rate}%, 估值增长率: {fund_info.estimated_change}%, 在途交易数: {asset_detail.on_way_transaction_count}")
+            logger.info(f"[资产快照] {fund_name}({fund_code}) 持仓市值: {asset_detail.asset_value:.2f}, 收益率: {constant_profit_rate}%, 估值变动: {fund_info.estimated_change}%")
         else:
-            logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}资产为空。Skip ..........")
+            logger.info(f"[资产快照] {fund_name}({fund_code}) 无持仓资产，视为首次建仓/空仓")
+            # 即使资产为空，也需要继续往下走，因为 asset_detail 为 None 时下面代码会报错
+            # 为了兼容下面代码，我们需要 mock 一个空的 asset_detail 或者直接返回
+            # 但如果 trades 不为空（比如今天刚买了），asset_detail 可能还没更新？
+            # 之前的逻辑是直接 return True，这里保持一致，但优化日志
             return True
     except Exception as e:
         logger.error(f"获取资产详情失败: {e}")
@@ -166,49 +170,48 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     constant_profit_rate = asset_detail.constant_profit_rate  # 移除 * 100
     on_way_transaction_count = asset_detail.on_way_transaction_count
     times = round(plan_assets / fund_amount, 2)
-    logger.info(f"计算结果 - 资产倍数: {times}")
+    logger.info(f"[资产倍数] 当前资产/定投金额 = {plan_assets:.2f}/{fund_amount} = {times}倍")
     
     # 获取当前收益率和估值增长率
     current_profit_rate = constant_profit_rate if constant_profit_rate is not None else 0.0
     estimated_change = fund_info.estimated_change if fund_info.estimated_change is not None else 0.0
     estimated_profit_rate = current_profit_rate + estimated_change
     
-    logger.info(f"收益率计算 - 当前收益率: {current_profit_rate}%, 估值增长率: {estimated_change}%, 预估收益率: {estimated_profit_rate}%")
+    logger.info(f"[收益率预估] 预估收益率 = 当前({current_profit_rate}%) + 估值({estimated_change}%) = {estimated_profit_rate:.2f}%")
+
       #判断是否是月定投延期交易
     if period_type == 3 and  period_value != day_of_month: 
-        logger.info(f"月定投延期检查 - 计划执行日期: {period_value}, 当前日期: {day_of_month}, 不匹配，执行回撤")
+        logger.info(f"[时间风控] 月定投延期拦截 - 计划日:{period_value} vs 今日:{day_of_month}，不匹配，撤回交易")
         #回撤所有交易   
         for i, trade in enumerate(trades):
-            logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}, 业务类型: {trade.business_type}, 业务代码: {trade.business_code}, 产品名称: {trade.product_name}, 状态: {trade.status}, 申请日期: {trade.apply_work_day}")
+            logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
             try:
                 revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                logger.info(f"交易回撤成功")
+                logger.info(f"     回撤成功")
             except Exception as e:
-                logger.error(f"交易回撤失败: {e}")
-        logger.info(f"{customer_name}的组合{sub_account_name}{fund_name}的月延期交易{day_of_month},撤回所有交易。")
+                logger.error(f"     回撤失败: {e}")
         return  True
                   
-    logger.info(f"当前计划:{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}的周期类型{period_type},period_type:{period_value},当前月的值:{day_of_month},当前资产:{plan_assets},计划类型:{plan_type}")
     # 5日均线守卫：对所有可回撤的买入/定投交易生效
     # 如果是周定投(1)或月定投(3)，即使是第一次(times<=1)也要检查；其他类型第一次不检查
     bypass_ma5 = (period_type not in [1, 3]) and (times <= 1)
     gate_ok = True if bypass_ma5 else bool(nav5_gate(fund_info, fund_name, fund_code, logger))
     if not gate_ok:
-        logger.info(f"5日均线守卫未通过（估算净值≤5日均值）：撤回当天所有可回撤交易。资产={plan_assets} 定投金额={fund_amount}")
+        logger.info(f"[均线风控] 5日均线守卫未通过 (估算净值 < 5日均值)，趋势向下，执行防守撤单")
         for i, trade in enumerate(trades):
-            logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+            logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
             try:
                 revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                logger.info("交易回撤成功")
+                logger.info("     回撤成功")
             except Exception as e:
-                logger.error(f"交易回撤失败: {e}")
+                logger.error(f"     回撤失败: {e}")
         return True
     else:
         if bypass_ma5:
-            logger.info(f"触发口子：非月/周定投且 资产/定投金额≤1（{times}），跳过5日均线判断，并直接结束本次处理。")
+            logger.info(f"[均线风控] 豁免：首次定投/资产积累期 (倍数{times}<=1)，跳过均线检查")
             return True  # 口子开启时直接通过并早停
         else:
-            logger.info(f"5日均线守卫通过（估算净值>5日均值）：继续执行后续判断。")
+            logger.info(f"[均线风控] 通过：估算净值 > 5日均值，趋势向上")
             if period_type in [1, 3] and times <= 1:
                 # 首次定投额外检查：避免追高 (Rank过低代表排名靠前，净值低，没有摆脱底部)
                 rank_100 = getattr(fund_info, "rank_100day", None)
@@ -219,37 +222,36 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                 
                 if isinstance(rank_100, (int, float)) and rank_100 < 20:
                     should_revoke = True
-                    revoke_reason = f"100日排名过低({rank_100} < 20，处于低位)"
+                    revoke_reason = f"100日排名过低({rank_100} < 20)"
                 elif isinstance(rank_30, (int, float)) and rank_30 < 5:
                     should_revoke = True
-                    revoke_reason = f"30日排名过低({rank_30} < 5，处于极低位)"
+                    revoke_reason = f"30日排名过低({rank_30} < 5)"
                     
                 if should_revoke:
-                    logger.info(f"首次定投Rank检查未通过 - {revoke_reason}，执行回撤")
+                    logger.info(f"[排名风控] 首次定投位置不佳 - {revoke_reason}，执行防守撤单")
                     for i, trade in enumerate(trades):
-                        logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+                        logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
                         try:
                             revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                            logger.info("交易回撤成功")
+                            logger.info("     回撤成功")
                         except Exception as e:
-                            logger.error(f"交易回撤失败: {e}")
+                            logger.error(f"     回撤失败: {e}")
                     return True
 
-                logger.info(f"月/周定投首次且通过5日均线及Rank检查：直接结束本次处理。资产={plan_assets} 定投金额={fund_amount}")
+                logger.info(f"[首次风控] 通过：均线及排名检查均合格，继续持有")
                 return True
 
     #判断是否是周定投延期交易
     if period_type == 1 and  period_value != day_of_week_number + 1:
-        logger.info(f"周定投延期检查 - 计划执行星期: {period_value}, 当前星期: {day_of_week_number + 1}, 不匹配，执行回撤")
+        logger.info(f"[时间风控] 周定投延期拦截 - 计划周:{period_value} vs 今日周:{day_of_week_number + 1}，不匹配，撤回交易")
         #回撤所有交易
         for i, trade in enumerate(trades):
-            logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+            logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
             try:
                 revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                logger.info(f"交易回撤成功")
+                logger.info(f"     回撤成功")
             except Exception as e:
-                logger.error(f"交易回撤失败: {e}")
-        logger.info(f"{customer_name}的组合{sub_account_name}{fund_name}的周延期交易{day_of_week_number + 1},撤回所有交易。")
+                logger.error(f"     回撤失败: {e}")
         return True
         
     # 使用“昨日净值日(nav_date)+今天”的守卫：任一天存在非撤的买入/定投则回撤并跳过
@@ -263,41 +265,38 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
 
     prev_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {d for d in [prev_trade_day] if d})
     today_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {today})
-    logger.info(f"同基金不连续守卫 - 昨日(nav_date)提交:{prev_trade_pre is not None}, 今日提交:{today_trade_pre is not None}")
-
+    
     if prev_trade_pre is not None:
-        logger.info(f"同基金不连续守卫触发 - 组合{sub_account_no}的{fund_name}{fund_code}昨日或今日存在买入/定投提交（非撤），执行回撤并跳过加仓")
+        logger.info(f"[频率风控] 交易过于频繁 - 昨日/今日已存在交易，避免重复加仓，撤回本次交易")
         # 撤回交易
         for i, trade in enumerate(trades):
-            logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+            logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
             try:
                 revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                logger.info(f"交易回撤成功")
+                logger.info(f"     回撤成功")
             except Exception as e:
-                logger.error(f"交易回撤失败: {e}")
+                logger.error(f"     回撤失败: {e}")
         return True
         
 
-    logger.info(
-        f"计划{plan_detail.rationPlan.planId}组合{sub_account_no}的{fund_name}{fund_code}"
-        f"当前收益率:{current_profit_rate},估值增长率:{estimated_change},预估收益率:{estimated_profit_rate}."
-    )
+    logger.info(f"[加仓决策] 进入加仓逻辑判断...")
     
     # 首次定投例外：优先以计划执行次数判断，其次以资产倍数兜底
     is_first_investment = (times == 1.0)
     if is_first_investment:
+        logger.info(f"[加仓决策] 首次定投(times=1.0)，直接通过")
         return True
 
     if not is_first_investment and estimated_profit_rate > -1.0 :
-        logger.info(f"预估收益率检查 - {customer_name}的组合{sub_account_name}{fund_name}的预估收益率{estimated_profit_rate} > -1.0,执行回撤")
+        logger.info(f"[加仓决策] 预估收益率({estimated_profit_rate:.2f}%) > -1.0%，不满足加仓条件，撤回交易")
         #回撤所有交易
         for i, trade in enumerate(trades):
-            logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+            logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
             try:
                 revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                logger.info(f"交易回撤成功")
+                logger.info(f"     回撤成功")
             except Exception as e:
-                logger.error(f"交易回撤失败: {e}")
+                logger.error(f"     回撤失败: {e}")
         return  True  
         
     #判断shares数组里面的totalVol之和等于shares数组里面的availableVol之和不相等为True和上面操作一样撤回交易  
@@ -307,108 +306,96 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         totalVol += share.totalVol
         availableVol += share.availableVol
         
-    logger.info(f"份额检查 - 总份额: {totalVol}, 可用份额: {availableVol}")
     if totalVol != availableVol:
-        logger.info(f"份额不匹配 - 组合{sub_account_no}的{fund_name}{fund_code}今天shares数组里面的totalVol之和不等于shares数组里面的availableVol之和，不进行加仓操作并回撤定投。Skip..........")
+        logger.info(f"[状态风控] 份额异常 (Total:{totalVol} != Avail:{availableVol})，可能有在途卖出或冻结，撤回交易")
         # 撤回交易
         for i, trade in enumerate(trades):
-            logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+            logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
             try:
                 revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                logger.info(f"交易回撤成功")
+                logger.info(f"     回撤成功")
             except Exception as e:
-                logger.error(f"交易回撤失败: {e}")
+                logger.error(f"     回撤失败: {e}")
         return True
         
     #计算当前可以回撤的交易数量 
     try:
         revoke_count = len(get_trades_list(user, sub_account_no=sub_account_no, fund_code = fund_code,bus_type="", status="7"))
-        logger.info(f"可回撤交易统计 - 总共{revoke_count}笔可回撤交易")
     except Exception as e:
         logger.error(f"统计可回撤交易失败: {e}")
         return False
         
     if  revoke_count == 1:
-        logger.info(f"单笔交易处理 - 组合{sub_account_no}的{fund_name}{fund_code}今天只有一个可以回撤的交易进行加仓判断")
+        logger.info(f"[单笔加仓] 当前仅有一笔可撤回交易，进行详细风控检查")
         if estimated_profit_rate < -1.0 :
-            logger.info(f"预估收益率符合条件 - {customer_name}的组合{sub_account_name}{fund_name}的预估收益率{estimated_profit_rate} < -1.0")  
-
             # 提取并校验排名字段，缺失时给出跳过原因并不参与阈值判断
             fund_name = plan_detail.rationPlan.fundName
             fund_code = plan_detail.rationPlan.fundCode
             rank_100 = getattr(fund_info, "rank_100day", None)
             rank_30 = getattr(fund_info, "rank_30day", None)
-            if not isinstance(rank_100, (int, float)) or not isinstance(rank_30, (int, float)):
-                logger.info(f"跳过排名判断：{fund_name}({fund_code}) 排名数据缺失（rank_100day={rank_100}, rank_30day={rank_30}）")
-            else:
+            
+            if isinstance(rank_100, (int, float)) and isinstance(rank_30, (int, float)):
                 if rank_100 < 20:
-                    logger.info(f"100日排名过低 - {fund_name} rank_100 {rank_100} < 20, 执行回撤")
+                    logger.info(f"[排名风控] 100日排名过低 ({rank_100} < 20)，执行撤单")
                     # 回撤交易
                     for i, trade in enumerate(trades):
-                        logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+                        logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
                         try:
                             revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                            logger.info("交易回撤成功")
+                            logger.info("     回撤成功")
                         except Exception as e:
-                            logger.error(f"交易回撤失败: {e}")
-                    logger.info(f"{fund_name} rank_100 {rank_100} < 20. Skip......")
+                            logger.error(f"     回撤失败: {e}")
                     return True
                 if rank_100 > 90:
-                    logger.info(f"100日排名过高 - {fund_name} rank_100 {rank_100} > 90, 执行回撤")
+                    logger.info(f"[排名风控] 100日排名过高 ({rank_100} > 90)，风险过大，执行撤单")
                     for i, trade in enumerate(trades):
-                        logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+                        logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
                         try:
                             revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                            logger.info("交易回撤成功")
+                            logger.info("     回撤成功")
                         except Exception as e:
-                            logger.error(f"交易回撤失败: {e}")
-                    logger.info(f"{fund_name} rank_100 {rank_100} > 90. Skip......")
+                            logger.error(f"     回撤失败: {e}")
                     return True
                 if rank_30 < 5:
-                    logger.info(f"30日排名过低 - {fund_name} rank_30 {rank_30} < 5, 执行回撤")
+                    logger.info(f"[排名风控] 30日排名过低 ({rank_30} < 5)，执行撤单")
                     for i, trade in enumerate(trades):
-                        logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+                        logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
                         try:
                             revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                            logger.info("交易回撤成功")
+                            logger.info("     回撤成功")
                         except Exception as e:
-                            logger.error(f"交易回撤失败: {e}")
-                    logger.info(f"{fund_name} rank_30 {rank_30} < 5. Skip......")
+                            logger.error(f"     回撤失败: {e}")
                     return True
 
             # 收益率字段防空与类型兜底（缺失时按0.0处理并打印原因）
             week_growth_raw = getattr(fund_info, "week_return", None)
             month_growth_raw = getattr(fund_info, "month_return", None)
             season_growth_raw = getattr(fund_info, "three_month_return", None)
-            if week_growth_raw is None or month_growth_raw is None or season_growth_raw is None:
-                logger.info(f"跳过部分收益率判断：{fund_name}({fund_code}) 周/月/季收益存在缺失（week={week_growth_raw}, month={month_growth_raw}, season={season_growth_raw}）")
+            
             week_growth_rate = float(week_growth_raw) if isinstance(week_growth_raw, (int, float)) else 0.0
             month_growth_rate = float(month_growth_raw) if isinstance(month_growth_raw, (int, float)) else 0.0
             season_growth_rate = float(season_growth_raw) if isinstance(season_growth_raw, (int, float)) else 0.0
 
-            logger.info(f"收益率数据 - {fund_name}周收益率预估:{week_growth_rate},{fund_name}月收益率预估:{month_growth_rate},季度收益率预估:{season_growth_rate}")
+            logger.info(f"[周期收益] 周:{week_growth_rate}%, 月:{month_growth_rate}%, 季:{season_growth_rate}%")
 
             if  week_growth_rate <  0.0 and month_growth_rate < 0.0 and season_growth_rate < 0.0:
-                logger.info(f"全部收益率为负 - 周、月、季度收益率均为负数，执行回撤")
+                logger.info(f"[趋势风控] 全部周期收益率为负 (周/月/季 < 0)，下跌趋势确立，执行撤单")
                 # 回撤所有交易  
                 for i, trade in enumerate(trades):
-                    logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+                    logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
                     try:
                         revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                        logger.info("交易回撤成功")
+                        logger.info("     回撤成功")
                     except Exception as e:
-                        logger.error(f"交易回撤失败: {e}")
-                logger.info(f"{fund_name}周收益率预估:{week_growth_rate},{fund_name}月收益率预估:{month_growth_rate},季度收益率预估:{season_growth_rate}.Skip......")
+                        logger.error(f"     回撤失败: {e}")
                 return  True    
 
             if  season_growth_rate < 0.0 and (month_growth_rate < 0.0 or week_growth_rate < 0.0 ):
-                logger.info(f"季度收益率为负且月/周收益率至少一个为负 - 执行跳过")
-                logger.info(f"{fund_name}周收益率预估:{week_growth_rate},{fund_name}月收益率预估:{month_growth_rate},季度收益率预估:{season_growth_rate}.Skip......")
+                logger.info(f"[趋势风控] 季度为负且(月或周)为负，跳过加仓")
                 return  True
 
             if  season_growth_rate > 0.0 and (month_growth_rate < 0.0 and week_growth_rate < 0.0 ):
-                logger.info(f"季度收益率为正但月、周收益率均为负 - 执行跳过")
-                logger.info(f"{fund_name}周收益率预估:{week_growth_rate},{fund_name}月收益率预估:{month_growth_rate},季度收益率预估:{season_growth_rate}.Skip......")
+                logger.info(f"[趋势风控] 季度为正但(月和周)均为负，跳过加仓")
                 return  True
 
             # 月/季排名比例防空（仅在可计算时参与判断）
@@ -428,53 +415,53 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                 logger.info(f"获取季度排名数据异常: {e}")
 
             if (month_rank_rate is not None and month_rank_rate > 0.75) or (season_rank_rate is not None and season_rank_rate > 0.75):
-                logger.info(f"月/季排名比例过高：month_rank_rate={month_rank_rate}, season_rank_rate={season_rank_rate}，执行回撤")
+                logger.info(f"[排名风控] 月/季排名比例过高 (月:{month_rank_rate:.2f}, 季:{season_rank_rate:.2f} > 0.75)，执行撤单")
                 for i, trade in enumerate(trades):
-                    logger.info(f"回撤交易 {i+1}/{len(trades)} - 序列号: {trade.busin_serial_no}, 金额: {trade.amount}")
+                    logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
                     try:
                         revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                        logger.info("交易回撤成功")
+                        logger.info("     回撤成功")
                     except Exception as e:
-                        logger.error(f"交易回撤失败: {e}")
+                        logger.error(f"     回撤失败: {e}")
                 return True
 
-            logger.info(f"所有条件检查通过 - {customer_name}在组合{sub_account_name}中{fund_name}{fund_code}候选成功.") 
+            logger.info(f"[加仓确认] 所有风控检查通过，确认加仓") 
             
             # 3倍逻辑检查
             if estimated_profit_rate < -5.0 and times > 15 :
-                logger.info(f"3倍加仓逻辑 - {customer_name}在组合{sub_account_name}中{fund_name}{fund_code}满足3倍逻辑条件，预估收益率: {estimated_profit_rate}, 倍数: {times}")
+                logger.info(f"[加仓执行] 触发3倍暴击! 预估收益率:{estimated_profit_rate}% < -5.0% 且 资产倍数:{times} > 15")
                 try:
                     commit_order(user, sub_account_no, fund_code, fund_amount * 3.0)
-                    logger.info(f"3倍加仓订单提交成功 - 金额: {fund_amount * 3.0}")
+                    logger.info(f"  -> 3倍加仓提交成功: 金额 {fund_amount * 3.0}")
                 except Exception as e:
-                    logger.error(f"3倍加仓订单提交失败: {e}")
+                    logger.error(f"  -> 3倍加仓提交失败: {e}")
                 return True 
                 
             # 基础加仓
             try:
-                logger.info(f"执行基础加仓 - 金额: {fund_amount}")
+                logger.info(f"[加仓执行] 基础加仓: 金额 {fund_amount}")
                 commit_order(user, sub_account_no, fund_code, fund_amount )
-                logger.info(f"基础加仓订单提交成功")
+                logger.info(f"  -> 基础加仓提交成功")
             except Exception as e:
-                logger.error(f"基础加仓订单提交失败: {e}")
+                logger.error(f"  -> 基础加仓提交失败: {e}")
                 
             # -3.0%额外加仓
             if estimated_profit_rate < -3.0 :
                 try:
-                    logger.info(f"执行-3.0%额外加仓 - 金额: {fund_amount}")
+                    logger.info(f"[加仓执行] 触发-3%额外加仓: 金额 {fund_amount}")
                     commit_order(user, sub_account_no, fund_code, fund_amount )
-                    logger.info(f"-3.0%额外加仓订单提交成功")
+                    logger.info(f"  -> 额外加仓提交成功")
                 except Exception as e:
-                    logger.error(f"-3.0%额外加仓订单提交失败: {e}")
+                    logger.error(f"  -> 额外加仓提交失败: {e}")
                     
             # -5.0%额外加仓
             if estimated_profit_rate < -5.0 :
                 try:
-                    logger.info(f"执行-5.0%额外加仓 - 金额: {fund_amount}")
+                    logger.info(f"[加仓执行] 触发-5%额外加仓: 金额 {fund_amount}")
                     commit_order(user, sub_account_no, fund_code, fund_amount )
-                    logger.info(f"-5.0%额外加仓订单提交成功")
+                    logger.info(f"  -> 额外加仓提交成功")
                 except Exception as e:
-                    logger.error(f"-5.0%额外加仓订单提交失败: {e}")
+                    logger.error(f"  -> 额外加仓提交失败: {e}")
                     
     logger.info(f"========== 加仓算法执行完成 ==========")
     return True
@@ -504,3 +491,7 @@ def increase_all_fund_plans(user: User):
     success_count = sum(1 for result in results if result)
     logger.info(f"{user.customer_name}有{len(results)}个定投计划执行加仓操作，成功{success_count}个，失败{len(results) - success_count}个")
     logger.info(f"========== 全部基金计划加仓执行完成 ==========")
+
+
+if __name__ == "__main__":
+    increase_all_fund_plans(DEFAULT_USER)

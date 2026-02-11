@@ -60,12 +60,87 @@ vars:
   # 自定义组合共享 payload（避免三处重复维护）
   custom_portfolio_redeem_payload: '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 10000.0},{"sub_account_name": "快速止盈", "amount": 30000.0}]}'
   custom_portfolio_add_payload: '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 10000.0, "total_budget": 200000.0},{"sub_account_name": "快速止盈", "amount": 30000.0, "total_budget": 1000000.0}]}'
-  custom_portfolio_increase_payload: '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 10000.0},{"sub_account_name": "快速止盈", "amount": 10000.0}]}'
+  custom_portfolio_increase_payload: '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 10000.0},{"sub_account_name": "快速止盈", "amount": 30000.0}]}'
 
   # 定投固定比率止盈配置
   fixed_ratio_redeem_payload: '{"account": "13918199137", "password": "sWX15706", "fundcodelist": [ {"fundcode": "020274", "stoprate": "1.0"},{"fundcode": "004433", "stoprate": "1.0"},{"fundcode": "011707", "stoprate": "5.0"}, {"fundcode": "021740", "stoprate": "1.0"},{"fundcode": "020412", "stoprate": "1.0"},{"fundcode": "025857", "stoprate": "1.0"},{"fundcode": "024195", "stoprate": "1.0"},{"fundcode": "008888", "stoprate": "1.0"},{"fundcode": "011103", "stoprate": "1.0"}]}'
 
 resources:
+  add_new_custom:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.add_new_custom"
+      functionName: "add_new_custom"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "add_new_custom_13918199137_portfolio"
+        triggerConfig:
+          payload: ${vars.custom_portfolio_add_payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 11 45 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+  increase_custom:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.increase_custom"
+      functionName: "increase_custom"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "increase_custom_13918199137_portfolio"
+        triggerConfig:
+          payload: ${vars.custom_portfolio_increase_payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 23 45 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+  redeem_custom:
+    component: ${vars.common.component}
+    actions: ${vars.common.actions}
+    props:
+      handler: "index.redeem_custom"
+      functionName: "redeem_custom"
+      logConfig: ${vars.common.props.logConfig}
+      diskSize: ${vars.common.props.diskSize}
+      code: ${vars.common.props.code}
+      memorySize: ${vars.common.props.memorySize}
+      layers: ${vars.common.props.layers}
+      cpu: ${vars.common.props.cpu}
+      runtime: ${vars.common.props.runtime}
+      region: ${vars.common.props.region}
+      timeout: ${vars.common.props.timeout}
+      environmentVariables: ${vars.common.props.environmentVariables}
+      triggers:
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "redeem_custom_13918199137_portfolio"
+        triggerConfig:
+          payload: ${vars.custom_portfolio_redeem_payload}
+          cronExpression: "CRON_TZ=Asia/Shanghai 39 45 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
   fixed_ratio_redeem:
     component: ${vars.common.component}
     actions: ${vars.common.actions}
@@ -356,3 +431,43 @@ resources:
           payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "黄金异次元"}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 53 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
+  
+  daily_task:
+      component: ${vars.common.component}
+      actions: ${vars.common.actions}
+      props:
+        handler: "index.daily_task"
+        functionName: "daily_task"
+        logConfig: ${vars.common.props.logConfig}
+        diskSize: ${vars.common.props.diskSize}
+        code: ${vars.common.props.code}
+        memorySize: ${vars.common.props.memorySize}
+        layers: ${vars.common.props.layers}
+        cpu: ${vars.common.props.cpu}
+        runtime: ${vars.common.props.runtime}
+        region: ${vars.common.props.region}
+        timeout: ${vars.common.props.timeout}
+        environmentVariables:
+          INDEX_FUNDS_SUB_ACCOUNT_NAME: "马丁格尔plus"
+        triggers:
+        - qualifier: ${vars.common.props.triggerConfig.qualifier}
+          triggerType: ${vars.common.props.triggerConfig.triggerType}
+          triggerName: "daily_task_1120"
+          triggerConfig:
+            payload: ${vars.common.props.triggerConfig.payload}
+            cronExpression: "CRON_TZ=Asia/Shanghai 0 20 11 * * 1-5"
+            enable: ${vars.common.props.triggerConfig.enable}  
+        - qualifier: ${vars.common.props.triggerConfig.qualifier}
+          triggerType: ${vars.common.props.triggerConfig.triggerType}
+          triggerName: "daily_task_1430"
+          triggerConfig:
+            payload: ${vars.common.props.triggerConfig.payload}
+            cronExpression: "CRON_TZ=Asia/Shanghai 0 30 14 * * 1-5"
+            enable: ${vars.common.props.triggerConfig.enable}
+        - qualifier: ${vars.common.props.triggerConfig.qualifier}
+          triggerType: ${vars.common.props.triggerConfig.triggerType}
+          triggerName: "daily_task_2130"
+          triggerConfig:
+            payload: ${vars.common.props.triggerConfig.payload}
+            cronExpression: "CRON_TZ=Asia/Shanghai 0 30 21 * * 1-5"
+            enable: ${vars.common.props.triggerConfig.enable}

@@ -179,9 +179,9 @@ def add_frequent_funds_to_fast_profit_group(user, days: int = 30, min_appear: in
     }
     
     # Check Huoqi Bao risk (Must be > 20.0 to proceed)
-    if not check_hqb_risk_allowed(user, threshold=20.0):
-        logger.info(f"Huoqi Bao check failed (Risk threshold: 20.0). Skipping addition.")
-        return stats
+    # if not check_hqb_risk_allowed(user, threshold=20.0):
+    #     logger.info(f"Huoqi Bao check failed (Risk threshold: 20.0). Skipping addition.")
+    #     return stats
     
     
     for fund in frequent_funds:

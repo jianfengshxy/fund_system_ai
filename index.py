@@ -397,15 +397,17 @@ def add_new_custom(event, context):
         if not sub_asset_response.Success or not sub_asset_response.Data:
             logger.warning("获取用户资产组合列表失败或为空")
             return
-        # 解析 sub_account_list，构建 amount 映射
+        # 解析 sub_account_list，构建配置映射
         sub_account_list = payload.get('sub_account_list', [])
         sub_account_config = {}
         if isinstance(sub_account_list, list):
             for item in sub_account_list:
                 name = item.get('sub_account_name')
-                amt = item.get('amount')
                 if name:
-                    sub_account_config[name] = amt
+                    sub_account_config[name] = {
+                        "amount": item.get('amount'),
+                        "total_budget": item.get('total_budget', 100000.0)
+                    }
 
         for group in sub_asset_response.Data.list_group:
             sub_account_name = group.group_name
@@ -416,17 +418,28 @@ def add_new_custom(event, context):
             if sub_account_name not in favorite_set:
                 continue
             
-            # 确定 amount: 优先使用 payload 中对应组合的 amount，否则使用默认值 10000.0
+            # 确定 amount 和 total_budget
             amount_val = 10000.0
+            total_budget_val = 0.0
+            
             if sub_account_name in sub_account_config:
-                cfg_amt = sub_account_config.get(sub_account_name)
+                cfg = sub_account_config.get(sub_account_name)
+                # amount
+                cfg_amt = cfg.get("amount")
                 if cfg_amt is not None:
                     try:
                         amount_val = float(cfg_amt)
                     except (ValueError, TypeError):
                         pass
+                # total_budget
+                cfg_budget = cfg.get("total_budget")
+                if cfg_budget is not None:
+                    try:
+                        total_budget_val = float(cfg_budget)
+                    except (ValueError, TypeError):
+                        pass
 
-            logger.info(f"组合 {sub_account_name} 准备新增，使用金额: {amount_val}", extra=extra)
+            logger.info(f"组合 {sub_account_name} 准备新增，使用金额: {amount_val}，预算限制: {total_budget_val}", extra=extra)
 
             assets = get_sub_account_asset_by_name(user, sub_account_name)
             if not assets:
@@ -444,7 +457,7 @@ def add_new_custom(event, context):
                     continue
                 fund_list.append({"fund_code": code, "fund_name": name_val, "amount": amount_val})
             logger.info(f"[自定义组合-新增] 开始为用户 {user.customer_name} 执行新增，组合：{sub_account_name}，基金数：{len(fund_list)}", extra=extra)
-            success = biz_add_new(user, sub_account_name, fund_list)
+            success = biz_add_new(user, sub_account_name, fund_list, total_budget=total_budget_val)
             if success:
                 logger.info(f"[自定义组合-新增] 用户 {user.customer_name} 新增完成：{sub_account_name}", extra=extra)
             else:
@@ -784,10 +797,10 @@ if __name__ == "__main__":
     # invoke(redeem, p_redeem, "redeem")
 
     # 8. Custom Portfolio
-    p_custom = '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 5000.0},{"sub_account_name": "快速止盈", "amount": 50000.0}]}'
-    # invoke(add_new_custom, p_custom, "add_new_custom")
+    p_custom = '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 5000.0,"total_budget": 200000.0},{"sub_account_name": "快速止盈", "amount": 30000.0,"total_budget": 1000000.0}]}'
+    invoke(add_new_custom, p_custom, "add_new_custom")
     # invoke(increase_custom, p_custom, "increase_custom")
-    invoke(redeem_custom, p_custom, "redeem_custom")
+    # invoke(redeem_custom, p_custom, "redeem_custom")
 
     # 9. Daily Task
     # p_daily = '{"account": "13918199137","password": "sWX15706","sub_account_name": "飞龙在天","total_budget": 1000000.0,"fund_type": "non_index"}'

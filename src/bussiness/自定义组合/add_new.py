@@ -18,7 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def add_new(user: User, sub_account_name: str, fund_list: Optional[List[dict]] = None) -> bool:
+def add_new(user: User, sub_account_name: str, fund_list: Optional[List[dict]] = None, total_budget: float = 0.0) -> bool:
     """
     业务层新增薄封装：委托到服务层自定义组合新增算法。
     - fund_list: 未持有的基金将直接按 amount 购买。
@@ -26,11 +26,11 @@ def add_new(user: User, sub_account_name: str, fund_list: Optional[List[dict]] =
     if not fund_list or not isinstance(fund_list, list):
         logger.info("[自定义组合·业务] 未提供 fund_list 或格式不正确，跳过新增")
         return False
-    logger.info(f"[自定义组合·业务] 新增：用户={getattr(user, 'customer_name', 'unknown')}, 组合={sub_account_name}, 基金数={len(fund_list)}")
+    logger.info(f"[自定义组合·业务] 新增：用户={getattr(user, 'customer_name', 'unknown')}, 组合={sub_account_name}, 基金数={len(fund_list)}, 预算={total_budget}")
     try:
         # 注意：服务层函数名为 increase_funds（文件名为自定义组合新增.py）
         from src.service.自定义组合算法.自定义组合新增 import increase_funds as service_add_new_funds
-        return service_add_new_funds(user, sub_account_name, fund_list)
+        return service_add_new_funds(user, sub_account_name, fund_list, total_budget=total_budget)
     except Exception as e:
         logger.error(f"[自定义组合·业务] 新增委托失败: {e}")
         return False

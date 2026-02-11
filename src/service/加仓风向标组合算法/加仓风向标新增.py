@@ -1,6 +1,5 @@
 # 顶部导入片段
 import logging
-from src.common.logger import get_logger
 import sys
 import os
 from typing import List, Optional, Set
@@ -12,6 +11,7 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
+from src.common.logger import get_logger
 from src.domain.user.User import User
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
@@ -36,7 +36,28 @@ def _check_wind_vane_hqb_risk(user: User, total_budget: float, threshold: float 
     否则返回 True (通过)
     """
     try:
-        current_hqb = float(getattr(user, 'hqb_value', 0) or 0)
+        if getattr(user, "max_hqb_bank", None) is None:
+            try:
+                from src.service.银行卡账户.bankAccoutService import getMaxhqbBank
+                getMaxhqbBank(user)
+            except Exception:
+                pass
+
+        current_hqb = None
+        bank = getattr(user, "max_hqb_bank", None)
+        if bank is not None:
+            try:
+                current_hqb = float(getattr(bank, "CurrentRealBalance", 0.0) or 0.0)
+            except Exception:
+                current_hqb = 0.0
+            if current_hqb <= 0:
+                try:
+                    current_hqb = float(getattr(bank, "BankAvaVol", 0.0) or 0.0)
+                except Exception:
+                    current_hqb = 0.0
+
+        if current_hqb is None:
+            current_hqb = float(getattr(user, 'hqb_value', 0) or 0)
         min_req = total_budget * (threshold / 100.0)
         
         if current_hqb < min_req:
@@ -290,7 +311,17 @@ def add_new_funds(
         
 if __name__ == "__main__":
     try:
-        add_new_funds(DEFAULT_USER, "飞龙在天", 1000000.0)
-        logging.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
+        from src.service.用户管理.用户信息 import get_user_all_info
+
+        test_user = get_user_all_info(getattr(DEFAULT_USER, "account", ""), getattr(DEFAULT_USER, "password", ""))
+        if not test_user:
+            logger.error("用户信息刷新失败，无法继续测试")
+            sys.exit(1)
+
+        bank = getattr(test_user, "max_hqb_bank", None)
+        hqb = getattr(bank, "CurrentRealBalance", None) if bank is not None else None
+        logger.info(f"测试用户: {test_user.customer_name}, 活期宝: {hqb if hqb is not None else getattr(test_user, 'hqb_value', 'N/A')}")
+        add_new_funds(test_user, "飞龙在天", 1000000.0)
+        logging.info(f"用户 {test_user.customer_name} 新增操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

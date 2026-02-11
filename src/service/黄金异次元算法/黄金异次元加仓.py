@@ -78,9 +78,20 @@ def increase_gold_dimension_funds(user: User, sub_account_name: str, amount: flo
     # 5. 决策逻辑
     final_amount = 0.0
     
-    if not target_asset:
-        # Case 1: 无持仓，初始化建仓
-        logger.info(f"组合无 {TARGET_FUND_CODE} 持仓，执行初始化建仓")
+    # 检查是否有有效持仓 (份额 > 0)
+    has_position = False
+    if target_asset:
+        try:
+            vol = float(getattr(target_asset, 'available_vol', 0) or 0)
+            val = float(getattr(target_asset, 'asset_value', 0) or 0)
+            if vol > 0.01 or val > 1.0: # 稍微给点容差，避免浮点数0.000001的情况
+                has_position = True
+        except:
+            pass
+
+    if not has_position:
+        # Case 1: 无持仓（或份额为0），初始化建仓
+        logger.info(f"组合无 {TARGET_FUND_CODE} 有效持仓，执行初始化建仓")
         final_amount = amount
             
     else:

@@ -39,8 +39,22 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 10000
     
     # 获取持仓
     user_assets = get_sub_account_asset_by_name(user, sub_account_name)
-    if not user_assets:
-        logger.info(f"组合 {sub_account_name} 中没有基金资产，视为初始化建仓")
+    
+    # 检查是否有有效持仓 (份额 > 0)
+    has_position = False
+    if user_assets:
+        for asset in user_assets:
+            try:
+                vol = float(getattr(asset, 'available_vol', 0) or 0)
+                val = float(getattr(asset, 'asset_value', 0) or 0)
+                if vol > 0.01 or val > 1.0: 
+                    has_position = True
+                    break
+            except:
+                pass
+
+    if not has_position:
+        logger.info(f"组合 {sub_account_name} 中没有有效基金资产，视为初始化建仓")
         # 直接买入目标基金
         res = commit_order(user, sub_account_no, target_fund_code, amount)
         if res:

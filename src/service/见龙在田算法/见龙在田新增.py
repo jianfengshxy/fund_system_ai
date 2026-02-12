@@ -84,8 +84,8 @@ def add_new_funds(
     MAX_FUNDS_THRESHOLD = _get_max_funds_threshold()
 
     # 1. 活期宝余额风控检查：如果HQB余额小于总资产的 10%，则直接跳过
-    # 参考 src/common/constant.py 中的 get_hqb_ratio_threshold 逻辑，这里硬性设定为 10%
-    if not check_hqb_risk_allowed(user, threshold=10.0):
+    # 参考 src/common/constant.py 中的 get_hqb_ratio_threshold 逻辑，这里硬性设定为20%
+    if not check_hqb_risk_allowed(user, threshold=20.0):
         logger.info("[见龙在田] 全局风控拦截：活期宝占比不足 10%，退出新增流程", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "jianlong_add_new"})
         return True
 

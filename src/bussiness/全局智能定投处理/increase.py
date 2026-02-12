@@ -128,14 +128,28 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     # 注意：check_hqb_risk_allowed 内部已经打日志了，这里主要为了拿到状态用于后续 stop_reason 判断
     # 如果 hqb_risk_passed 为 False，说明 占比 < 10%
     
+    try:
+        asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
+    except Exception as e:
+        logger.error(f"获取资产详情失败: {e}")
+        return False
+    asset_available_vol = float(getattr(asset_detail, "available_vol", 0.0) or 0.0) if asset_detail else 0.0
+    asset_asset_value = float(getattr(asset_detail, "asset_value", 0.0) or 0.0) if asset_detail else 0.0
+    bank_available_vol = 0.0
+    try:
+        bank_available_vol = sum(float(getattr(s, "availableVol", 0.0) or 0.0) for s in (shares or []))
+    except Exception:
+        bank_available_vol = 0.0
+    has_position = (asset_asset_value > 1.0) or (asset_available_vol > 0.01) or (bank_available_vol > 0.01)
+    
     stop_reason = None
     
     if half_year_val is not None and half_year_val <= 0:
         stop_reason = f"半年收益率({half_year_val}%) <= 0"
     elif year_val is not None and year_val <= 0:
         stop_reason = f"年收益率({year_val}%) <= 0"
-    elif not hqb_risk_passed:
-        stop_reason = f"活期宝占比不足 20% (硬性风控)"
+    elif (not hqb_risk_passed) and (not has_position):
+        stop_reason = f"活期宝占比不足 20% 且 无持仓资产，直接跳过，不开新仓"
         
     if stop_reason:
         logger.info(f"[风控拦截] 最强风控触发 - {fund_name}({fund_code}) 触发原因: {stop_reason}")
@@ -150,21 +164,12 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         logger.info(f"[风控拦截] 处理完毕，已跳过后续加仓")
         return True
     
-    try:
-        asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
-        if asset_detail is not None:
-            constant_profit_rate = asset_detail.constant_profit_rate  # 移除 * 100
-            logger.info(f"[资产快照] {fund_name}({fund_code}) 持仓市值: {asset_detail.asset_value:.2f}, 收益率: {constant_profit_rate}%, 估值变动: {fund_info.estimated_change}%")
-        else:
-            logger.info(f"[资产快照] {fund_name}({fund_code}) 无持仓资产，视为首次建仓/空仓")
-            # 即使资产为空，也需要继续往下走，因为 asset_detail 为 None 时下面代码会报错
-            # 为了兼容下面代码，我们需要 mock 一个空的 asset_detail 或者直接返回
-            # 但如果 trades 不为空（比如今天刚买了），asset_detail 可能还没更新？
-            # 之前的逻辑是直接 return True，这里保持一致，但优化日志
-            return True
-    except Exception as e:
-        logger.error(f"获取资产详情失败: {e}")
-        return False
+    if asset_detail is not None:
+        constant_profit_rate = asset_detail.constant_profit_rate
+        logger.info(f"[资产快照] {fund_name}({fund_code}) 持仓市值: {asset_detail.asset_value:.2f}, 收益率: {constant_profit_rate}%, 估值变动: {fund_info.estimated_change}%")
+    else:
+        logger.info(f"[资产快照] {fund_name}({fund_code}) 无持仓资产，视为首次建仓/空仓")
+        return True
         
     plan_assets = asset_detail.asset_value
     constant_profit_rate = asset_detail.constant_profit_rate  # 移除 * 100
@@ -229,6 +234,18 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                     
                 if should_revoke:
                     logger.info(f"[排名风控] 首次定投位置不佳 - {revoke_reason}，执行防守撤单")
+                    for i, trade in enumerate(trades):
+                        logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
+                        try:
+                            revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+                            logger.info("     回撤成功")
+                        except Exception as e:
+                            logger.error(f"     回撤失败: {e}")
+                    return True
+
+                # 首次定投需同时满足活期宝占比阈值（不足则不新开仓）
+                if not hqb_risk_passed and not has_position:
+                    logger.info(f"[资金风控] 活期宝占比不足 20% 且 无持仓资产，直接跳过，不开新仓")
                     for i, trade in enumerate(trades):
                         logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
                         try:

@@ -161,8 +161,8 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             logger.info(f"止盈趋势门槛检查：缺少用于对比的净值（estimated_value={est_nav}, prev_nav={prev_nav}, nav_5day_avg={nav5}），跳过止盈")
             return True
 
-        # 更新：止盈点 = 波动率，但不低于 3.0（移除此前的 5% 上限与估值分支）
-        stop_rate = max(float(volatility), 3.0)
+        # 更新：止盈点 = 波动率，限制在3.0到10.0之间）
+        stop_rate = min(max(float(volatility), 3.0), 10.0)
         logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（不低于3.0）")
  
         if asset_detail.fund_type == 'a' and estimated_profit_rate > 3.0:

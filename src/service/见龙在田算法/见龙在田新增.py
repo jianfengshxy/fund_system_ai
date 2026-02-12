@@ -1,15 +1,15 @@
 import logging
-from src.common.logger import get_logger
 import sys
 import os
 from typing import List, Optional, Set
 
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-# 如果项目根目录不在Python路径中，则添加
+# 如果项目根目录不在Python路径中，则添加到最前，确保优先解析
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
+from src.common.logger import get_logger
 from src.domain.user.User import User
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
@@ -18,7 +18,7 @@ from src.service.交易管理.购买基金 import commit_order
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.service.大数据.低位加仓风向标筛选 import select_low_position_indicators
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
-
+from src.common.constant import DEFAULT_USER
 # 配置日志
 logger = get_logger(__name__)
 
@@ -83,10 +83,10 @@ def add_new_funds(
     # 读取最大基金数阈值（本地/云端统一）
     MAX_FUNDS_THRESHOLD = _get_max_funds_threshold()
 
-    # 1. 活期宝余额风控检查：如果HQB余额小于总资产的 10%，则直接跳过
-    # 参考 src/common/constant.py 中的 get_hqb_ratio_threshold 逻辑，这里硬性设定为20%
+    # 1. 活期宝余额风控检查：如果HQB余额小于总资产的 20%，则直接跳过
+    # 参考 src/common/constant.py 中的 get_hqb_ratio_threshold 逻辑
     if not check_hqb_risk_allowed(user, threshold=20.0):
-        logger.info("[见龙在田] 全局风控拦截：活期宝占比不足 10%，退出新增流程", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "jianlong_add_new"})
+        logger.info("[见龙在田] 全局风控拦截：活期宝占比不足 20%，退出新增流程", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "jianlong_add_new"})
         return True
 
     # 计算预算分配
@@ -311,3 +311,10 @@ def add_new_funds(
         import traceback
         logger.error(f"异常堆栈: {traceback.format_exc()}")
         return False
+
+if __name__ == "__main__":
+    try:
+        add_new_funds(DEFAULT_USER, "见龙在田", 1000000.0)
+        logging.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
+    except Exception as e:
+        logging.error(f"测试用户处理失败：{str(e)}")

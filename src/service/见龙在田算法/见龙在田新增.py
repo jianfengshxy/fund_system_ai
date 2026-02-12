@@ -18,6 +18,7 @@ from src.service.交易管理.购买基金 import commit_order
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.service.大数据.低位加仓风向标筛选 import select_low_position_indicators
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
+from src.service.公共服务.nav_gate_service import nav5_gate
 from src.common.constant import DEFAULT_USER
 # 配置日志
 logger = get_logger(__name__)
@@ -279,6 +280,16 @@ def add_new_funds(
             code = getattr(f, 'fund_code', None)
             name = getattr(f, 'fund_name', code or 'N/A')
             buy_amount = base_per_fund
+
+            try:
+                info = get_all_fund_info(user, code)
+                gate_ok = bool(nav5_gate(info, name, code, logger))
+                if not gate_ok:
+                    logger.info(f"[均线风控] 5日均线守卫未通过：{name}({code}) 估算净值低于5日均值，暂不新开仓")
+                    continue
+            except Exception as e:
+                logger.warning(f"[均线风控] 获取基金信息或均线判断失败：{name}({code})，错误={e}，跳过该基金")
+                continue
 
             # 判断是否可申购（若可获取）
             try:

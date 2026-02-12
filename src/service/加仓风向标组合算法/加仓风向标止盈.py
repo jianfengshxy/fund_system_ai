@@ -266,7 +266,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             threshold = 3.0 if fund_type == "000" else 5.0
 
             is_c = "C" in str(fund_name)
-            if estimated_profit_rate > threshold:
+            if (estimated_profit_rate > threshold) and (estimated_change > 0.5):
                 try:
                     shares = get_bank_shares(user, sub_account_no, fund_code)
                     if is_c:
@@ -290,10 +290,11 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                     logger.error(f"第三轮止盈失败：{fund_name}({fund_code}) 异常={e}")
             else:
                 logger.info(
-                    f"第三轮跳过：{fund_name}({fund_code}) 预估收益率≤止盈点({threshold:.2f}%) 预估={estimated_profit_rate:.2f}%"
+                    f"第三轮跳过：{fund_name}({fund_code}) 条件未满足（预估≤止盈点({threshold:.2f}%) 或 估值增长≤0.5%），"
+                    f"预估={estimated_profit_rate:.2f}% 估值增长={estimated_change:.2f}%"
                 )
     else:
-        logger.info("第三轮未触发：持仓比率≤80% 且 活期宝占比≥20% (或预算未设置)")
+        logger.info("第三轮未触发：持仓比率≤70% 且 活期宝占比≥20% (或预算未设置)")
 
     logger.info(f"止盈完成：{user.customer_name} 成功执行 {success_count} 次赎回操作（最多3个）")
     return True

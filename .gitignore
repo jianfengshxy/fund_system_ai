@@ -102,6 +102,7 @@ venv.bak/
 Icon?
 Icon
 .DS_Store
+._*
 
 # IDE and Editor
 .idea/

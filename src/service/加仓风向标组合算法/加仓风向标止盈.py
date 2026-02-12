@@ -113,8 +113,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
         estimated_profit_rate = current_profit_rate + estimated_change
         volatility = _safe_float(getattr(fund_info, "volatility", None), 0.0) 
-        stop_rate = max(volatility, 3.0)
-
+        stop_rate = min(max(float(volatility), 5.0), 15.0)
         # C类与非C类分流处理
         is_c = "C" in str(fund_name)
         if estimated_profit_rate > stop_rate:
@@ -127,7 +126,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                             f"{user.customer_name} 第一轮止盈：不在风向标且预估收益>{stop_rate:.2f}%，C类赎回0费率份额 "
                             f"{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% 波动率={volatility:.2f} 0费率份额={zero_fee_shares:.2f}"
                         )
-                        redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
+                        redeem_ok = bool(sell_low_fee_shares(user, sub_account_no, fund_code, shares))
                         if redeem_ok:
                             success_count += 1
                         else:

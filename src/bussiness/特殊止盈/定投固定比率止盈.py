@@ -12,7 +12,7 @@ if root_dir not in sys.path:
 
 from src.domain.user.User import User
 from src.API.定投计划管理.SmartPlan import getFundPlanList, getPlanDetailPro
-from src.service.交易管理.赎回基金 import sell_0_fee_shares
+from src.service.交易管理.赎回基金 import sell_0_fee_shares, sell_low_fee_shares
 from src.service.资产管理.get_fund_asset_detail import get_fund_asset_detail
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.交易管理.trade import get_bank_shares
@@ -141,12 +141,17 @@ def process_fixed_ratio_redeem(user: User, config: Dict):
                 
                 # 判断是否满足止盈条件
                 if estimated_profit_rate >= stop_rate:
-                    logger.info(f"满足止盈条件！开始卖出 0 费率份额...")
-                    result = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
+                    if fund_info.fund_type == "000":
+                        logger.info(f"满足止盈条件（指数基金）！开始卖出低费率份额...")
+                        result = sell_low_fee_shares(user, sub_account_no, fund_code, shares)
+                    else:
+                        logger.info(f"满足止盈条件！开始卖出 0 费率份额...")
+                        result = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
+
                     if result:
                         logger.info(f"止盈操作提交成功: {result}")
                     else:
-                        logger.warning(f"止盈操作未产生交易记录 (可能无 0 费率份额)")
+                        logger.warning(f"止盈操作未产生交易记录 (可能无符合条件的份额)")
                 else:
                     logger.info(f"未达到止盈点，继续持有")
 

@@ -163,15 +163,15 @@ def add_new_funds(
             except Exception as e:
                 logger.warning(f"获取基金 {getattr(asset, 'fund_code', 'N/A')} 信息失败: {e}")
 
-        # 仅当“基金数量过多”且“资产总和超过80%”两个条件同时满足时，才退出
+        # 仅当“基金数量过多”且“资产总和超过70%”两个条件同时满足时，才退出
         total_asset_value = sum(
             (asset.asset_value or 0.0) for asset in user_assets
             if hasattr(asset, 'asset_value')
         )
-        if len(user_assets) >= MAX_FUNDS_THRESHOLD and total_asset_value > total_budget * 0.8:
+        if len(user_assets) >= MAX_FUNDS_THRESHOLD and total_asset_value > total_budget * 0.7:
             logger.info(
                 f"用户 {user.customer_name} 的基金数量已达到{MAX_FUNDS_THRESHOLD}个，且资产总和({total_asset_value}元)"
-                f"已超过总预算({total_budget}元)的80%({total_budget * 0.8}元)，停止新增基金"
+                f"已超过总预算({total_budget}元)的80%({total_budget * 0.7}元)，停止新增基金"
             )
             return True
         else:

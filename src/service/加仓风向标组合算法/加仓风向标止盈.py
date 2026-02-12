@@ -184,7 +184,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
             estimated_profit_rate = current_profit_rate + estimated_change
             volatility = _safe_float(getattr(fund_info, "volatility", None), 0.0)
-            stop_rate = max(volatility, 3.0)
+            stop_rate = min(max(float(volatility), 3.0), 10.0)
 
             # C类与非C类分流处理
             is_c = "C" in str(fund_name)
@@ -224,7 +224,6 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             else:
                 logger.info(f"第二轮跳过：{fund_name}({fund_code}) 预估收益率≤止盈点({stop_rate:.2f}%) 预估={estimated_profit_rate:.2f}%")
 
-    # 第三轮：持仓比率>80%，不在风向标且预估收益率<-10%的基金执行止损（第三轮无外层 success_count 进入判断）
     # 计算组合持仓占比
     try:
         total_asset_value = sum(_safe_float(getattr(a, "asset_value", 0.0), 0.0) for a in user_assets)
@@ -238,13 +237,13 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         asset_budget_ratio = None
         logger.warning(f"计算持仓占比失败，第三轮止盈触发条件跳过：异常={e}")
 
-    # 第三轮触发条件：持仓比率 > 80.0 OR 活期宝余额 < 预算 * 20%
+    # 第三轮触发条件：持仓比率 > 70.0 OR 活期宝余额 < 预算 * 20%
     hqb_risk_triggered = not check_hqb_risk_allowed(user, threshold=20.0)
     
-    if (asset_budget_ratio is not None and asset_budget_ratio > 80.0) or hqb_risk_triggered:
+    if (asset_budget_ratio is not None and asset_budget_ratio > 70.0) or hqb_risk_triggered:
         trigger_reason = []
-        if asset_budget_ratio is not None and asset_budget_ratio > 80.0:
-            trigger_reason.append(f"持仓比率({asset_budget_ratio:.2f}%)>80%")
+        if asset_budget_ratio is not None and asset_budget_ratio > 70.0:
+            trigger_reason.append(f"持仓比率({asset_budget_ratio:.2f}%)>70%")
         if hqb_risk_triggered:
             trigger_reason.append("活期宝占比不足20%")
             

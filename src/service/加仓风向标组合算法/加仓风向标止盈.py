@@ -116,7 +116,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         stop_rate = min(max(float(volatility), 5.0), 15.0)
         # C类与非C类分流处理
         is_c = "C" in str(fund_name)
-        if estimated_profit_rate > stop_rate:
+        if (estimated_profit_rate > stop_rate) and (estimated_change > 0.5):
             try:
                 shares = get_bank_shares(user, sub_account_no, fund_code)
                 if is_c:
@@ -132,7 +132,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                         else:
                             logger.info(f"{user.customer_name} 第一轮止盈未成功或被跳过：{fund_name}({fund_code})")
                     else:
-                        logger.info(f"第一轮跳过：{fund_name}({fund_code}) 0费率份额≤10 预估={estimated_profit_rate:.2f}% 止盈点={stop_rate:.2f}%")
+                        logger.info(f"第一轮跳过：{fund_name}({fund_code}) 0费率份额≤10 预估={estimated_profit_rate:.2f}% 估值增长={estimated_change:.2f}% 止盈点={stop_rate:.2f}%")
                 else:
                     low_fee_shares = _safe_float(get_low_fee_shares(user, fund_code), 0.0)
                     if low_fee_shares > 10.0:
@@ -145,12 +145,10 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                             success_count += 1
                         else:
                             logger.info(f"{user.customer_name} 第一轮止盈未成功或被跳过：{fund_name}({fund_code})")
-                    else:
-                        logger.info(f"第一轮跳过：{fund_name}({fund_code}) 低费率份额≤10 预估={estimated_profit_rate:.2f}% 止盈点={stop_rate:.2f}%")
             except Exception as e:
                 logger.error(f"第一轮止盈失败：{fund_name}({fund_code}) 异常={e}")
         else:
-            logger.info(f"第一轮跳过：{fund_name}({fund_code}) 预估收益率≤止盈点({stop_rate:.2f}%) 预估={estimated_profit_rate:.2f}%")
+            logger.info(f"第一轮跳过：{fund_name}({fund_code}) 条件未满足（预估≤止盈点({stop_rate:.2f}%) 或 估值增长≤0.5%） 预估={estimated_profit_rate:.2f}% 估值增长={estimated_change:.2f}%")
 
     # 第二轮：若第一轮成功数不足3，处理在加仓风向标内的基金
     if success_count < 3:
@@ -188,7 +186,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
             # C类与非C类分流处理
             is_c = "C" in str(fund_name)
-            if estimated_profit_rate > stop_rate:
+            if (estimated_profit_rate > stop_rate) and (estimated_change > 0.5):
                 try:
                     shares = get_bank_shares(user, sub_account_no, fund_code)
                     if is_c:
@@ -204,7 +202,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                             else:
                                 logger.info(f"{user.customer_name} 第二轮止盈未成功或被跳过：{fund_name}({fund_code})")
                         else:
-                            logger.info(f"第二轮跳过：{fund_name}({fund_code}) 0费率份额≤10 预估={estimated_profit_rate:.2f}% 止盈点={stop_rate:.2f}%")
+                            logger.info(f"第二轮跳过：{fund_name}({fund_code}) 0费率份额≤10 预估={estimated_profit_rate:.2f}% 估值增长={estimated_change:.2f}% 止盈点={stop_rate:.2f}%")
                     else:
                         low_fee_shares = _safe_float(get_low_fee_shares(user, fund_code), 0.0)
                         if low_fee_shares > 10.0:
@@ -218,11 +216,11 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                             else:
                                 logger.info(f"{user.customer_name} 第二轮止盈未成功或被跳过：{fund_name}({fund_code})")
                         else:
-                            logger.info(f"第二轮跳过：{fund_name}({fund_code}) 低费率份额≤10 预估={estimated_profit_rate:.2f}% 止盈点={stop_rate:.2f}%")
+                            logger.info(f"第二轮跳过：{fund_name}({fund_code}) 低费率份额≤10 预估={estimated_profit_rate:.2f}% 估值增长={estimated_change:.2f}% 止盈点={stop_rate:.2f}%")
                 except Exception as e:
                     logger.error(f"第二轮止盈失败：{fund_name}({fund_code}) 异常={e}")
             else:
-                logger.info(f"第二轮跳过：{fund_name}({fund_code}) 预估收益率≤止盈点({stop_rate:.2f}%) 预估={estimated_profit_rate:.2f}%")
+                logger.info(f"第二轮跳过：{fund_name}({fund_code}) 条件未满足（预估≤止盈点({stop_rate:.2f}%) 或 估值增长≤0.5%） 预估={estimated_profit_rate:.2f}% 估值增长={estimated_change:.2f}%")
 
     # 计算组合持仓占比
     try:

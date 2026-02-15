@@ -1,7 +1,7 @@
 import os
 import sys
 import logging
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Set, Tuple, Optional
 
 # Add root dir to sys.path
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -11,9 +11,56 @@ if root_dir not in sys.path:
 from src.db.database_connection import DatabaseConnection
 from src.common.constant import DEFAULT_USER
 from src.API.自选基金.FavorFund import get_favor_groups, add_to_favorites, get_favor_group
+from src.API.交易管理.feeMrg import getFee
 from src.common.logger import get_logger
 
 logger = get_logger(__name__)
+
+def _parse_rate_to_float(rate: Optional[object]) -> Optional[float]:
+    if rate is None:
+        return None
+    try:
+        if isinstance(rate, (int, float)):
+            return float(rate)
+        s = str(rate).strip()
+        if not s:
+            return None
+        if s.endswith("%"):
+            s = s[:-1].strip()
+        return float(s)
+    except Exception:
+        return None
+
+
+# 过滤逻辑说明（高频交易成本控制）：
+# - 目标：只保留“赎回费率阶梯”仅包含 {1.5%, 0.0%} 的指数基金。
+# - 原因：指数基金通常持有 >= 7 天赎回费率为 0；若中间还有 0.5% 等档位，往往需要 >= 30 天才为 0，
+#         对高频/短周期轮动不划算，需要过滤掉。
+# - 判定依据：优先读取 getFee 返回的 RedemptionFractionalChargeDetailList（分段费率明细）；
+#             提取所有 Rate，转换为数字后，要求 rate_set == {0.0, 1.5}。
+def _is_high_frequency_fee_ok(fee_data: Optional[Dict]) -> Tuple[bool, str]:
+    if not isinstance(fee_data, dict):
+        return False, "fee_data_invalid"
+    details = fee_data.get("RedemptionFractionalChargeDetailList")
+    if not isinstance(details, list) or not details:
+        return False, "fee_detail_missing"
+
+    rates: Set[float] = set()
+    raw_rates: List[str] = []
+    for item in details:
+        if not isinstance(item, dict):
+            continue
+        raw = item.get("Rate")
+        raw_rates.append(str(raw))
+        v = _parse_rate_to_float(raw)
+        if v is None:
+            continue
+        rates.add(round(v, 4))
+
+    if rates == {0.0, 1.5}:
+        return True, f"ok rates={sorted(rates)}"
+    return False, f"reject rates={sorted(rates)} raw_rates={raw_rates}"
+
 
 def get_frequent_index_funds(user, days: int = 30, min_appear: int = 10) -> List[Dict]:
     """
@@ -177,6 +224,8 @@ def add_frequent_funds_to_fast_profit_group(user, days: int = 30, min_appear: in
         'added': 0,
         'skipped': 0
     }
+
+    fee_cache: Dict[str, Dict] = {}
     
     # Check Huoqi Bao risk (Must be > 20.0 to proceed)
     # if not check_hqb_risk_allowed(user, threshold=20.0):
@@ -191,6 +240,21 @@ def add_frequent_funds_to_fast_profit_group(user, days: int = 30, min_appear: in
         
         if str(fund_code) in existing_funds:
             logger.info(f"Skip {fund_name} ({fund_code}): Already in group. (Appearances: {cnt})")
+            stats['skipped'] += 1
+            continue
+
+        try:
+            if str(fund_code) not in fee_cache:
+                fee_cache[str(fund_code)] = getFee(user, str(fund_code))
+            ok, reason = _is_high_frequency_fee_ok(fee_cache.get(str(fund_code)))
+            if not ok:
+                logger.info(
+                    f"Skip {fund_name} ({fund_code}): Fee structure not suitable for high frequency. ({reason})"
+                )
+                stats['skipped'] += 1
+                continue
+        except Exception as e:
+            logger.error(f"Skip {fund_name} ({fund_code}): Fee query failed. ({e})")
             stats['skipped'] += 1
             continue
             

@@ -1,19 +1,20 @@
-import sys
-import os
 import requests
 import json
 import logging
+
+if __name__ == "__main__":
+    import os
+    import sys
+
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
 from src.common.logger import get_logger
 from src.common.errors import RetriableError, ValidationError
 import hashlib
 import time
+from src.common.requests_session import session
 
-# 获取项目根目录路径
-root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-# 如果项目根目录不在Python路径中，则添加
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
 
 from src.domain.trade.TradeResult import TradeResult
 from src.domain.user.User import User
@@ -83,7 +84,7 @@ def super_transfer(user: User, sub_account_no: str, fund_code: str, fund_amount:
     
     logger = get_logger("SellMrg")
     try:
-        response = requests.post(url, headers=headers, data=data, verify=False)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
         response.raise_for_status()
         response_data = response.json()
         logger.info(f"响应数据: {response_data}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "super_transfer", "fund_code": fund_code, "sub_account_no": sub_account_no})
@@ -192,7 +193,7 @@ def hqbMakeRedemption(user: User, sub_account_no: str, fund_code: str, fund_amou
     
     logger = get_logger("SellMrg")
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(payload), verify=False)
+        response = session.post(url, headers=headers, data=json.dumps(payload), verify=False, timeout=10)
         response.raise_for_status()
         response_data = response.json()
         logger.info(f"赎回的响应: {response_data}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "hqbMakeRedemption", "fund_code": fund_code, "sub_account_no": sub_account_no})
@@ -302,7 +303,7 @@ def SFT1Transfer(user: User, sub_account_no: str, fund_code: str, fund_amount: f
     
     logger = get_logger("SellMrg")
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(payload), verify=False)
+        response = session.post(url, headers=headers, data=json.dumps(payload), verify=False, timeout=10)
         response.raise_for_status()
         response_data = response.json()
         logger.info(f"SFT1转换L2的响应: {response_data}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "SFT1Transfer", "fund_code": fund_code, "sub_account_no": sub_account_no})

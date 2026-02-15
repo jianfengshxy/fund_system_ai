@@ -1,16 +1,15 @@
-import sys
-import os
-
-# 获取项目根目录路径
-root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-# 如果项目根目录不在Python路径中，则添加
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
-
 import requests
 import json
 import logging
+
+if __name__ == "__main__":
+    import os
+    import sys
+
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
+
 from src.common.logger import get_logger
 import hashlib
 import random
@@ -23,6 +22,7 @@ from src.common.constant import MOBILE_KEY
 from src.API.工具.utils import get_fund_system_time_trade
 from src.common.errors import TradePasswordError  # 新增：密码错误异常
 from src.common.errors import RetriableError, ValidationError
+from src.common.requests_session import session
 
 def _is_password_error_message(msg: str) -> bool:
     """根据返回文案判断是否为密码相关错误（保守匹配，避免误伤）。"""
@@ -108,7 +108,7 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
     )
 
     try:
-        response = requests.post(url, headers=headers, data=data, verify=False)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
         response.raise_for_status()
         result = response.json()
 
@@ -184,7 +184,7 @@ def get_trace_id(user: User) -> Optional[str]:
     )
     
     try:
-        response = requests.post(url, headers=headers, data=data, verify=False)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
         response.raise_for_status()
         result = response.json()
         

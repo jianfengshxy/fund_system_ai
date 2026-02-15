@@ -1,17 +1,17 @@
-import sys
-import os
 import logging
+
+if __name__ == "__main__":
+    import os
+    import sys
+
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
+
 from src.common.logger import get_logger
 import urllib.parse
-import urllib3
-import warnings
 import requests
-# 添加项目根目录到路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-# 禁用 urllib3 的警告信息
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
+from src.common.requests_session import session
 
 from typing import Optional, List
 from src.domain.fund_plan import ApiResponse
@@ -62,7 +62,7 @@ def getCashBagAvailableShareV2(user) -> List[HqbBank]:
     logger = get_logger("CashBag")
     extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "getCashBagAvailableShareV2"}
     try:
-        response = requests.post(url, data=data, headers=headers, verify=False)
+        response = session.post(url, data=data, headers=headers, verify=False, timeout=10)
         response.raise_for_status()
         json_data = response.json()
         # logger.info(f"响应数据: {json_data}")

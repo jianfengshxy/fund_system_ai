@@ -1,33 +1,24 @@
-import sys
-import os
-import logging
 import urllib.parse
-import urllib3
-import warnings
 import json
 import time
 import random
 
-# 添加项目根目录到路径
-root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-sys.path.append(root_dir)
-sys.path.append(os.path.join(root_dir, "src"))
+if __name__ == "__main__":
+    import os
+    import sys
+
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
 
 from src.common.logger import get_logger
 from src.common.errors import RetriableError, ValidationError
 from src.common.constant import SERVER_VERSION, PHONE_TYPE
 
-# 禁用SSL证书验证警告
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# 禁用 urllib3 的警告信息
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 from typing import Optional
 from src.common.requests_session import session
-from domain.fund.fund_info import FundInfo
+from src.domain.fund.fund_info import FundInfo
 
 # 移除本地Session配置，使用全局共享Session
 
@@ -299,4 +290,3 @@ if __name__ == "__main__":
             
     except Exception as e:
         print(f"\n程序执行出错: {str(e)}")
-

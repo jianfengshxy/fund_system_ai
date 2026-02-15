@@ -1,15 +1,19 @@
-import os
-import sys
 import logging
 import requests
 from typing import List, Dict, Any, Optional
 
-# 添加项目根目录到路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if __name__ == "__main__":
+    import os
+    import sys
 
-from common.constant import DEFAULT_USER, FUND_CODE
-from domain.fund_plan import ApiResponse
-from domain.fund.fund_investment_indicator import FundInvestmentIndicator
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
+
+from src.common.constant import DEFAULT_USER, FUND_CODE
+from src.common.requests_session import session
+from src.domain.fund_plan import ApiResponse
+from src.domain.fund.fund_investment_indicator import FundInvestmentIndicator
 
 def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[Dict[str, Any]]:
     """
@@ -60,7 +64,7 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[Dict[str, Any
     logger = logging.getLogger("FundInvestmentIndicatorAPI")
     
     try:
-        response = requests.post(url, data=data, headers=headers, verify=False)
+        response = session.post(url, data=data, headers=headers, verify=False, timeout=10)
         response.raise_for_status()
         json_data = response.json()
         
@@ -120,5 +124,3 @@ if __name__ == "__main__":
     except Exception as e:
         print("\n=== 执行过程中发生异常 ===")
         print(f"异常信息: {str(e)}")
-
-

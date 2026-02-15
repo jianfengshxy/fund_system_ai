@@ -1,15 +1,17 @@
 import hashlib
-import requests
-import logging
-from src.common.logger import get_logger
-import sys
-import os
-import time
-from typing import Dict, Tuple
+from typing import Dict
 
-# 添加项目根目录到路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if __name__ == "__main__":
+    import os
+    import sys
+
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
+
+from src.API._core.client import default_client
 from src.common.constant import PHONE_TYPE, SERVER_VERSION
+from src.common.logger import get_logger
 from src.domain.user.User import User
 
 def login(account: str, password: str) -> User:
@@ -58,9 +60,7 @@ def login(account: str, password: str) -> User:
     logger = get_logger("Login")
     extra = {"account": account, "action": "login"}
     try:
-        response = requests.post(url, json=data, headers=headers, verify=False)
-        response.raise_for_status()
-        json_data = response.json()
+        json_data = default_client.post_json(url, headers=headers, json=data, timeout=10)
         # logger.info(f"登录响应数据: {json_data}")
         
         if not json_data.get('Success', False):
@@ -93,11 +93,8 @@ def login(account: str, password: str) -> User:
             logger.error(f"创建User对象失败: {str(e)}", extra=extra)
             return None
             
-    except requests.exceptions.RequestException as e:
-        logger.error(f'登录请求失败: {str(e)}', extra=extra)
-        return None
     except Exception as e:
-        logger.error(f'登录数据解析失败: {str(e)}', extra=extra)
+        logger.error(f'登录失败: {str(e)}', extra=extra)
         return None
 
 def login_passport(user: User) -> User:
@@ -141,9 +138,7 @@ def login_passport(user: User) -> User:
     logger = get_logger("Login")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "login_passport"}
     try:
-        response = requests.post(url, data=data, headers=headers, verify=False)  # 注意这里使用data而不是json
-        response.raise_for_status()
-        json_data = response.json()
+        json_data = default_client.post_form(url, data=data, headers=headers, timeout=10)
         logger.info(f"Passport登录响应数据: {json_data}", extra=extra)
         
         if not json_data.get('Success', False):
@@ -167,11 +162,8 @@ def login_passport(user: User) -> User:
             logger.error(f"更新User对象的Passport信息失败: {str(e)}", extra=extra)
             return None
             
-    except requests.exceptions.RequestException as e:
-        logger.error(f'Passport登录请求失败: {str(e)}', extra=extra)
-        return None
     except Exception as e:
-        logger.error(f'Passport登录数据解析失败: {str(e)}', extra=extra)
+        logger.error(f'Passport登录失败: {str(e)}', extra=extra)
         return None
 
 def inference_passport_for_bind(user: User) -> User:
@@ -216,9 +208,7 @@ def inference_passport_for_bind(user: User) -> User:
     logger = get_logger("Login")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "inference_passport"}
     try:
-        response = requests.post(url, json=data, headers=headers, verify=False)
-        response.raise_for_status()
-        json_data = response.json()
+        json_data = default_client.post_json(url, headers=headers, json=data, timeout=10)
         # logger.info(f"Passport绑定信息响应数据: {json_data}")
         
         if not json_data.get('Success', False):
@@ -243,11 +233,8 @@ def inference_passport_for_bind(user: User) -> User:
             logger.error(f"更新User对象的Passport绑定信息失败: {str(e)}", extra=extra)
             return None
             
-    except requests.exceptions.RequestException as e:
-        logger.error(f'Passport绑定信息请求失败: {str(e)}', extra=extra)
-        return None
     except Exception as e:
-        logger.error(f'Passport绑定信息数据解析失败: {str(e)}', extra=extra)
+        logger.error(f'Passport绑定信息失败: {str(e)}', extra=extra)
         return None
 
 

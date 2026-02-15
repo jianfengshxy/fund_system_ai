@@ -1,20 +1,21 @@
-import sys
-import os
 import logging
+
+if __name__ == "__main__":
+    import os
+    import sys
+
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
 from src.common.logger import get_logger
 from src.API.登录接口.login import ensure_user_fresh
 import urllib.parse
-import urllib3
-import warnings
 import hashlib
+import requests
 import requests
 from urllib.parse import quote_plus
 from typing import Dict, Any, Optional, Union,List
 import uuid, secrets, time
-
-# 添加项目根目录到路径
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-sys.path.insert(0, project_root)
 
 # 然后进行其他导入
 from src.service.基金信息.基金信息 import get_all_fund_info

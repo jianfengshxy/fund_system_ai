@@ -1,17 +1,21 @@
-import os
-import sys
 import logging
 import requests
 import json
 import re
 from typing import List, Dict, Any, Optional
 
-# 添加项目根目录到路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if __name__ == "__main__":
+    import os
+    import sys
 
-from common.constant import DEFAULT_USER
-from domain.fund_plan import ApiResponse
-from domain.fund.fund_info import FundInfo
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
+
+from src.common.constant import DEFAULT_USER
+from src.common.requests_session import session
+from src.domain.fund_plan import ApiResponse
+from src.domain.fund.fund_info import FundInfo
 
 # 噪音词列表，用于提取基金核心主题
 NOISE_WORDS = [
@@ -159,7 +163,7 @@ def getThemeSelectedFunds(user, page_size=10) -> ApiResponse[List[FundInfo]]:
     
     try:
         # 使用域名而不是IP，并设置verify=False
-        response = requests.get(url, params=params, headers=headers, verify=False)
+        response = session.get(url, params=params, headers=headers, verify=False, timeout=10)
         response.raise_for_status()
         json_data = response.json()
         

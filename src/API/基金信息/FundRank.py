@@ -1,16 +1,20 @@
 from typing import Optional, Tuple
-import logging
+
+if __name__ == "__main__":
+    import os
+    import sys
+
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
+
 from src.common.logger import get_logger
 from src.common.errors import RetriableError, ValidationError
 import requests
-import urllib3
 import numpy as np
 from src.common.requests_session import session
-from domain.fund.fund_info import FundInfo
-from common.constant import SERVER_VERSION, PHONE_TYPE, MOBILE_KEY, DEVICE_ID
-
-# 禁用SSL证书验证警告
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from src.domain.fund.fund_info import FundInfo
+from src.common.constant import SERVER_VERSION, PHONE_TYPE, MOBILE_KEY, DEVICE_ID
 
 def get_nav_rank(user, fund_info: FundInfo, N: int, nav: Optional[float] = None) -> Optional[int]:
     """

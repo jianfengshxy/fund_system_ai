@@ -2,6 +2,15 @@
 import requests
 import json
 import logging
+
+if __name__ == "__main__":
+    import os
+    import sys
+
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
+
 from src.common.logger import get_logger
 from src.common.errors import RetriableError, ValidationError
 import hashlib
@@ -296,19 +305,7 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
 
 if __name__ == "__main__":
     # 导入必要的模块
-    import sys
-    import os
     import logging
-    
-    # 获取项目根目录路径
-    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    
-    # 如果项目根目录不在Python路径中，则添加
-    if root_dir not in sys.path:
-        sys.path.insert(0, root_dir)
-    
-   
- 
     
     # 配置日志
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

@@ -1,25 +1,20 @@
 from typing import Optional
 import logging
-import sys
-import os
 
-# 添加项目根目录到 sys.path
-# 假设当前文件位于 src/API/基金信息/
-# 需要向上移动 3 层才能到达项目根目录
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+if __name__ == "__main__":
+    import os
+    import sys
+
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
 
 from src.common.logger import get_logger
 from src.common.errors import RetriableError, ValidationError
 import requests
-import urllib3
 import json
 from src.common.constant import SERVER_VERSION, PHONE_TYPE, DEVICE_ID
-
-# 禁用SSL证书验证警告
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from src.common.requests_session import session
 
 def get_fund_rank_diagram(user, fund_code) -> Optional[dict]:
     """
@@ -70,7 +65,7 @@ def get_fund_rank_diagram(user, fund_code) -> Optional[dict]:
     logger = get_logger("FundRankDiagram")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_fund_rank_diagram", "fund_code": fund_code}
     try:
-        response = requests.post(url, headers=headers, data=data, verify=False, timeout=15)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=15)
         response.raise_for_status()
         
         try:
@@ -119,4 +114,3 @@ if __name__ == '__main__':
             print("Failed to get data (returned None).")
     except Exception as e:
         print(f"An error occurred: {e}")
-

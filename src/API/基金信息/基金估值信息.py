@@ -1,20 +1,26 @@
 from typing import Optional
+
+if __name__ == "__main__":
+    # 导入必要的模块
+    import sys
+    import os
+    
+    # 获取项目根目录路径
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    
+    # 如果项目根目录不在Python路径中，则添加
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
+
 import logging
-import sys
-import os
 
-# 将项目根目录添加到 python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
-
+from src.API.基金信息.FundInfo import getFundInfo
 from src.common.logger import get_logger
 from src.common.errors import RetriableError, ValidationError
 import requests
-import urllib3
+from src.common.requests_session import session
 from src.domain.fund.fund_info import FundInfo
-from src.common.constant import SERVER_VERSION, PHONE_TYPE, MOBILE_KEY, DEVICE_ID
-
-# 禁用SSL证书验证警告
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from src.common.constant import DEFAULT_USER, SERVER_VERSION, PHONE_TYPE, MOBILE_KEY, DEVICE_ID
 
 def update_fund_estimated_value(user, fund_info: FundInfo) -> FundInfo:
     """
@@ -63,7 +69,7 @@ def update_fund_estimated_value(user, fund_info: FundInfo) -> FundInfo:
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "update_fund_estimated_value", "fund_code": fund_info.fund_code}
     
     try:
-        response = requests.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
         response.raise_for_status()
         
         json_data = response.json()
@@ -112,10 +118,6 @@ def update_fund_estimated_value(user, fund_info: FundInfo) -> FundInfo:
         raise ValidationError(str(e))
 
 if __name__ == "__main__":
-    from src.common.constant import DEFAULT_USER
-    from src.API.基金信息.FundInfo import getFundInfo
-    import logging
-    
     # 设置日志级别为DEBUG
     logging.getLogger().setLevel(logging.DEBUG)
     

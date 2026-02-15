@@ -1,14 +1,18 @@
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
-
 import logging
+
+if __name__ == "__main__":
+    import os
+    import sys
+
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
+
 from src.common.logger import get_logger
 import urllib.parse
-import urllib3
-import warnings
 import requests
 from typing import List, Tuple, Dict, Any
+from src.common.requests_session import session
 
 # 使用绝对导入
 from src.domain.fund_plan import ApiResponse
@@ -74,7 +78,7 @@ def get_asset_list_of_sub(user, sub_account_no, with_meta: bool = False):
     first_error_text = ""
     for url in url_list:
         try:
-            r = requests.post(url, json=data_json, headers=headers, verify=False, timeout=10)
+            r = session.post(url, json=data_json, headers=headers, verify=False, timeout=10)
             r.raise_for_status()
             rd = r.json()
             if rd.get("Success") is False:
@@ -93,7 +97,7 @@ def get_asset_list_of_sub(user, sub_account_no, with_meta: bool = False):
         except requests.exceptions.RequestException as e:
             pass
         try:
-            r = requests.post(url, data=data_form, headers={**headers, "Content-Type": "application/x-www-form-urlencoded"}, verify=False, timeout=10)
+            r = session.post(url, data=data_form, headers={**headers, "Content-Type": "application/x-www-form-urlencoded"}, verify=False, timeout=10)
             r.raise_for_status()
             rd = r.json()
             if rd.get("Success") is False:

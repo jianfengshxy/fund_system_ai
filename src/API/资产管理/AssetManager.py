@@ -1,8 +1,13 @@
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) ))
-
 import logging
+
+if __name__ == "__main__":
+    import os
+    import sys
+
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
+
 from src.common.logger import get_logger
 from src.common.errors import RetriableError, ValidationError
 import urllib.parse
@@ -10,6 +15,7 @@ import urllib.parse
 import requests
 from typing import Optional
 from src.domain.user.api_response import ApiResponse  # 修改为 src.domain.fund_plan
+from src.common.requests_session import session
 
 from src.common.constant import (
     SERVER_VERSION, PHONE_TYPE, MOBILE_KEY,
@@ -52,7 +58,7 @@ def GetMyAssetMainPartAsync(user) -> ApiResponse:
     logger = get_logger("AssetManager")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "GetMyAssetMainPartAsync"}
     try:
-        response = requests.post(url, json=request_payload, headers=headers, verify=False)
+        response = session.post(url, json=request_payload, headers=headers, verify=False, timeout=10)
         response.raise_for_status()
         json_data = response.json()
         try:

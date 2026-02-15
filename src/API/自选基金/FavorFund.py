@@ -1,44 +1,37 @@
 import logging
-import os
-import sys
 import time
 import urllib.parse
 from typing import Any, Dict, Optional
 
-# 确保将项目的 src 目录加入到模块路径，保证 common/domain 等包可用
-SRC_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-ROOT_DIR = os.path.dirname(SRC_DIR)
-if SRC_DIR not in sys.path:
-    sys.path.append(SRC_DIR)
-if ROOT_DIR not in sys.path:
-    sys.path.append(ROOT_DIR)
-
 import requests
-from common.logger import get_logger
 
-from common.constant import (
+if __name__ == "__main__":
+    import os
+    import sys
+
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
+
+from src.common.logger import get_logger
+from src.common.requests_session import session
+
+from src.common.constant import (
     SERVER_VERSION,
     PHONE_TYPE,
     MOBILE_KEY,
     DEFAULT_USER,
 )
-from domain.fund_plan import ApiResponse
-from domain.user.User import User
+from src.domain.fund_plan import ApiResponse
+from src.domain.user.User import User
 
 FUND_FAVOR_HOST = "fundfavorapi.eastmoney.com"
-
-
-# 补充：导入最新用户信息函数，并设置指定账号密码
-from src.service.用户管理.用户信息 import get_user_all_info
-PREFERRED_ACCOUNT = "13918199137"
-PREFERRED_PASSWORD = "sWX15706"
 
 
 def _get_user(user: Optional[User]) -> User:
     if user:
         return user
-    latest = get_user_all_info(PREFERRED_ACCOUNT, PREFERRED_PASSWORD)
-    return latest or DEFAULT_USER
+    return DEFAULT_USER
 
 
 def _build_headers() -> Dict[str, str]:
@@ -120,9 +113,9 @@ def add_to_favorites(
     
     try:
         form_data = dict(params)
-        resp = requests.post(url, headers=headers, data=form_data, verify=False, timeout=10)
+        resp = session.post(url, headers=headers, data=form_data, verify=False, timeout=10)
         if resp.status_code == 405:
-            resp = requests.get(full_url, headers=headers, verify=False, timeout=10)
+            resp = session.get(full_url, headers=headers, verify=False, timeout=10)
         resp.raise_for_status()
         json_data = resp.json()
 
@@ -145,10 +138,10 @@ def add_to_favorites(
                         params_retry[i] = (k, new_version)
                         break
                 form_retry = dict(params_retry)
-                resp2 = requests.post(url, headers=headers, data=form_retry, verify=False, timeout=10)
+                resp2 = session.post(url, headers=headers, data=form_retry, verify=False, timeout=10)
                 if resp2.status_code == 405:
                     query_retry = urllib.parse.urlencode(params_retry)
-                    resp2 = requests.get(f"{url}?{query_retry}", headers=headers, verify=False, timeout=10)
+                    resp2 = session.get(f"{url}?{query_retry}", headers=headers, verify=False, timeout=10)
                 resp2.raise_for_status()
                 json_data2 = resp2.json()
                 success = json_data2.get("Success", json_data2.get("success", False))
@@ -218,7 +211,6 @@ def _refresh_user_tokens(user: User) -> Optional[User]:
     return u2 or u1
 
 def _ensure_auth_ready(user: Optional[User]) -> User:
-    # 先获取最新用户信息；若失败再退回到默认/刷新逻辑
     u = _get_user(user)
     has_all = all([
         getattr(u, "c_token", None),
@@ -228,14 +220,16 @@ def _ensure_auth_ready(user: Optional[User]) -> User:
         getattr(u, "passport_id", None),
     ])
     if not has_all:
-        # 尝试直接用最新账号密码获取完整用户信息（带缓存）
-        latest = get_user_all_info("13918199137", "sWX15706")
-        if latest:
-            return latest
-        # 若仍不完整，回退到旧的刷新逻辑
-        refreshed = _refresh_user_tokens(u)
-        if refreshed:
-            return refreshed
+        try:
+            from src.API.登录接口.login import ensure_user_fresh
+
+            u2 = ensure_user_fresh(u, 600, True)
+            if u2:
+                u = u2
+        except Exception:
+            refreshed = _refresh_user_tokens(u)
+            if refreshed:
+                u = refreshed
     return u
 
 
@@ -269,7 +263,7 @@ def get_favor_group(
     logger = get_logger("FavorFund.getgroup")
     extra = {"account": getattr(u, 'mobile_phone', None) or getattr(u, 'account', None), "action": "favor_getgroup"}
     try:
-        resp = requests.post(url, headers=headers, data=form, verify=False, timeout=10)
+        resp = session.post(url, headers=headers, data=form, verify=False, timeout=10)
         resp.raise_for_status()
         json_data = resp.json()
 
@@ -329,10 +323,10 @@ def remove_from_favorites(
     for url in endpoints:
         try:
             form_data = dict(params)
-            resp = requests.post(url, headers=headers, data=form_data, verify=False, timeout=10)
+            resp = session.post(url, headers=headers, data=form_data, verify=False, timeout=10)
             if resp.status_code == 405:
                 query = urllib.parse.urlencode(params)
-                resp = requests.get(f"{url}?{query}", headers=headers, verify=False, timeout=10)
+                resp = session.get(f"{url}?{query}", headers=headers, verify=False, timeout=10)
             resp.raise_for_status()
             json_data = resp.json()
             success = json_data.get("Success", json_data.get("success", False))
@@ -356,10 +350,10 @@ def remove_from_favorites(
                             params_retry[i] = (k, new_version)
                             break
                     form_retry = dict(params_retry)
-                    resp2 = requests.post(url, headers=headers, data=form_retry, verify=False, timeout=10)
+                    resp2 = session.post(url, headers=headers, data=form_retry, verify=False, timeout=10)
                     if resp2.status_code == 405:
                         query_retry = urllib.parse.urlencode(params_retry)
-                        resp2 = requests.get(f"{url}?{query_retry}", headers=headers, verify=False, timeout=10)
+                        resp2 = session.get(f"{url}?{query_retry}", headers=headers, verify=False, timeout=10)
                     resp2.raise_for_status()
                     json_data2 = resp2.json()
                     success2 = json_data2.get("Success", json_data2.get("success", False))
@@ -458,7 +452,7 @@ def get_favor_groups(
     logger = get_logger("FavorFund.group_get")
     extra = {"account": getattr(u, 'mobile_phone', None) or getattr(u, 'account', None), "action": "favor_group_get"}
     try:
-        resp = requests.post(url, headers=headers, data=form, verify=False, timeout=10)
+        resp = session.post(url, headers=headers, data=form, verify=False, timeout=10)
         resp.raise_for_status()
         json_data = resp.json()
         success = json_data.get("Success", json_data.get("success", False))

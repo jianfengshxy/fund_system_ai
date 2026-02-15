@@ -1,17 +1,18 @@
-import sys
-import os
 import requests
 import json
 import logging
+
+if __name__ == "__main__":
+    import os
+    import sys
+
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if root_dir not in sys.path:
+        sys.path.insert(0, root_dir)
 from src.common.logger import get_logger
 import hashlib
+from src.common.requests_session import session
 
-# 获取项目根目录路径
-root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-# 如果项目根目录不在Python路径中，则添加
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
 
 from src.domain.trade.TradeResult import TradeResult
 from src.domain.user.User import User
@@ -85,7 +86,7 @@ def revoke_order(user: User, busin_serial_no: str, business_type: str, fund_code
              "sub_account_no": sub_account_no,
              "busin_serial_no": busin_serial_no}
     try:
-        response = requests.post(url, headers=headers, data=data, verify=False)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
         response.raise_for_status()
         response_data = response.json()
         # logger.info(f"响应数据: {response_data}")
@@ -113,14 +114,6 @@ def revoke_order(user: User, busin_serial_no: str, business_type: str, fund_code
 if __name__ == "__main__":
     # 导入必要的模块
     import sys
-    import os
-    
-    # 获取项目根目录路径
-    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    
-    # 如果项目根目录不在Python路径中，则添加
-    if root_dir not in sys.path:
-        sys.path.insert(0, root_dir)
     
     # 导入常量
     from src.common.constant import DEFAULT_USER

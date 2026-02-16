@@ -2,7 +2,7 @@
 import logging
 import sys
 import os
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -24,9 +24,12 @@ from src.common.constant import DEFAULT_USER  # 添加导入，如果需要
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.common.errors import TradePasswordError  # 新增：捕获密码错误异常
 from src.service.公共服务.nav_gate_service import nav5_gate
+from src.API.交易管理.feeMrg import getFee
+from src.service.公共服务.redeem_fee_filter_service import is_high_frequency_index_fee_ok
 
 # 配置日志
 logger = get_logger(__name__)
+
 
 def _check_wind_vane_hqb_risk(user: User, total_budget: float, threshold: float = 20.0) -> bool:
     """
@@ -143,6 +146,8 @@ def add_new_funds(
         return True
 
     try:
+        fee_cache: Dict[str, Dict] = {}
+
         # 1) 获取组合资产与持仓
         user_assets = get_sub_account_asset_by_name(user, sub_account_name)
         if user_assets is None:
@@ -223,6 +228,17 @@ def add_new_funds(
             if ftype == '000':
                 idx_code = getattr(info, 'index_code', None)
                 if idx_code and idx_code in user_index_codes:
+                    continue
+                try:
+                    key = str(code)
+                    if key not in fee_cache:
+                        fee_cache[key] = getFee(user, key)
+                    ok, reason = is_high_frequency_index_fee_ok(fee_cache.get(key))
+                    if not ok:
+                        logger.info(f"指数基金费率结构不满足高频要求，跳过新增：{name}({code}) ({reason})")
+                        continue
+                except Exception as e:
+                    logger.warning(f"获取指数基金 {code} 费率失败，跳过该基金：{e}")
                     continue
 
             # 新增：候选阶段净值门槛

@@ -142,13 +142,13 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     # 新增：当活期宝占比不足，且当前有效份额≈0（未确认/在途），统一执行防守撤单（避免余额不足还继续开网格）
     if (not hqb_risk_passed) and (asset_available_vol <= 0.01):
         logger.info(f"[资金风控] 活期宝占比不足 20% 且 有效份额≈0，仅撤回可撤交易 - {fund_name}({fund_code})")
-        if not trades or len(trades) == 0:
+        if not trades:
             logger.info(f"[资金风控] 当日无可撤回定投记录，跳过撤单 - {fund_name}({fund_code})")
             return True
         for i, trade in enumerate(trades):
-            logger.info(f"  -> 执行回撤 {i+1}/{len(to_revoke)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
+            logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
             try:
-                revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+                revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
                 logger.info("     回撤成功")
             except Exception as e:
                 logger.error(f"     回撤失败: {e}")

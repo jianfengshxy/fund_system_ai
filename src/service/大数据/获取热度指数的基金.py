@@ -11,7 +11,9 @@ if __name__ == "__main__":
 
 from src.common.logger import get_logger
 from src.domain.user.User import User
+from src.domain.fund.fund_info import FundInfo
 from src.service.大数据.获取指数资金热度 import get_index_heat_rank
+from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.市场指数.获取追踪指数的基金 import get_tracking_funds
 from src.API.市场指数.指数资金流向 import get_index_money_flow
 
@@ -85,31 +87,31 @@ def check_money_flow_trend(user: User, index_code: str) -> bool:
         logger.error(f"检查指数 {index_code} 资金流向异常: {e}")
         return False
 
-def get_heat_index_funds(user: User, top_n: int = 50) -> List[Dict[str, Any]]:
+def get_heat_index_funds(user: User, top_n: int = 20) -> List[FundInfo]:
     """
     获取热度指数对应的优选基金
     1. 获取热度指数排行
     2. 遍历指数，获取追踪该指数的基金
     3. 筛选条件：
+       - 热度分数 > 50.0
+       - 资金流向趋势：5日和10日净流入加大
        - 指数基金的C类份额 (ISCLASSC == 1)
        - 费率只有{0, 1.5}两档位 (通过 SHRATE7 == 0 判断，即持有7天免赎回费)
-    4. 如果有多个符合条件的基金，选择第一个
+    4. 如果有多个符合条件的基金，选择第一个，并获取其完整信息(FundInfo)
     
     Args:
         user: User对象
         top_n: 获取前N个热度指数
         
     Returns:
-        List[Dict[str, Any]]: 基金列表，包含指数信息和选中的基金信息
+        List[FundInfo]: 基金信息对象列表，包含完整基金信息
     """
     logger.info(f"开始获取前 {top_n} 个热度指数对应的优选基金...")
     
     # 1. 获取热度指数
     heat_ranks = get_index_heat_rank(user, page_size=top_n)
     
-    # 截取前 top_n 个 (虽然 get_index_heat_rank 的 page_size 控制了获取数量，但去重后数量可能会变，且为了保险再次截取)
-    # 注意：get_index_heat_rank 返回的是去重后的列表，page_size 是传给 API 的，所以返回数量可能小于 2*page_size
-    # 这里我们只处理前 top_n 个热度最高的
+    # 截取前 top_n 个
     target_indices = heat_ranks[:top_n]
     
     results = []
@@ -138,11 +140,10 @@ def get_heat_index_funds(user: User, top_n: int = 50) -> List[Dict[str, Any]]:
                 continue
                 
             # 3. 获取追踪基金
-            # logger.info(f"[{i+1}/{len(target_indices)}] 正在查询指数 {index_name} ({index_code}) 的追踪基金...")
             funds = get_tracking_funds(user, index_code=index_code, page_size=50)
             
             # 4. 筛选基金
-            selected_fund = None
+            selected_fund_basic = None
             
             for fund in funds:
                 # 检查是否为 C 类份额
@@ -165,21 +166,26 @@ def get_heat_index_funds(user: User, top_n: int = 50) -> List[Dict[str, Any]]:
                     pass
                 
                 if is_low_fee:
-                    selected_fund = fund
+                    selected_fund_basic = fund
                     break # 找到第一个就退出
             
-            if selected_fund:
-                logger.info(f"指数 {index_name} 选中基金: {selected_fund.get('SHORTNAME')} ({selected_fund.get('FCODE')})")
-                results.append({
-                    "index_name": index_name,
-                    "index_code": index_code,
-                    "index_score": index_score,
-                    "fund_name": selected_fund.get("SHORTNAME"),
-                    "fund_code": selected_fund.get("FCODE"),
-                    "fund_nav": selected_fund.get("ENDNAV"), # 规模
-                    "fund_1y_return": selected_fund.get("SYL_1N"), # 近1年收益
-                    "shrate7": selected_fund.get("SHRATE7")
-                })
+            if selected_fund_basic:
+                fund_code = selected_fund_basic.get('FCODE')
+                fund_name = selected_fund_basic.get('SHORTNAME')
+                logger.info(f"指数 {index_name} 选中基金: {fund_name} ({fund_code})，正在获取详细信息...")
+                
+                # 5. 获取详细基金信息
+                fund_info = get_all_fund_info(user, fund_code)
+                
+                if fund_info:
+                    # 动态附加指数信息到 FundInfo 对象，方便后续使用
+                    setattr(fund_info, 'heat_index_name', index_name)
+                    setattr(fund_info, 'heat_index_code', index_code)
+                    setattr(fund_info, 'heat_index_score', index_score)
+                    
+                    results.append(fund_info)
+                else:
+                    logger.warning(f"获取基金 {fund_name} ({fund_code}) 详细信息失败")
             else:
                 logger.warning(f"指数 {index_name} ({index_code}) 未找到符合条件(C类且7天免赎回费)的基金")
                 
@@ -200,16 +206,24 @@ if __name__ == "__main__":
     # 获取前 5 个热度指数的基金进行测试
     selected_funds = get_heat_index_funds(user, top_n=50)
     
-    print(f"\n{'Index Name':<20} {'Score':<8} {'Fund Name':<30} {'Code':<10} {'1Y Return':<10}")
-    print("-" * 90)
+    print(f"\n{'Index Name':<20} {'Idx Code':<10} {'Score':<8} {'Fund Name':<30} {'Fd Code':<10} {'1Y Return':<10}")
+    print("-" * 100)
     
-    for item in selected_funds:
-        # 处理中文对齐
-        idx_name = item['index_name']
-        fund_name = item['fund_name']
+    for fund_info in selected_funds:
+        # 获取动态附加的指数信息
+        idx_name = getattr(fund_info, 'heat_index_name', 'Unknown')
+        idx_code = getattr(fund_info, 'heat_index_code', 'Unknown')
+        idx_score = getattr(fund_info, 'heat_index_score', 0)
+        
+        fund_name = fund_info.fund_name
+        fund_code = fund_info.fund_code
         
         # 简单截断过长的名称以便显示
         if len(fund_name) > 20:
             fund_name = fund_name[:18] + ".."
             
-        print(f"{idx_name:<20} {item['index_score']:<8} {fund_name:<30} {item['fund_code']:<10} {item['fund_1y_return']}%")
+        # 获取近1年收益率，注意处理 None
+        year_return = fund_info.year_return
+        year_return_str = f"{year_return}%" if year_return is not None else "N/A"
+            
+        print(f"{idx_name:<20} {idx_code:<10} {idx_score:<8} {fund_name:<30} {fund_code:<10} {year_return_str}")

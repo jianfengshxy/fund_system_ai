@@ -1,29 +1,198 @@
-
 import requests
 import json
 import logging
-
-if __name__ == "__main__":
-    import os
-    import sys
-
-    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    if root_dir not in sys.path:
-        sys.path.insert(0, root_dir)
-
-from src.common.logger import get_logger
-from src.common.errors import RetriableError, ValidationError
+import urllib3
 import hashlib
+from requests.adapters import HTTPAdapter
+from typing import List, Optional
+import sys
+import os
+
+# Add root dir to sys.path if needed
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+
+from src.API.登录接口.login import ensure_user_fresh
 from src.domain.trade.TradeResult import TradeResult
 from src.domain.trade.share import Share
-from src.domain.user.User import User  # 添加User类的导入
-from typing import List, Optional  # 添加类型提示支持
-from src.common.constant import DEFAULT_USER, MOBILE_KEY
-from src.API.登录接口.login import ensure_user_fresh
+from src.domain.user.User import User
+from src.common.constant import MOBILE_KEY, DEFAULT_USER
+from src.common.logger import get_logger
+from src.common.errors import RetriableError, ValidationError
 
 logger = get_logger("Trade")
 
-def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="", page_index=1, page_size=50, date_type=""):
+class HostResolveAdapter(HTTPAdapter):
+    def __init__(self, host: str, ip: str, **kwargs):
+        self._host = host
+        self._ip = ip
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        pool_kwargs["assert_hostname"] = self._host
+        pool_kwargs["server_hostname"] = self._host
+        self.poolmanager = urllib3.PoolManager(num_pools=connections, maxsize=maxsize, block=block, **pool_kwargs)
+
+    def get_connection(self, url, proxies=None):
+        return self.poolmanager.connection_from_host(self._ip, port=443, scheme="https")
+
+    def add_headers(self, request, **kwargs):
+        request.headers["Host"] = self._host
+
+def get_one_fund_tran_infos(user, fund_code, start_date=None, end_date=None, page_index=1, page_size=100, date_type="3"):
+    """
+    获取单个基金的全部交易历史（支持指定时间范围）
+    Args:
+        user: User对象
+        fund_code: 基金代码
+        start_date: 开始日期 (YYYY-MM-DD), 默认为2010-01-01
+        end_date: 结束日期 (YYYY-MM-DD), 默认为当前日期
+        page_index: 页码
+        page_size: 每页数量
+        date_type: 时间范围类型，默认为""(全部)。
+    """
+    u = ensure_user_fresh(user)
+    host_header = f"tquerycoreapi{u.index}.1234567.com.cn"
+    if not u.index:
+        host_header = "tquerycoreapi1.1234567.com.cn"
+    url = f"https://{host_header}/api/mobile/Query/GetOneFundTranInfos"
+    
+    session = requests.Session()
+    # 使用 HostResolveAdapter 强制解析域名到指定 IP
+    session.mount(f"https://{host_header}/", HostResolveAdapter(host_header, "114.141.184.84"))
+
+    # 定义内部请求函数以支持重试
+    def _fetch_page(p_index, p_size, d_type, start_date=None, end_date=None, retry=True):
+        curr_u = ensure_user_fresh(user)
+        
+        headers = {
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Language": "zh-Hans-CN;q=1",
+            "Connection": "keep-alive",
+            "Content-Type": "application/json",
+            "GTOKEN": "4474AFD3E15F441E937647556C01C174",
+            "Host": host_header,
+            "MP-VERSION": "5.5.0-1104",
+            "Referer": "https://mpservice.com/329e138b3cb74f17a2e4ba5c23f374c0/release/pages/fundRecord/index",
+            "User-Agent": "EMProjJijin/6.5.8 (iPhone; iOS 15.6.1; Scale/3.00)",
+            "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.6.1",
+            "traceparent": "00-63d20001cab74ce99de3c388f65d6277-0000000000000000-01",
+            "tracestate": "pid=0x108ee7460,taskid=0x1507ec120"
+        }
+
+        payload_dict = {
+            "PageIndex": p_index,
+            "PageSize": p_size,
+            "FundCode": fund_code,
+            "SubAccountNo": "",
+            "CustomerNo": curr_u.customer_no,
+            "BusType": "",
+            "Statu": "",
+            "Account": "",
+            "TransactionAccountId": "",
+            "AccountTypes": ["0", "1", "2"],
+            "DateType": d_type if d_type is not None else "",
+            "StartDate": "",
+            "EndDate": ""
+        }
+        
+        if start_date:
+            payload_dict["StartDate"] = start_date
+            
+        if end_date:
+            payload_dict["EndDate"] = end_date
+
+        final_data = {
+            "utoken": curr_u.u_token,
+            "uid": curr_u.customer_no,
+            "mobileKey": MOBILE_KEY,
+            "customerNo": curr_u.customer_no,
+            "deviceid": MOBILE_KEY,
+            "ctoken": curr_u.c_token,
+            "serverversion": "6.6.11",
+            "rtype": "app",
+            "data": json.dumps(payload_dict)
+        }
+
+        try:
+            # 注意：verify=False 配合 HostResolveAdapter 使用，因为我们手动指定了IP但Host头是域名
+            response = session.post(url, headers=headers, json=final_data, verify=False, timeout=10)
+            response.raise_for_status()
+            resp_json = response.json()
+            
+            # 检查是否需要刷新 Token (Code=1006 或相关消息)
+            if not resp_json.get("Succeed", False) and retry:
+                msg = resp_json.get("Message", "")
+                code = resp_json.get("Code", 0)
+                if code == 1006 or "token" in msg.lower() or "设备" in msg:
+                    logger.warning(f"检测到Token/设备ID不一致(Code={code}, Msg={msg})，尝试强制刷新Token并重试...")
+                    # 强制刷新 Token
+                    ensure_user_fresh(user, force_refresh=True)
+                    # 递归调用一次（不再 retry）
+                    return _fetch_page(p_index, p_size, d_type, start_date, end_date, retry=False)
+            
+            if "TotalCount" in resp_json:
+                logger.info(f"TotalCount: {resp_json['TotalCount']}, PageSize: {p_size}, PageIndex: {p_index}")
+                
+            return resp_json
+
+        except Exception as e:
+            logger.error(f"API请求异常: {e}", extra=extra)
+            return {}
+
+    extra = {"account": getattr(user, "mobile_phone", None), "action": "get_one_fund_tran_infos", "fund_code": fund_code}
+    all_results = []
+    current_page = page_index
+    total_count = None
+    max_pages = 500
+
+    # 如果没有指定开始时间，且查询全部，则默认从2000年开始，确保覆盖所有历史
+    if not start_date and not date_type:
+        start_date = "2000-01-01"
+
+    while current_page <= max_pages:
+        response_data = _fetch_page(current_page, page_size, date_type, start_date, end_date)
+
+        if not response_data.get("Succeed", False):
+            logger.error(f"获取单基金历史交易失败: {response_data}", extra=extra)
+            # 如果是第一页失败，直接返回空；如果是后续页失败，返回已获取的
+            if current_page == 1:
+                return []
+            break
+
+        if total_count is None:
+            total_count = response_data.get("TotalCount")
+            logger.info(f"预期总条数: {total_count}", extra=extra)
+
+        items = response_data.get("responseObjects") or response_data.get("List") or response_data.get("Data")
+        if not items:
+            break
+
+        if isinstance(items, list):
+            for item in items:
+                all_results.append(TradeResult.from_api(item))
+
+        # 终止条件判断
+        # 1. 如果已知 TotalCount，且已获取数量达到 TotalCount，则停止
+        if total_count is not None:
+            if len(all_results) >= total_count:
+                logger.info(f"已获取全部 {len(all_results)} 条记录 (TotalCount={total_count})", extra=extra)
+                break
+        
+        # 2. 如果当前页返回数量小于 page_size，通常意味着是最后一页
+        # 但如果 TotalCount 还没达到，可能是 API 分页有问题，或者实际上还有更多
+        # 这里为了稳健，如果 TotalCount 存在，优先信赖 TotalCount；否则信赖 len(items) < page_size
+        if total_count is None and len(items) < page_size:
+            break
+            
+        current_page += 1
+
+    logger.info(f"获取单基金历史交易成功，共 {len(all_results)} 条", extra=extra)
+    return all_results
+
+def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="", page_index=1, page_size=50, date_type: Optional[str] = "3"):
     """
     获取交易列表
     Args:
@@ -33,167 +202,196 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
         bus_type: 业务类型，默认为空
         status: 状态，默认为空
         page_index: 页码，默认为1
-        page_size: 每页数量，默认为100
+        page_size: 每页数量，默认为50
         date_type: 时间范围类型，默认为"3"。
                    "5": 近1周
                    "1": 近1月
                    "2": 近3月
                    "3": 近1年 (推荐，能获取较长历史记录)
+                   "": 全量查询（通过循环 DateType='3' 和 '0' 并配合结束日期递推实现）
     Returns:
         List[TradeResult]: 交易结果列表
     """
-    # print(f"index:{user.index}")
-    u = ensure_user_fresh(user)
-    url = f"https://tquerycoreapi{u.index}.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
-    if not u.index:
-        url = "https://tquerycoreapi1.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
-    
-    headers = {
-        "Connection": "keep-alive",
-        "Host": f"tquerycoreapi{user.index}.1234567.com.cn",
-        "Accept": "*/*",
-        "GTOKEN": "4474AFD3E15F441E937647556C01C174",
-        "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.6.1",
-        "MP-VERSION": "5.5.0-1104",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Accept-Language": "zh-Hans-CN;q=1",
-        "Content-Type": "application/json",
-        "User-Agent": "EMProjJijin/6.5.8 (iPhone; iOS 15.6.1; Scale/3.00)",
-        "Referer": "https://mpservice.com/329e138b3cb74f17a2e4ba5c23f374c0/release/pages/home/index"
-    }
-    
-    payload_dict = {
-        "PageIndex": page_index,
-        "PageSize": page_size,
-        "FundCode": fund_code,
-        "BusType": bus_type,
-        "Statu": status,
-        "Account": "",
-        "SubAccountNo": sub_account_no,
-        "CustomerNo": u.customer_no
-    }
-    
-    if date_type is not None:
-        payload_dict["DateType"] = date_type
+    # 内部辅助函数：请求单次API
+    def _fetch_page(p_index, p_size, d_type, end_date=None):
+        u = ensure_user_fresh(user)
+        url = f"https://tquerycoreapi{u.index}.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
+        if not u.index:
+            url = "https://tquerycoreapi1.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
         
-    data = {
-        "utoken": u.u_token,
-        "uid": u.customer_no,
-        "mobileKey": MOBILE_KEY,
-        "customerNo": u.customer_no,
-        "deviceid": "6A464B04-3930-4D99-AFAD-E40BE6727075",
-        "ctoken": u.c_token,
-        "serverversion": "6.6.11",
-        "rtype": "app",
-        "data": json.dumps(payload_dict)
-    }
-    
-    extra = {"account": getattr(user, "mobile_phone", None) or getattr(user, "account", None),
-             "sub_account_name": "",
-             "action": "get_trades_list",
-             "fund_code": fund_code,
-             "sub_account_no": sub_account_no}
-    
-    all_results = []
-    current_page = page_index
-    max_pages = 100  # 防止无限循环
-    
-    try:
-        while current_page < page_index + max_pages:
-            payload_dict["PageIndex"] = current_page
-            data["data"] = json.dumps(payload_dict)
+        headers = {
+            "Connection": "keep-alive",
+            "Host": f"tquerycoreapi{user.index}.1234567.com.cn",
+            "Accept": "*/*",
+            "GTOKEN": "4474AFD3E15F441E937647556C01C174",
+            "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.6.1",
+            "MP-VERSION": "5.5.0-1104",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Language": "zh-Hans-CN;q=1",
+            "Content-Type": "application/json",
+            "User-Agent": "EMProjJijin/6.5.8 (iPhone; iOS 15.6.1; Scale/3.00)",
+            "Referer": "https://mpservice.com/329e138b3cb74f17a2e4ba5c23f374c0/release/pages/home/index"
+        }
+        
+        payload_dict = {
+            "PageIndex": p_index,
+            "PageSize": p_size,
+            "FundCode": fund_code,
+            "BusType": bus_type,
+            "Statu": status,
+            "Account": "",
+            "SubAccountNo": sub_account_no,
+            "CustomerNo": u.customer_no
+        }
+        
+        if d_type:
+            payload_dict["DateType"] = d_type
             
+        if end_date:
+            payload_dict["EndDate"] = end_date
+
+        data = {
+            "utoken": u.u_token,
+            "uid": u.customer_no,
+            "mobileKey": MOBILE_KEY,
+            "customerNo": u.customer_no,
+            "deviceid": "6A464B04-3930-4D99-AFAD-E40BE6727075",
+            "ctoken": u.c_token,
+            "serverversion": "6.6.11",
+            "rtype": "app",
+            "data": json.dumps(payload_dict)
+        }
+        
+        try:
             response = requests.post(url, headers=headers, json=data, verify=False)
             response.raise_for_status()
-            response_data = response.json()
+            return response.json()
+        except Exception as e:
+            logger.error(f"API请求失败: {e}")
+            return {}
+
+    # 主逻辑
+    all_results = []
+    
+    # 如果指定了 date_type (非空)，则按常规分页逻辑处理
+    if date_type:
+        current_page = page_index
+        max_pages = 100
+        while current_page < page_index + max_pages:
+            resp = _fetch_page(current_page, page_size, date_type)
+            if not resp.get("Succeed", False):
+                break
             
-            current_batch = []
-            if response_data.get("Succeed", False):
-                for trade_info in response_data.get("responseObjects", []):
-                    current_batch.append(TradeResult.from_api(trade_info))
-                
-                if current_batch:
-                    all_results.extend(current_batch)
-                
-                # 如果当前页获取的数据少于page_size，说明是最后一页了
-                if len(current_batch) < page_size:
-                    break
-                    
-                current_page += 1
-            else:
-                # 错误处理逻辑 (保留原有的错误处理，但只针对第一次请求或关键错误)
-                err_text = ""
-                try:
-                    err_text = json.dumps(response_data, ensure_ascii=False)
-                except Exception:
-                    err_text = ""
-                
-                # 检查是否为正常空数据（ErrorCode=0）
-                error_code = response_data.get("ErrorCode")
-                if error_code == 0 or str(error_code) == "0":
-                    if current_page == page_index: # 第一页就没数据
-                         logger.info(f"获取交易列表为空 (ErrorCode=0)", extra=extra)
-                    break # 没数据了，退出循环
-
-                need_refresh = any(k in err_text for k in ['Token', 'token', '凭证', 'passport', '未登录', '请登录', 'UToken', 'CToken', 'passportid', '权限'])
-                if not need_refresh:
-                    logger.error(f"获取可撤单交易列表失败: {response_data}", extra=extra)
-                    if current_page == page_index: # 第一页就失败才抛异常
-                        raise ValidationError("API_FAIL")
-                    break
-
-                # Token过期重试逻辑 (简化版，只在第一页失败时重试，或者在循环中刷新token后继续？)
-                # 为了保持逻辑简单且健壮，如果中途token过期，刷新后重试当前页
-                u2 = ensure_user_fresh(u, force_refresh=True)
-                url2 = f"https://tquerycoreapi{u2.index}.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
-                if not u2.index:
-                    url2 = "https://tquerycoreapi1.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
-                
-                # 更新data中的token信息
-                data["utoken"] = u2.u_token
-                data["uid"] = u2.customer_no
-                data["customerNo"] = u2.customer_no
-                data["ctoken"] = u2.c_token
-                payload_dict["CustomerNo"] = u2.customer_no
-                data["data"] = json.dumps(payload_dict)
-                
-                # 更新headers host (虽然requests会自动处理，但保持一致性)
-                headers["Host"] = f"tquerycoreapi{u2.index}.1234567.com.cn"
-                
-                # 重试当前页
-                response = requests.post(url2, headers=headers, json=data, verify=False)
-                response.raise_for_status()
-                response_data = response.json()
-                
-                if response_data.get("Succeed", False):
-                    retry_batch = []
-                    for trade_info in response_data.get("responseObjects", []):
-                        retry_batch.append(TradeResult.from_api(trade_info))
-                    
-                    if retry_batch:
-                        all_results.extend(retry_batch)
-                    
-                    if len(retry_batch) < page_size:
-                        break
-                    current_page += 1
-                else:
-                    error_code = response_data.get("ErrorCode")
-                    if error_code == 0 or str(error_code) == "0":
-                        break
-                    
-                    logger.error(f"获取可撤单交易列表失败(重试后): {response_data}", extra=extra)
-                    if current_page == page_index:
-                        raise ValidationError("API_FAIL")
-                    break
-        
+            batch = []
+            for item in resp.get("responseObjects", []):
+                batch.append(TradeResult.from_api(item))
+            
+            if batch:
+                all_results.extend(batch)
+            
+            if len(batch) < page_size:
+                break
+            current_page += 1
+            
         return all_results
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}", extra=extra)
-        raise RetriableError(str(e))
-    except Exception as e:
-        logger.error(f"获取可撤单交易列表失败: {str(e)}", extra=extra)
-        raise ValidationError(str(e))
+    
+    # 如果 date_type 为空，执行全量回溯逻辑
+    # 策略：先查近1年(DateType='3')，拿到最早的一条日期，然后作为 EndDate 继续查更早的(DateType='0')
+    # 注意：DateType='0' 通常表示自定义时间段或不限，需要配合 EndDate 使用
+    
+    # 1. 先获取近1年的
+    logger.info(f"正在获取近1年交易记录...")
+    current_page = 1
+    min_date = None
+    
+    while True:
+        resp = _fetch_page(current_page, 50, "3") # DateType='3'
+        if not resp.get("Succeed", False):
+            break
+            
+        batch = []
+        for item in resp.get("responseObjects", []):
+            t = TradeResult.from_api(item)
+            batch.append(t)
+            # 记录最小日期
+            d_str = getattr(t, 'strike_start_date', None) or getattr(t, 'apply_work_day', None)
+            if d_str:
+                if not min_date or d_str < min_date:
+                    min_date = d_str
+                    
+        if batch:
+            all_results.extend(batch)
+            
+        if len(batch) < 50:
+            break
+        current_page += 1
+        
+    logger.info(f"近1年记录获取完毕，共 {len(all_results)} 条。最早日期: {min_date}")
+    
+    # 2. 递归获取更早的记录
+    # 假设 API 支持 EndDate 参数来查询该日期之前的记录
+    # 如果 API 不支持 EndDate，那这个方法也无法获取更多。
+    # 根据测试结果，DateType='0' 似乎返回了和 '3' 一样的数据（198条），说明 '0' 可能是默认值。
+    # 我们尝试用 DateType='0' 且 EndDate = min_date 来获取更早的
+    
+    # 防止死循环，最多回溯 5 年
+    for _ in range(5):
+        if not min_date:
+            break
+            
+        logger.info(f"正在尝试获取 {min_date} 之前的记录...")
+        
+        # 构造 EndDate (减去1天)
+        try:
+            from datetime import datetime, timedelta
+            last_dt = datetime.strptime(min_date[:10], "%Y-%m-%d")
+            next_end_date = (last_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+        except:
+            break
+            
+        # 尝试查询更早的
+        # 这里假设 API 支持 EndDate。如果不支持，这段代码可能只会重复返回相同数据，需要去重。
+        current_page = 1
+        found_new = False
+        batch_results = []
+        
+        while True:
+            # 关键：这里用 DateType='0' 或其他值，并传入 EndDate
+            # 注意：如果 API 不识别 EndDate，这可能会返回重复数据，必须去重
+            resp = _fetch_page(current_page, 50, "0", end_date=next_end_date)
+            
+            if not resp.get("Succeed", False):
+                break
+                
+            batch = []
+            for item in resp.get("responseObjects", []):
+                t = TradeResult.from_api(item)
+                # 判重
+                if not any(x.id == t.id for x in all_results):
+                    batch.append(t)
+                    # 更新全局最小日期
+                    d_str = getattr(t, 'strike_start_date', None) or getattr(t, 'apply_work_day', None)
+                    if d_str and d_str < min_date:
+                        min_date = d_str
+                        
+            if batch:
+                batch_results.extend(batch)
+                found_new = True
+                
+            if len(batch) < 50:
+                break
+            current_page += 1
+        
+        if found_new:
+            logger.info(f"获取到更早的 {len(batch_results)} 条记录。当前最早日期: {min_date}")
+            all_results.extend(batch_results)
+        else:
+            logger.info("未获取到更早记录，结束回溯。")
+            break
+            
+    # 按日期排序
+    all_results.sort(key=lambda x: getattr(x, 'strike_start_date', "") or "0000-00-00", reverse=True)
+    return all_results
 
 def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Share]:
     """
@@ -206,13 +404,14 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
         List[Share]: 银行份额列表
     """
     u = ensure_user_fresh(user)
-    url = f"https://tradeapilvs{u.index}.1234567.com.cn/User/home/GetShareDetail"
+    host_header = f"tradeapilvs{u.index}.1234567.com.cn"
     if not u.index:
-        url = "https://tradeapilvs1.1234567.com.cn/User/home/GetShareDetail"
+        host_header = "tradeapilvs1.1234567.com.cn"
+    url = f"https://{host_header}/User/home/GetShareDetail"
     
     headers = {
         "Connection": "keep-alive",
-        "Host": f"tradeapilvs{u.index}.1234567.com.cn",
+        "Host": host_header,
         "Accept": "*/*",
         "GTOKEN": "4474AFD3E15F441E937647556C01C174",
         "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.6",
@@ -240,7 +439,6 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
         "subAccountNo": sub_account_no
     }
 
-    logger = get_logger("Trade")
     extra = {"account": getattr(user, "mobile_phone", None) or getattr(user, "account", None),
              "action": "get_bank_shares",
              "fund_code": fund_code,
@@ -258,25 +456,23 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
             data["UToken"] = u2.u_token
             data["UserId"] = u2.customer_no
             
-            url2 = f"https://tradeapilvs{u2.index}.1234567.com.cn/User/home/GetShareDetail"
+            host_header2 = f"tradeapilvs{u2.index}.1234567.com.cn"
             if not u2.index:
-                url2 = "https://tradeapilvs1.1234567.com.cn/User/home/GetShareDetail"
+                host_header2 = "tradeapilvs1.1234567.com.cn"
+            url2 = f"https://{host_header2}/User/home/GetShareDetail"
             
             # 更新Host头
-            headers["Host"] = f"tradeapilvs{u2.index}.1234567.com.cn"
+            headers["Host"] = host_header2
             
             response = requests.post(url2, headers=headers, data=data, verify=False)
 
         response.raise_for_status()
         response_data = response.json()
-        # logger.info(f"响应数据: {response_data}")
         
         bank_shares = []
         if response_data.get("Data") and response_data["Data"].get("Shares"):
             shares_list = response_data["Data"]["Shares"]
             for share_data in shares_list:
-                # logger.info(f"share_data: {share_data}")
-                # 使用正确的参数名称创建Share对象
                 bank_share = Share(
                     bankName=share_data.get("BankName", ""),
                     bankCode=share_data.get("BankCode", ""),
@@ -314,9 +510,13 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
             data["Passportid"] = u2.passport_id
             data["UToken"] = u2.u_token
             data["UserId"] = u2.customer_no
-            url2 = f"https://tradeapilvs{u2.index}.1234567.com.cn/User/home/GetShareDetail"
+            
+            host_header2 = f"tradeapilvs{u2.index}.1234567.com.cn"
             if not u2.index:
-                url2 = "https://tradeapilvs1.1234567.com.cn/User/home/GetShareDetail"
+                host_header2 = "tradeapilvs1.1234567.com.cn"
+            url2 = f"https://{host_header2}/User/home/GetShareDetail"
+            headers["Host"] = host_header2
+
             response = requests.post(url2, headers=headers, data=data, verify=False)
             response.raise_for_status()
             response_data = response.json()
@@ -348,21 +548,30 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
 
 
 if __name__ == "__main__":
-    # 导入必要的模块
-    import logging
+    from src.domain.user.User import User
     
     # 配置日志
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger("Trade")
     
     # 打印用户信息
     logger.info("开始获取交易列表")
     logger.info(f"用户信息: customer_no={DEFAULT_USER.customer_no}")
     
-    # 调用接口获取交易列表
-    trades = get_trades_list(DEFAULT_USER)
+    # 测试新接口 GetOneFundTranInfos
+    fund_code = "011707" # 测试基金
+    logger.info(f"测试 GetOneFundTranInfos 接口, 基金代码: {fund_code}")
     
-    # 打印结果
-    logger.info(f"获取到 {len(trades)} 条交易记录")
-    for i, trade in enumerate(trades):
-        logger.info(f"交易记录 {i+1}: ID={trade.id}, 业务代码={trade.business_code}, 申请份额={trade.apply_count}")
+    # 验证调用已按你要求改成 DateType=3 和 page_size=20
+    trades = get_one_fund_tran_infos(DEFAULT_USER, fund_code=fund_code, page_size=20, date_type="3")
+    
+    logger.info(f"date_type='3' 获取到 {len(trades)} 条交易记录")
+    if trades:
+        dates = []
+        for t in trades:
+            d = getattr(t, 'strike_start_date', None) or getattr(t, 'apply_work_day', None)
+            if d:
+                dates.append(d)
+        
+        if dates:
+            logger.info(f"日期范围: {min(dates)} 到 {max(dates)}")
+

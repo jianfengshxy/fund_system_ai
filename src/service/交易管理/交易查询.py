@@ -90,6 +90,42 @@ def get_fund_success_trades(user: User, fund_code: str, date_type: str = "") -> 
     logger.info(f"共获取到 {len(all_trades)} 条记录，其中成功记录 {len(success_trades)} 条", extra=extra)
     return success_trades
 
+def get_fund_history_success_trades(user: User, fund_code: str) -> List[TradeResult]:
+    """
+    获取指定基金的全量历史成功交易记录（优先使用新接口，失败回退）
+    
+    Args:
+        user: User对象
+        fund_code: 基金代码
+        
+    Returns:
+        List[TradeResult]: 成功的交易记录列表
+    """
+    logger = get_logger("TradeQuery")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), 
+             "action": "get_fund_history_success_trades", 
+             "fund_code": fund_code}
+             
+    logger.info(f"正在尝试使用 GetOneFundTranInfos 获取基金 {fund_code} 的全量历史交易记录...", extra=extra)
+    
+    try:
+        from src.API.交易管理.trade import get_one_fund_tran_infos
+        trades = get_one_fund_tran_infos(user, fund_code)
+        
+        # 如果新接口返回了数据，直接使用并过滤
+        if trades:
+            success_trades = [t for t in trades if "撤" not in (t.status or "") and "失败" not in (t.status or "")]
+            logger.info(f"使用新接口成功获取 {len(success_trades)} 条有效记录", extra=extra)
+            return success_trades
+            
+        logger.info(f"新接口返回空数据", extra=extra)
+    except Exception as e:
+        logger.error(f"新接口调用失败: {e}", extra=extra)
+        # 根据用户要求，不进行回退，直接报错或返回空
+        raise e
+        
+    return []
+
 def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account_no: str = "") -> int:
     """
     统计某基金在上一个交易日（以基金的 nav_date 为准）及当天的未回撤交易数量。
@@ -197,7 +233,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s') # 简化日志格式，只输出message
     logger = logging.getLogger("TradeQuery")
     
-    fund_code = "025857"
+    fund_code = "161226"
     
     # 1. 获取当前持仓资产详情
     from src.service.资产管理.get_fund_asset_detail import get_fund_total_asset_detail
@@ -219,23 +255,29 @@ if __name__ == "__main__":
     print("="*60 + "\n")
 
     # 2. 获取历史交易记录
-    logger.info(f"正在获取基金 {fund_code} 的历史成功交易记录(date_type='3' 获取近1年)...")
-    success_trades = get_fund_success_trades(DEFAULT_USER, fund_code, date_type="3")
+    success_trades = get_fund_history_success_trades(DEFAULT_USER, fund_code)
     
     # 3. 整理交易数据并计算 Cashflows
-    print(f"【交易记录明细】 (共 {len(success_trades)} 条)")
+    # 打印全部成功交易记录
+    print(f"【交易记录明细】 (共 {len(success_trades)} 条，显示全部历史记录)")
     print("-" * 100)
     print(f"{'交易时间':<20} | {'业务类型':<15} | {'确认金额':<12} | {'确认份额':<12} | {'状态'}")
     print("-" * 100)
     
-    cashflows = []
-    dates = []
-    total_invest = 0.0  # 总投入
-    total_redeem = 0.0  # 总赎回/分红
+    # 辅助变量：计算最近一年的期初本金状态
+    # 定义近1年窗口
+    one_year_ago = datetime.now().replace(year=datetime.now().year - 1)
+    one_year_ago_date = one_year_ago.date()
+    
+    # 核心数据结构：
+    # 1. full_cashflows: 全量现金流（用于推导一年前的状态）
+    # 2. recent_cashflows: 最近一年现金流（用于计算近1年收益率）
+    # 3. initial_state_1y: 一年前那个时间点的持仓状态（投入本金、持仓市值等）
+    
+    initial_principal_1y = 0.0 # 一年前的剩余本金（总投入-总赎回，未考虑盈亏）
+    initial_share_1y = 0.0 # 一年前的持有份额
     
     # 按时间正序排列（API通常返回倒序，需确认）
-    # get_trades_list 并没有明确排序，通常是时间倒序。我们需要正序来打印和计算XIRR
-    # 先尝试解析日期
     parsed_trades = []
     for trade in success_trades:
         # 获取日期
@@ -289,170 +331,168 @@ if __name__ == "__main__":
     # 按日期正序排序
     parsed_trades.sort(key=lambda x: x['date'] if x['date'] else datetime.min)
     
+    recent_cashflows = [] # 仅包含最近1年的现金流
+    recent_dates = []
+    
+    total_invest_recent = 0.0 # 最近1年投入
+    total_redeem_recent = 0.0 # 最近1年赎回
+    
     for t in parsed_trades:
-        print(f"{t['date_str']:<20} | {t['type']:<15} | {t['amount']:<12,.2f} | {t['vol']:<12.2f} | {t['status']}")
-        
         if not t['date']:
             continue
             
-        # 构建现金流
-        # 买入/定投/申购 -> 现金流出 (-)
-        # 卖出/赎回/分红 -> 现金流入 (+)
-        # 转换入 -> 流出, 转换出 -> 流入
+        is_recent = t['date'] >= one_year_ago
         
+        # 打印控制：打印全部记录
+        print(f"{t['date_str']:<20} | {t['type']:<15} | {t['amount']:<12,.2f} | {t['vol']:<12.2f} | {t['status']}")
+        
+        # 识别资金流向
         flow = 0.0
-        is_inflow = False # 是否为流入（回到口袋）
         
         if any(k in t['type'] for k in ['买入', '申购', '定投', '转入', '分红再投']):
             flow = -t['amount']
-            total_invest += t['amount']
+            
+            # 累计数据
+            if is_recent:
+                total_invest_recent += t['amount']
+            else:
+                # 这是一个简化的假设：历史投入都算作本金积累
+                # 实际上应该用份额来推导一年前的市值，但没有当时净值，只能估算资金占用
+                initial_principal_1y += t['amount']
+                initial_share_1y += t['vol']
+                
         elif any(k in t['type'] for k in ['卖出', '赎回', '转出', '分红', '转换出', '强制赎回']):
             flow = t['amount']
-            total_redeem += t['amount']
-            is_inflow = True
+            
+            if is_recent:
+                total_redeem_recent += t['amount']
+            else:
+                initial_principal_1y -= t['amount']
+                initial_share_1y -= t['vol']
         else:
-            # 其他类型，暂且忽略或按正负判断
+            # 其他类型，暂且忽略
             pass
             
-        if flow != 0:
-            cashflows.append(flow)
-            dates.append(t['date'])
+        # 如果是最近一年的交易，加入现金流计算
+        if is_recent and flow != 0:
+            recent_cashflows.append(flow)
+            recent_dates.append(t['date'])
 
     print("-" * 100)
     
-    # 4. 加入期末资产作为最后一笔现金流
+    # 4. 构建近1年的完整现金流模型
+    # 模型 = [初始状态] + [期间交易] + [期末状态]
+    
+    # 期末状态 (当前)
     current_asset = asset_detail.asset_value
-    cashflows.append(current_asset)
-    dates.append(datetime.now())
+    recent_cashflows.append(current_asset)
+    recent_dates.append(datetime.now())
     
-    # 5. 计算收益率指标
-    # 尝试推导缺失的初始成本 (Implied Initial Cost)
-    # 逻辑: TotalInvest_Lifetime = TotalRedeem_Lifetime + CurrentAsset - TotalProfit_Lifetime
-    # 我们假设 TotalRedeem_Lifetime ≈ total_redeem (窗口内的赎回), 这在只最近一年有大额卖出的情况下成立
-    # 如果用户在更早之前也有大额卖出，这个推导会偏小，但总比没有好。
+    # 推导期初状态 (一年前)
+    # 这里的 initial_principal_1y 只是资金流水差额，不代表当时的市值。
+    # 既然用户只关心最近1年的表现，我们可以把 "一年前的持有市值" 视为 "初始投入"。
+    # 但是我们不知道一年前的净值，无法准确计算当时市值。
+    # 变通方案：
+    # 使用 "一年前剩余本金" (initial_principal_1y) 作为期初投入。
+    # 这假设之前的盈亏已经结清，或者我们将之前的投入视为成本。
+    # 如果 initial_principal_1y < 0，说明之前已经回本且盈利，期初成本为0（甚至可以视为负成本？XIRR通常处理不了负的期初值作为投入）
     
-    total_invest_lifetime_derived = total_redeem + current_asset - asset_detail.profit_value
-    missing_initial_cost = total_invest_lifetime_derived - total_invest
+    initial_cost_for_xirr = max(0, initial_principal_1y)
     
-    # 计算日均持有资产
-    # 算法：按天遍历，每一天计算当天的持有投入成本（累计投入-累计赎回），然后求平均
-    if dates:
-        start_date = dates[0]
+    if initial_cost_for_xirr > 0:
+        # 在 cashflows 开头插入一笔“期初投入”
+        recent_cashflows.insert(0, -initial_cost_for_xirr)
+        recent_dates.insert(0, one_year_ago)
+        
+    print("\n【近1年资金效率分析】")
+    print("=" * 60)
+    print(f"统计区间: {one_year_ago.strftime('%Y-%m-%d')} 至 {datetime.now().strftime('%Y-%m-%d')}")
+    print("-" * 60)
+    print(f"期初推导本金: {initial_cost_for_xirr:,.2f} (基于历史全量交易推算)")
+    print(f"期间总投入: {total_invest_recent:,.2f}")
+    print(f"期间总赎回: {total_redeem_recent:,.2f}")
+    print(f"期末持仓市值: {current_asset:,.2f}")
+    
+    # 计算近1年净收益
+    # Net Profit = (期末市值 + 期间赎回) - (期初本金 + 期间投入)
+    net_profit_1y = (current_asset + total_redeem_recent) - (initial_cost_for_xirr + total_invest_recent)
+    print(f"近1年净收益: {net_profit_1y:,.2f}")
+    
+    # 计算日均持有资产 (近1年)
+    avg_daily_invested = 0.0
+    if recent_dates:
+        start_date = recent_dates[0] # 可能是 one_year_ago 或第一笔交易日
         end_date = datetime.now()
         total_days = (end_date - start_date).days + 1
         
-        daily_invested_sum = 0.0
-        current_invested = max(0, missing_initial_cost) # 初始投入
+        daily_sum = 0.0
+        current_invested = initial_cost_for_xirr
         
-        # 将交易按日期归组
+        # 交易映射
         trade_map = {}
         for t in parsed_trades:
-            if not t['date']: continue
-            d_str = t['date'].strftime("%Y-%m-%d")
-            
-            flow = 0.0
-            if any(k in t['type'] for k in ['买入', '申购', '定投', '转入', '分红再投']):
-                flow = t['amount']
-            elif any(k in t['type'] for k in ['卖出', '赎回', '转出', '分红', '转换出', '强制赎回']):
-                flow = -t['amount']
+            if t['date'] and t['date'] >= start_date:
+                d_str = t['date'].strftime("%Y-%m-%d")
                 
-            trade_map[d_str] = trade_map.get(d_str, 0.0) + flow
-            
+                flow = 0.0
+                if any(k in t['type'] for k in ['买入', '申购', '定投', '转入', '分红再投']):
+                    flow = t['amount']
+                elif any(k in t['type'] for k in ['卖出', '赎回', '转出', '分红', '转换出', '强制赎回']):
+                    flow = -t['amount']
+                trade_map[d_str] = trade_map.get(d_str, 0.0) + flow
+        
         # 按天累加
         from datetime import timedelta
         for i in range(total_days):
             curr_d = start_date + timedelta(days=i)
             d_str = curr_d.strftime("%Y-%m-%d")
             
-            # 处理当天的资金进出
             if d_str in trade_map:
                 current_invested += trade_map[d_str]
             
-            # 累加当天的持有资金（简化：假设资金变动发生在当天末，或者直接取变动后的值）
-            # 更精确的做法是加权，这里简化为取当天结束时的投入本金
-            daily_invested_sum += max(0, current_invested)
+            daily_sum += max(0, current_invested)
             
-        avg_daily_invested = daily_invested_sum / total_days if total_days > 0 else 0.0
-    else:
-        avg_daily_invested = 0.0
-
-    print("\n【收益分析 (基于APP数据校正)】")
-    print("=" * 60)
-    print(f"当前持仓市值: {current_asset:,.2f}")
-    print(f"APP显示累计收益: {asset_detail.profit_value:,.2f}")
-    print(f"窗口内总投入: {total_invest:,.2f}")
-    print(f"窗口内总赎回: {total_redeem:,.2f}")
-    
-    if missing_initial_cost > 100:
-        print(f"推导缺失初始成本: {missing_initial_cost:,.2f} (将作为期初投入参与XIRR计算)")
-        # 添加一笔期初现金流
-        start_date = dates[0] if dates else datetime.now()
-        # 设为第一笔交易前一天
-        from datetime import timedelta
-        initial_date = start_date - timedelta(days=1)
+        avg_daily_invested = daily_sum / total_days if total_days > 0 else 0.0
         
-        cashflows.insert(0, -missing_initial_cost)
-        dates.insert(0, initial_date)
-        
-        # 修正用于显示的净收益
-        net_profit_calc = current_asset + total_redeem - (total_invest + missing_initial_cost)
-        print(f"校正后计算净收益: {net_profit_calc:,.2f} (与APP一致)")
-        
-        # 修正日均持有资产（加上初始成本）
-        # 上面计算 avg_daily_invested 时已经考虑了 missing_initial_cost 作为初始值
-        pass
-    else:
-        print(f"计算净收益: {current_asset + total_redeem - total_invest:,.2f}")
+    print(f"近1年日均资金占用: {avg_daily_invested:,.2f}")
 
-    print(f"日均持有资产 (平均本金): {avg_daily_invested:,.2f}")
-
-    # 简单收益率 (基于推导的总投入)
-    total_principal = total_invest + max(0, missing_initial_cost)
-    simple_return = (asset_detail.profit_value / total_principal * 100) if total_principal > 0 else 0.0
-    
-    # 实际年化收益率 (基于日均持有资产)
-    # Annualized Return = (Total Profit / Avg Daily Invested) * (365 / Total Days)
-    days_held = (dates[-1] - dates[0]).days
-    if days_held > 0 and avg_daily_invested > 0:
-        actual_annualized_return = (asset_detail.profit_value / avg_daily_invested) * (365 / days_held) * 100
-    else:
-        actual_annualized_return = 0.0
-    
     # XIRR 计算函数
     def xirr(cashflows, dates):
         if not cashflows or not dates or len(cashflows) != len(dates):
             return None
         
-        # 将日期转换为距首日的天数
         start_date = dates[0]
         days = [(d - start_date).days for d in dates]
         
-        # 定义净现值函数
         def npv(rate):
-            # 避免除零和复数
             if rate <= -1.0: return float('inf')
             total_npv = 0.0
             for i, flow in enumerate(cashflows):
                 total_npv += flow / ((1 + rate) ** (days[i] / 365.0))
             return total_npv
             
-        # 二分法求解 rate
-        low, high = -0.9999, 10.0 # -99.99% 到 1000%
+        low, high = -0.9999, 10.0 
         for _ in range(100):
             mid = (low + high) / 2
             v = npv(mid)
             if abs(v) < 1e-5:
                 return mid
             if v > 0:
-                low = mid # 需要更高的折现率来降低NPV
+                low = mid 
             else:
                 high = mid
         return (low + high) / 2
 
-    xirr_val = xirr(cashflows, dates)
+    xirr_val = xirr(recent_cashflows, recent_dates)
     xirr_percent = xirr_val * 100 if xirr_val is not None else 0.0
     
-    print(f"简单收益率 (TotalProfit / Max.Principal): {simple_return:.2f}%")
-    print(f"实际年化收益率 (TotalProfit / Avg.Daily.Invested): {actual_annualized_return:.2f}%")
-    print(f"内部收益率 (XIRR): {xirr_percent:.2f}%")
+    # 实际年化收益率 (简单版: 收益/日均占用)
+    # 注意：这里的年化是简单的 (收益/本金) * (365/天数)
+    days_held = (datetime.now() - one_year_ago).days
+    simple_annualized = 0.0
+    if avg_daily_invested > 0:
+        simple_annualized = (net_profit_1y / avg_daily_invested) * (365 / days_held) * 100
+        
+    print(f"近1年实际资金回报率 (TotalProfit / Avg.Daily.Invested): {simple_annualized:.2f}%")
+    print(f"近1年内部收益率 (XIRR): {xirr_percent:.2f}%")
     print("=" * 60)

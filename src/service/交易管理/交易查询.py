@@ -1,7 +1,6 @@
 import requests
 import json
 import logging
-from src.common.logger import get_logger
 import sys
 import os
 import re
@@ -13,6 +12,8 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 # 如果项目根目录不在Python路径中，则添加
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
+
+from src.common.logger import get_logger
 
 from src.domain.trade.TradeResult import TradeResult
 from src.domain.user.User import User
@@ -42,6 +43,52 @@ def get_withdrawable_trades(user, sub_account_no="", fund_code="", bus_type="", 
     
     logger.info(f"获取到 {len(trades)} 条可撤单交易记录", extra=extra)
     return trades
+
+def get_fund_success_trades(user: User, fund_code: str, date_type: str = "") -> List[TradeResult]:
+    """
+    获取指定基金的所有成功交易记录（排除撤单和失败）
+    
+    Args:
+        user: User对象
+        fund_code: 基金代码
+        date_type: 时间范围类型，默认为"3" (近1年)。
+                   "5": 近1周
+                   "1": 近1月
+                   "2": 近3月
+                   "3": 近1年
+    
+    Returns:
+        List[TradeResult]: 成功的交易记录列表
+    """
+    logger = get_logger("TradeQuery")
+    extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), 
+             "action": "get_fund_success_trades", 
+             "fund_code": fund_code,
+             "date_type": date_type}
+    
+    logger.info(f"开始获取基金 {fund_code} 的成功交易记录 (date_type={date_type})", extra=extra)
+    
+    # get_trades_list 现在已经内置了自动分页获取所有数据的逻辑
+    try:
+        all_trades = get_trades_list(user, fund_code=fund_code, page_index=1, page_size=50, date_type=date_type)
+    except Exception as e:
+        logger.error(f"获取交易记录失败: {e}", extra=extra)
+        all_trades = []
+            
+    # 过滤成功的交易
+    success_trades = []
+    for trade in all_trades:
+        # 获取状态文本
+        status_text = getattr(trade, 'app_state_text', "") or getattr(trade, 'status', "") or ""
+        
+        # 排除撤单和失败
+        if "撤" in status_text or "失败" in status_text:
+            continue
+            
+        success_trades.append(trade)
+        
+    logger.info(f"共获取到 {len(all_trades)} 条记录，其中成功记录 {len(success_trades)} 条", extra=extra)
+    return success_trades
 
 def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account_no: str = "") -> int:
     """
@@ -147,31 +194,208 @@ def count_success_trades_on_prev_nav_day(user: User, fund_code: str, sub_account
 
 if __name__ == "__main__":
     # 配置日志
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logging.basicConfig(level=logging.INFO, format='%(message)s') # 简化日志格式，只输出message
     logger = logging.getLogger("TradeQuery")
     
-    # 调用函数获取可撤单交易列表
-    trades = get_withdrawable_trades(DEFAULT_USER)
+    fund_code = "020516"
     
-    # 打印结果
-    for i, trade in enumerate(trades):
-        logger.info(f"\n{'='*50}")
-        logger.info(f"可撤单交易记录 {i+1} 详细信息:")
-        logger.info(f"{'-'*50}")
-        logger.info(f"交易ID(busin_serial_no): {trade.busin_serial_no}")
-        logger.info(f"业务类型(business_type): {trade.business_type}")
-        logger.info(f"申请工作日(apply_work_day): {trade.apply_work_day}")
-        logger.info(f"申请金额/份额(amount): {trade.amount}")
-        logger.info(f"交易状态(status): {trade.status}")
-        logger.info(f"显示属性(show_com_prop): {trade.show_com_prop}")
-        logger.info(f"基金代码(fund_code): {trade.fund_code}")
-        # 新增：打印基金名称（优先从对象取，兜底调用基金信息服务）
-        try:
-            fund_name = getattr(trade, 'product_name', None) or getattr(trade, 'fund_name', None)
-            if not fund_name and getattr(trade, 'fund_code', None):
-                fi = get_all_fund_info(DEFAULT_USER, trade.fund_code)
-                fund_name = fi.fund_name if fi else None
-            logger.info(f"基金名称(fund_name): {fund_name or '未知'}")
-        except Exception as e:
-            logger.warning(f"获取基金名称失败: {e}")
-        logger.info(f"{'='*50}")
+    # 1. 获取当前持仓资产详情
+    from src.service.资产管理.get_fund_asset_detail import get_fund_total_asset_detail
+    logger.info(f"正在获取基金 {fund_code} 的当前持仓详情...")
+    asset_detail = get_fund_total_asset_detail(DEFAULT_USER, fund_code)
+    
+    if not asset_detail:
+        logger.error("未找到资产详情，无法计算收益率。")
+        sys.exit(1)
+        
+    # 打印资产详情摘要
+    print("\n" + "="*60)
+    print(f"【当前持仓详情】 基金: {asset_detail.fund_name} ({asset_detail.fund_code})")
+    print("-" * 60)
+    print(f"资产/市值: {asset_detail.asset_value:,.2f}")
+    print(f"持有收益: {asset_detail.hold_profit:,.2f} (收益率: {asset_detail.hold_profit_rate}%)")
+    print(f"累计收益: {asset_detail.profit_value:,.2f}")
+    print(f"可用份额: {asset_detail.available_vol:,.2f}")
+    print("="*60 + "\n")
+
+    # 2. 获取历史交易记录
+    logger.info(f"正在获取基金 {fund_code} 的历史成功交易记录(date_type='3' 获取近1年)...")
+    success_trades = get_fund_success_trades(DEFAULT_USER, fund_code, date_type="3")
+    
+    # 3. 整理交易数据并计算 Cashflows
+    print(f"【交易记录明细】 (共 {len(success_trades)} 条)")
+    print("-" * 100)
+    print(f"{'交易时间':<20} | {'业务类型':<15} | {'确认金额':<12} | {'确认份额':<12} | {'状态'}")
+    print("-" * 100)
+    
+    cashflows = []
+    dates = []
+    total_invest = 0.0  # 总投入
+    total_redeem = 0.0  # 总赎回/分红
+    
+    # 按时间正序排列（API通常返回倒序，需确认）
+    # get_trades_list 并没有明确排序，通常是时间倒序。我们需要正序来打印和计算XIRR
+    # 先尝试解析日期
+    parsed_trades = []
+    for trade in success_trades:
+        # 获取日期
+        date_str = getattr(trade, 'strike_start_date', None) or getattr(trade, 'apply_work_day', None)
+        trade_date = None
+        if date_str:
+            try:
+                # 处理 '2025-05-28 09:33:56' 格式
+                trade_date = datetime.strptime(str(date_str)[:19], "%Y-%m-%d %H:%M:%S")
+            except:
+                try:
+                    trade_date = datetime.strptime(str(date_str)[:10], "%Y-%m-%d")
+                except:
+                    pass
+        
+        # 获取金额 (解析 "1,000.00元" 这种格式)
+        raw_amount = getattr(trade, 'confirm_count', None) or getattr(trade, 'amount', None)
+        amount = 0.0
+        if raw_amount:
+            try:
+                s = str(raw_amount).replace(',', '').replace('元', '').replace('--', '').strip()
+                if s:
+                    amount = float(s)
+            except:
+                pass
+                
+        # 获取份额
+        raw_vol = getattr(trade, 'confirm_vol', None) # TradeResult 可能没有这个字段，需检查 raw
+        vol = 0.0
+        if hasattr(trade, 'raw') and isinstance(trade.raw, dict):
+             # 有些接口返回 ConfirmVol
+             v = trade.raw.get('ConfirmVol')
+             if v:
+                 try:
+                     vol = float(str(v).replace(',', ''))
+                 except:
+                     pass
+        
+        bus_type = getattr(trade, 'business_type', '未知')
+        status = getattr(trade, 'app_state_text', '成功')
+        
+        parsed_trades.append({
+            'date': trade_date,
+            'date_str': date_str,
+            'type': bus_type,
+            'amount': amount,
+            'vol': vol,
+            'status': status
+        })
+        
+    # 按日期正序排序
+    parsed_trades.sort(key=lambda x: x['date'] if x['date'] else datetime.min)
+    
+    for t in parsed_trades:
+        print(f"{t['date_str']:<20} | {t['type']:<15} | {t['amount']:<12,.2f} | {t['vol']:<12.2f} | {t['status']}")
+        
+        if not t['date']:
+            continue
+            
+        # 构建现金流
+        # 买入/定投/申购 -> 现金流出 (-)
+        # 卖出/赎回/分红 -> 现金流入 (+)
+        # 转换入 -> 流出, 转换出 -> 流入
+        
+        flow = 0.0
+        is_inflow = False # 是否为流入（回到口袋）
+        
+        if any(k in t['type'] for k in ['买入', '申购', '定投', '转入']):
+            flow = -t['amount']
+            total_invest += t['amount']
+        elif any(k in t['type'] for k in ['卖出', '赎回', '转出', '分红', '转换出']):
+            flow = t['amount']
+            total_redeem += t['amount']
+            is_inflow = True
+        else:
+            # 其他类型，暂且忽略或按正负判断
+            pass
+            
+        if flow != 0:
+            cashflows.append(flow)
+            dates.append(t['date'])
+
+    print("-" * 100)
+    
+    # 4. 加入期末资产作为最后一笔现金流
+    current_asset = asset_detail.asset_value
+    cashflows.append(current_asset)
+    dates.append(datetime.now())
+    
+    # 5. 计算收益率指标
+    # 尝试推导缺失的初始成本 (Implied Initial Cost)
+    # 逻辑: TotalInvest_Lifetime = TotalRedeem_Lifetime + CurrentAsset - TotalProfit_Lifetime
+    # 我们假设 TotalRedeem_Lifetime ≈ total_redeem (窗口内的赎回), 这在只最近一年有大额卖出的情况下成立
+    # 如果用户在更早之前也有大额卖出，这个推导会偏小，但总比没有好。
+    
+    total_invest_lifetime_derived = total_redeem + current_asset - asset_detail.profit_value
+    missing_initial_cost = total_invest_lifetime_derived - total_invest
+    
+    print("\n【收益分析 (基于APP数据校正)】")
+    print("=" * 60)
+    print(f"当前持仓市值: {current_asset:,.2f}")
+    print(f"APP显示累计收益: {asset_detail.profit_value:,.2f}")
+    print(f"窗口内总投入: {total_invest:,.2f}")
+    print(f"窗口内总赎回: {total_redeem:,.2f}")
+    
+    if missing_initial_cost > 100:
+        print(f"推导缺失初始成本: {missing_initial_cost:,.2f} (将作为期初投入参与XIRR计算)")
+        # 添加一笔期初现金流
+        start_date = dates[0] if dates else datetime.now()
+        # 设为第一笔交易前一天
+        from datetime import timedelta
+        initial_date = start_date - timedelta(days=1)
+        
+        cashflows.insert(0, -missing_initial_cost)
+        dates.insert(0, initial_date)
+        
+        # 修正用于显示的净收益
+        net_profit_calc = current_asset + total_redeem - (total_invest + missing_initial_cost)
+        print(f"校正后计算净收益: {net_profit_calc:,.2f} (与APP一致)")
+    else:
+        print(f"计算净收益: {net_profit:,.2f}")
+
+    # 简单收益率 (基于推导的总投入)
+    total_principal = total_invest + max(0, missing_initial_cost)
+    simple_return = (asset_detail.profit_value / total_principal * 100) if total_principal > 0 else 0.0
+    
+    # XIRR 计算函数
+    def xirr(cashflows, dates):
+        if not cashflows or not dates or len(cashflows) != len(dates):
+            return None
+        
+        # 将日期转换为距首日的天数
+        start_date = dates[0]
+        days = [(d - start_date).days for d in dates]
+        
+        # 定义净现值函数
+        def npv(rate):
+            # 避免除零和复数
+            if rate <= -1.0: return float('inf')
+            total_npv = 0.0
+            for i, flow in enumerate(cashflows):
+                total_npv += flow / ((1 + rate) ** (days[i] / 365.0))
+            return total_npv
+            
+        # 二分法求解 rate
+        low, high = -0.9999, 10.0 # -99.99% 到 1000%
+        for _ in range(100):
+            mid = (low + high) / 2
+            v = npv(mid)
+            if abs(v) < 1e-5:
+                return mid
+            if v > 0:
+                low = mid # 需要更高的折现率来降低NPV
+            else:
+                high = mid
+        return (low + high) / 2
+
+    xirr_val = xirr(cashflows, dates)
+    xirr_percent = xirr_val * 100 if xirr_val is not None else 0.0
+    
+    print(f"简单收益率 (TotalProfit / Est.Principal): {simple_return:.2f}%")
+    print(f"年化收益率 (XIRR): {xirr_percent:.2f}%")
+    print("=" * 60)

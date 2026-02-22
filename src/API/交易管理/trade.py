@@ -23,7 +23,7 @@ from src.API.登录接口.login import ensure_user_fresh
 
 logger = get_logger("Trade")
 
-def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="", page_index=1, page_size=50, date_type="3"):
+def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="", page_index=1, page_size=50, date_type=""):
     """
     获取交易列表
     Args:
@@ -62,6 +62,20 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
         "Referer": "https://mpservice.com/329e138b3cb74f17a2e4ba5c23f374c0/release/pages/home/index"
     }
     
+    payload_dict = {
+        "PageIndex": page_index,
+        "PageSize": page_size,
+        "FundCode": fund_code,
+        "BusType": bus_type,
+        "Statu": status,
+        "Account": "",
+        "SubAccountNo": sub_account_no,
+        "CustomerNo": u.customer_no
+    }
+    
+    if date_type is not None:
+        payload_dict["DateType"] = date_type
+        
     data = {
         "utoken": u.u_token,
         "uid": u.customer_no,
@@ -71,17 +85,7 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
         "ctoken": u.c_token,
         "serverversion": "6.6.11",
         "rtype": "app",
-        "data": json.dumps({
-            "PageIndex": page_index,
-            "PageSize": page_size,
-            "FundCode": fund_code,
-            "DateType": date_type,
-            "BusType": bus_type,
-            "Statu": status,
-            "Account": "",
-            "SubAccountNo": sub_account_no,
-            "CustomerNo": u.customer_no
-        })
+        "data": json.dumps(payload_dict)
     }
     
     extra = {"account": getattr(user, "mobile_phone", None) or getattr(user, "account", None),
@@ -89,61 +93,101 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
              "action": "get_trades_list",
              "fund_code": fund_code,
              "sub_account_no": sub_account_no}
+    
+    all_results = []
+    current_page = page_index
+    max_pages = 100  # 防止无限循环
+    
     try:
-        response = requests.post(url, headers=headers, json=data, verify=False)
-        response.raise_for_status()
-        response_data = response.json()
-        # logger.info(f"响应数据: {response_data}")
-        
-        if response_data.get("Succeed", False):
-            results = []
-            for trade_info in response_data.get("responseObjects", []):
-                trade_result = TradeResult.from_api(trade_info)
-                results.append(trade_result)
-            return results
-        else:
-            err_text = ""
-            try:
-                err_text = json.dumps(response_data, ensure_ascii=False)
-            except Exception:
-                err_text = ""
+        while current_page < page_index + max_pages:
+            payload_dict["PageIndex"] = current_page
+            data["data"] = json.dumps(payload_dict)
             
-            # 检查是否为正常空数据（ErrorCode=0）
-            error_code = response_data.get("ErrorCode")
-            if error_code == 0 or str(error_code) == "0":
-                logger.info(f"获取交易列表为空 (ErrorCode=0)", extra=extra)
-                return []
-
-            need_refresh = any(k in err_text for k in ['Token', 'token', '凭证', 'passport', '未登录', '请登录', 'UToken', 'CToken', 'passportid', '权限'])
-            if not need_refresh:
-                logger.error(f"获取可撤单交易列表失败: {response_data}", extra=extra)
-                raise ValidationError("API_FAIL")
-            u2 = ensure_user_fresh(u, force_refresh=True)
-            url2 = f"https://tquerycoreapi{u2.index}.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
-            if not u2.index:
-                url2 = "https://tquerycoreapi1.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
-            data["utoken"] = u2.u_token
-            data["uid"] = u2.customer_no
-            data["customerNo"] = u2.customer_no
-            data["ctoken"] = u2.c_token
-            payload = data.copy()
-            response = requests.post(url2, headers=headers, json=payload, verify=False)
+            response = requests.post(url, headers=headers, json=data, verify=False)
             response.raise_for_status()
             response_data = response.json()
-            if response_data.get("Succeed", False):
-                results = []
-                for trade_info in response_data.get("responseObjects", []):
-                    results.append(TradeResult.from_api(trade_info))
-                return results
             
-            # 检查是否为正常空数据（ErrorCode=0）
-            error_code = response_data.get("ErrorCode")
-            if error_code == 0 or str(error_code) == "0":
-                logger.info(f"获取交易列表为空 (ErrorCode=0) - 重试后", extra=extra)
-                return []
+            current_batch = []
+            if response_data.get("Succeed", False):
+                for trade_info in response_data.get("responseObjects", []):
+                    current_batch.append(TradeResult.from_api(trade_info))
+                
+                if current_batch:
+                    all_results.extend(current_batch)
+                
+                # 如果当前页获取的数据少于page_size，说明是最后一页了
+                if len(current_batch) < page_size:
+                    break
+                    
+                current_page += 1
+            else:
+                # 错误处理逻辑 (保留原有的错误处理，但只针对第一次请求或关键错误)
+                err_text = ""
+                try:
+                    err_text = json.dumps(response_data, ensure_ascii=False)
+                except Exception:
+                    err_text = ""
+                
+                # 检查是否为正常空数据（ErrorCode=0）
+                error_code = response_data.get("ErrorCode")
+                if error_code == 0 or str(error_code) == "0":
+                    if current_page == page_index: # 第一页就没数据
+                         logger.info(f"获取交易列表为空 (ErrorCode=0)", extra=extra)
+                    break # 没数据了，退出循环
 
-            logger.error(f"获取可撤单交易列表失败: {response_data}", extra=extra)
-            raise ValidationError("API_FAIL")
+                need_refresh = any(k in err_text for k in ['Token', 'token', '凭证', 'passport', '未登录', '请登录', 'UToken', 'CToken', 'passportid', '权限'])
+                if not need_refresh:
+                    logger.error(f"获取可撤单交易列表失败: {response_data}", extra=extra)
+                    if current_page == page_index: # 第一页就失败才抛异常
+                        raise ValidationError("API_FAIL")
+                    break
+
+                # Token过期重试逻辑 (简化版，只在第一页失败时重试，或者在循环中刷新token后继续？)
+                # 为了保持逻辑简单且健壮，如果中途token过期，刷新后重试当前页
+                u2 = ensure_user_fresh(u, force_refresh=True)
+                url2 = f"https://tquerycoreapi{u2.index}.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
+                if not u2.index:
+                    url2 = "https://tquerycoreapi1.1234567.com.cn/api/mobile/Query/GetQueryInfosQuickUse"
+                
+                # 更新data中的token信息
+                data["utoken"] = u2.u_token
+                data["uid"] = u2.customer_no
+                data["customerNo"] = u2.customer_no
+                data["ctoken"] = u2.c_token
+                payload_dict["CustomerNo"] = u2.customer_no
+                data["data"] = json.dumps(payload_dict)
+                
+                # 更新headers host (虽然requests会自动处理，但保持一致性)
+                headers["Host"] = f"tquerycoreapi{u2.index}.1234567.com.cn"
+                
+                # 重试当前页
+                response = requests.post(url2, headers=headers, json=data, verify=False)
+                response.raise_for_status()
+                response_data = response.json()
+                
+                if response_data.get("Succeed", False):
+                    retry_batch = []
+                    for trade_info in response_data.get("responseObjects", []):
+                        retry_batch.append(TradeResult.from_api(trade_info))
+                    
+                    if retry_batch:
+                        all_results.extend(retry_batch)
+                    
+                    if len(retry_batch) < page_size:
+                        break
+                    current_page += 1
+                else:
+                    error_code = response_data.get("ErrorCode")
+                    if error_code == 0 or str(error_code) == "0":
+                        break
+                    
+                    logger.error(f"获取可撤单交易列表失败(重试后): {response_data}", extra=extra)
+                    if current_page == page_index:
+                        raise ValidationError("API_FAIL")
+                    break
+        
+        return all_results
+
     except requests.exceptions.RequestException as e:
         logger.error(f"请求失败: {str(e)}", extra=extra)
         raise RetriableError(str(e))

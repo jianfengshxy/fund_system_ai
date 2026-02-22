@@ -197,7 +197,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s') # 简化日志格式，只输出message
     logger = logging.getLogger("TradeQuery")
     
-    fund_code = "020516"
+    fund_code = "025857"
     
     # 1. 获取当前持仓资产详情
     from src.service.资产管理.get_fund_asset_detail import get_fund_total_asset_detail
@@ -303,10 +303,10 @@ if __name__ == "__main__":
         flow = 0.0
         is_inflow = False # 是否为流入（回到口袋）
         
-        if any(k in t['type'] for k in ['买入', '申购', '定投', '转入']):
+        if any(k in t['type'] for k in ['买入', '申购', '定投', '转入', '分红再投']):
             flow = -t['amount']
             total_invest += t['amount']
-        elif any(k in t['type'] for k in ['卖出', '赎回', '转出', '分红', '转换出']):
+        elif any(k in t['type'] for k in ['卖出', '赎回', '转出', '分红', '转换出', '强制赎回']):
             flow = t['amount']
             total_redeem += t['amount']
             is_inflow = True
@@ -334,6 +334,48 @@ if __name__ == "__main__":
     total_invest_lifetime_derived = total_redeem + current_asset - asset_detail.profit_value
     missing_initial_cost = total_invest_lifetime_derived - total_invest
     
+    # 计算日均持有资产
+    # 算法：按天遍历，每一天计算当天的持有投入成本（累计投入-累计赎回），然后求平均
+    if dates:
+        start_date = dates[0]
+        end_date = datetime.now()
+        total_days = (end_date - start_date).days + 1
+        
+        daily_invested_sum = 0.0
+        current_invested = max(0, missing_initial_cost) # 初始投入
+        
+        # 将交易按日期归组
+        trade_map = {}
+        for t in parsed_trades:
+            if not t['date']: continue
+            d_str = t['date'].strftime("%Y-%m-%d")
+            
+            flow = 0.0
+            if any(k in t['type'] for k in ['买入', '申购', '定投', '转入', '分红再投']):
+                flow = t['amount']
+            elif any(k in t['type'] for k in ['卖出', '赎回', '转出', '分红', '转换出', '强制赎回']):
+                flow = -t['amount']
+                
+            trade_map[d_str] = trade_map.get(d_str, 0.0) + flow
+            
+        # 按天累加
+        from datetime import timedelta
+        for i in range(total_days):
+            curr_d = start_date + timedelta(days=i)
+            d_str = curr_d.strftime("%Y-%m-%d")
+            
+            # 处理当天的资金进出
+            if d_str in trade_map:
+                current_invested += trade_map[d_str]
+            
+            # 累加当天的持有资金（简化：假设资金变动发生在当天末，或者直接取变动后的值）
+            # 更精确的做法是加权，这里简化为取当天结束时的投入本金
+            daily_invested_sum += max(0, current_invested)
+            
+        avg_daily_invested = daily_invested_sum / total_days if total_days > 0 else 0.0
+    else:
+        avg_daily_invested = 0.0
+
     print("\n【收益分析 (基于APP数据校正)】")
     print("=" * 60)
     print(f"当前持仓市值: {current_asset:,.2f}")
@@ -355,12 +397,26 @@ if __name__ == "__main__":
         # 修正用于显示的净收益
         net_profit_calc = current_asset + total_redeem - (total_invest + missing_initial_cost)
         print(f"校正后计算净收益: {net_profit_calc:,.2f} (与APP一致)")
+        
+        # 修正日均持有资产（加上初始成本）
+        # 上面计算 avg_daily_invested 时已经考虑了 missing_initial_cost 作为初始值
+        pass
     else:
-        print(f"计算净收益: {net_profit:,.2f}")
+        print(f"计算净收益: {current_asset + total_redeem - total_invest:,.2f}")
+
+    print(f"日均持有资产 (平均本金): {avg_daily_invested:,.2f}")
 
     # 简单收益率 (基于推导的总投入)
     total_principal = total_invest + max(0, missing_initial_cost)
     simple_return = (asset_detail.profit_value / total_principal * 100) if total_principal > 0 else 0.0
+    
+    # 实际年化收益率 (基于日均持有资产)
+    # Annualized Return = (Total Profit / Avg Daily Invested) * (365 / Total Days)
+    days_held = (dates[-1] - dates[0]).days
+    if days_held > 0 and avg_daily_invested > 0:
+        actual_annualized_return = (asset_detail.profit_value / avg_daily_invested) * (365 / days_held) * 100
+    else:
+        actual_annualized_return = 0.0
     
     # XIRR 计算函数
     def xirr(cashflows, dates):
@@ -396,6 +452,7 @@ if __name__ == "__main__":
     xirr_val = xirr(cashflows, dates)
     xirr_percent = xirr_val * 100 if xirr_val is not None else 0.0
     
-    print(f"简单收益率 (TotalProfit / Est.Principal): {simple_return:.2f}%")
-    print(f"年化收益率 (XIRR): {xirr_percent:.2f}%")
+    print(f"简单收益率 (TotalProfit / Max.Principal): {simple_return:.2f}%")
+    print(f"实际年化收益率 (TotalProfit / Avg.Daily.Invested): {actual_annualized_return:.2f}%")
+    print(f"内部收益率 (XIRR): {xirr_percent:.2f}%")
     print("=" * 60)

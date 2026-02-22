@@ -1,7 +1,6 @@
 import requests
 import json
 import logging
-from src.common.logger import get_logger
 import sys
 import os
 
@@ -12,9 +11,12 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
+from src.common.logger import get_logger
+
 from src.domain.trade.TradeResult import TradeResult
 from src.domain.asset.asset_details import AssetDetails
 from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
+from src.API.资产管理.getFundAssetDetailsOfBaseSubHdt import get_fund_asset_details_of_base_sub_hdt
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.domain.user.User import User
 from typing import List, Optional
@@ -24,6 +26,27 @@ from src.service.基金信息.基金信息 import get_all_fund_info
 from src.common.errors import RetriableError, ValidationError
 from src.API.登录接口.login import ensure_user_fresh
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def get_fund_total_asset_detail(user: User, fund_code: str) -> Optional[AssetDetails]:
+    """
+    获取指定基金在整个账户上的资产详情
+    
+    Args:
+        user: 用户对象
+        fund_code: 基金代码
+    
+    Returns:
+        Optional[AssetDetails]: 如果找到对应基金的资产详情则返回，否则返回None
+    """
+    fresh_user = ensure_user_fresh(user, 600)
+    asset_detail, meta = get_fund_asset_details_of_base_sub_hdt(fresh_user, fund_code, with_meta=True)
+    
+    if not asset_detail:
+        if meta.get("token_error"):
+            fresh_user = ensure_user_fresh(user, 600, True)
+            asset_detail, meta = get_fund_asset_details_of_base_sub_hdt(fresh_user, fund_code, with_meta=True)
+            
+    return asset_detail
 
 def get_fund_asset_detail(user: User, sub_account_no: str,fund_code: str) -> Optional[AssetDetails]:
     """
@@ -107,5 +130,14 @@ def get_sub_account_asset_by_name(user: User, sub_account_name: str) -> Optional
     return asset_details_list
     
 if __name__ == "__main__":
-    get_sub_account_asset_by_name(DEFAULT_USER,"飞龙在天")
+    # get_sub_account_asset_by_name(DEFAULT_USER,"飞龙在天")
+    
+    # Test get_fund_total_asset_detail
+    fund_code = "020516" # Example from user input
+    asset_detail = get_fund_total_asset_detail(DEFAULT_USER, fund_code)
+    if asset_detail:
+        print(f"Fund {fund_code} details:")
+        print(asset_detail)
+    else:
+        print(f"Fund {fund_code} not found or error occurred.")
     pass

@@ -31,6 +31,8 @@ class TradeResult:
         id=None,
         app_state_text=None,
         is_stay_on_way=None,
+        sub_account_no=None,
+        sub_account_name=None,
         # 预留原始对象
         raw=None,
     ):
@@ -66,6 +68,8 @@ class TradeResult:
         self.id = id
         self.app_state_text = app_state_text
         self.is_stay_on_way = is_stay_on_way
+        self.sub_account_no = sub_account_no
+        self.sub_account_name = sub_account_name
 
         # 兜底映射，保证旧字段尽量有值
         if self.fund_code is None and self.product_code is not None:
@@ -92,8 +96,8 @@ class TradeResult:
             business_type=item.get("business_type") or item.get("BusinessType"),
             apply_workday=item.get("apply_workday") or item.get("StrikeStartDate"),
             apply_amount=item.get("apply_amount") or item.get("ApplyCount"),
-            status=item.get("status"),
-            show_com_prop=item.get("show_com_prop"),
+            status=item.get("status") or item.get("Status") or str(item.get("StatuIcon")),
+            show_com_prop=item.get("show_com_prop") or item.get("ShowComProp"),
             fund_code=item.get("fund_code") or item.get("ProductCode"),
 
             # 新字段（全部保存）
@@ -104,7 +108,7 @@ class TradeResult:
             cash_bag_app_time=item.get("CashBagAppTime"),
             product_name=item.get("ProductName"),
             business_code=item.get("BusinessCode"),
-            display_business_code=item.get("DisPlayBusinessCode"),
+            display_business_code=item.get("DisplayBusinessCode"),
             apply_count=item.get("ApplyCount"),
             confirm_count=item.get("ConfirmCount"),
             business_icon=item.get("BusinessIcon"),
@@ -119,6 +123,8 @@ class TradeResult:
             id=item.get("ID"),
             app_state_text=item.get("APPStateText"),
             is_stay_on_way=item.get("IsStayOnWay"),
+            sub_account_no=item.get("sub_account_no") or item.get("SubAccountNo"),
+            sub_account_name=item.get("sub_account_name") or item.get("SubAccountName"),
             raw=item,
         )
 

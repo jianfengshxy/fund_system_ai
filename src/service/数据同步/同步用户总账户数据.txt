@@ -1,0 +1,83 @@
+目的：为了后续统计分析数据需要同步用户的每日的资产数据和交易记录到数据库的表中
+需要同步的数据：
+1. 用户的总账户情况(总资产，活期宝资产，基金资产，今日总收益,总持仓收益金额，总累积收益，基金持有收益，基金累计收益）
+ service 层接口GetMyAssetMainPartAsync(user)获取相关信息
+{
+	"CasVal": 0,
+	"HitCache": false,
+	"Data": {
+		"Investment": null,
+		"IsDisPlayInvest": false,
+		"CumulProfit": "544854.2500",  ## 总累积收益，需要落库
+		"StayWayTitle": "15笔交易在途",  ## 在途交易的数量
+		"StayWayType": 2,
+		"UserFlag": 1,
+		"YesterDayDate": null, // 这个就是日期，如果为null或者空那么取当前的日期
+		"FundUpdating": false,   ## false 表示基金信息已经更新结束，true 还在更新，不用写入表里面
+		"FundProfitValue": "0.0000", ##基金(权益资产)今日收益金额
+		"FundToOrYesDayProfit": false, // 基金资产今日是否需要更新，false 就是不需要
+		"GroupUpdating": false,
+		"GroupProfitValue": "0.0000",
+		"GroupToOrYesDayProfit": false,
+		"Updating": false,
+		"ProfitValue": "32.6400", ##今日收益金额
+		"ToOrYesDayProfit": true,  ## true 代表 总资产需要更新
+		"TotalValue": 4432043.15, ##总资产金额
+		"TotalBenifit": "76433.9400",
+		"TotalBenifit2": "76433.9400",  ##总持仓收益金额
+		"HqbValueString": "908478.23", ## 活期宝的金额的string表达
+		"HqbValue": 908478.23,    ## 活期宝的金额
+		"HqbToOrYesDayProfit": true,  ## true 活期宝今天收益率 需要更新
+		"HqbUpdating": false,      ##false代表更新完了，true代表真正更新
+		"HqbBenifit": "85681.0400",    ##活期宝累计收益金额
+		"HqbDailyBenifit": "32.6400",  ## 活期宝今日收益金额
+		"HqbDailyBenifitDate": "02-22",
+		"FundValue": 0,
+		"FundBenifit": 0,
+		"FundUnConfirmedAmount": 0,
+		"DqbValue": 0,
+		"FixedBagfdProfit": 0,
+		"ZsbValue": 0,
+		"ZsbBenifit": 0,
+		"TotalFdProfit": 66706.05,
+		"AdvancedAmountString": "30157.66",
+		"AdvancedAmount": 30157.66, ##垫资金额
+		"DebtsAmount": "0.0000",
+		"GDLCShares": 0,
+		"TotalFundAsset": "3553722.5800",  ##基金资产(权益资产)
+		"TotalFundProfit": "230799.4000",  ##基金（权益资产）收益金额
+		"DailyBenifit": null,
+		"DailyBenifitDate": null,
+		"BenifitType": 1,
+		"TotalGroupAsset": "0.0000",
+		"TotalGroupProfit": "216610.8800",
+		"OpenId": "9af81c64cd0b7906b53b43ffa508a99744b4055b",
+		"TipInfo": "",
+		"TotalPensionAsset": "0.0000",
+		"TotalPensionProfit": "0.0000",
+		"PensionToOrYesDayProfit": false,
+		"PensionUpdating": false,
+		"PensionProfitValue": "0.0000",
+		"TotalPensionBenifit": 0,
+		"TotalGdlcAsset": "0.0000",     
+		"TotalGdlcProfit": "228373.8100", 
+		"GdlcToOrYesDayProfit": false,
+		"GdlcUpdating": false,
+		"GdlcProfitValue": "0.0000",
+		"TotalGdlcBenifit": 0,
+		"CardOverView": null
+	},
+	"IsDowngrade": false,
+	"ErrorCode": 0,
+	"InnerErrorCode": null,
+	"ErrorMessage": [],
+	"FirstError": null,
+	"Message": null,
+	"DebugError": null,
+	"Success": true,
+	"NotCache": false,
+	"UserMigration": null,
+	"HasWrongToken": false
+}
+要在数据kuafu数据库建立一张表记录用户资产表(一个用户每日一条记录，日期+customer_no确定为主键，为了便于读取记录要把，用户的手机号和姓名也记录进去)
+调用接口，把数据更新到表里面。

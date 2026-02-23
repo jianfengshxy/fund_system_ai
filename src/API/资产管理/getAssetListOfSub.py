@@ -120,8 +120,20 @@ def get_asset_list_of_sub(user, sub_account_no, with_meta: bool = False):
         if with_meta:
             return [], {"token_error": token_error, "first_error": first_error_text}
         return []
+
+    # Extract summary info from Data
+    data_obj = response_data.get("Data", {})
+    summary_info = {
+        "TotalAssetValue": data_obj.get("TotalAssetValue"),
+        "TotalHoldProfit": data_obj.get("TotalHoldProfit"),
+        "TotalConstantProfit": data_obj.get("TotalConstantProfit"),
+        "TotalDailyProfit": data_obj.get("TotalDailyProfit"),
+        "TotalProfitValue": data_obj.get("TotalProfitValue"),
+        "SubAssetPreview": data_obj.get("SubAssetPreview", {})
+    }
+
     asset_details_list = []
-    for asset in response_data.get("Data", {}).get("AssetDetails", []):
+    for asset in data_obj.get("AssetDetails", []):
         asset_detail = AssetDetails()
         asset_detail.fund_name = asset.get("FundName")
         asset_detail.fund_code = asset.get("FundCode")
@@ -165,6 +177,10 @@ def get_asset_list_of_sub(user, sub_account_no, with_meta: bool = False):
         asset_details_list.append(asset_detail)
     logger.info(f"资产明细条数: {len(asset_details_list)}", extra=extra)
     if with_meta:
-        return asset_details_list, {"token_error": token_error, "first_error": first_error_text}
+        return asset_details_list, {
+            "token_error": token_error, 
+            "first_error": first_error_text,
+            "summary": summary_info
+        }
     return asset_details_list
    

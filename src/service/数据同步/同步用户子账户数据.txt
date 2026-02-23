@@ -1,0 +1,20 @@
+目的: 在用户总账户下，用户的资产还可以拆分成3种子账户
+1. 基础账户: 里面的资产没有进行分组，所以子账户的sub_account_no为空
+   get_fund_asset_list_of_base_v3 里面有所有基础账户 盈亏的信息
+
+2. 用户创建的子账户，所以子账户有sub_account_no和sub_account_name
+   getSubAssetMultList
+
+3. 用户创建的目标止盈的定投计划时创建的子账户，有sub_account_no，组合名称固定“目标止盈定投+基金代码”(比如“目标止盈定投008888”)，而且这个组合里面只有一个基金
+   查询定投计划里面 strategy_type = 0 的定投计划 然后找到 定投计划详情，再获取相应的信息 
+   
+
+  创建一张表记录用户各个子账户的资产情况（一个用户customer_no ,一个sub_account_no，和 日期
+
+  构成主键唯一）
+
+   然后封装一个服务去同步子账户的资产盈亏信息（这个可以参考user_asset_daily 记录的信息）
+
+   
+
+

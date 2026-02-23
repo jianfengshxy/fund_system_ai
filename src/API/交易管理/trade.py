@@ -392,6 +392,95 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
     # 按日期排序
     all_results.sort(key=lambda x: getattr(x, 'strike_start_date', "") or "0000-00-00", reverse=True)
     return all_results
+ 
+def get_trade_order_result(user: User, app_serial_no: str, business_type: str):
+    """
+    查询指定的交易的结果
+    Args:
+        user: User对象
+        app_serial_no: APP流水号(或busin_serial_no)
+        business_type: 业务类型 (默认 "22")
+    Returns:
+        dict: 交易结果详情
+    """
+    u = ensure_user_fresh(user)
+    host_header = f"tradeapilvs{u.index}.1234567.com.cn"
+    if not u.index:
+        host_header = "tradeapilvs5.1234567.com.cn"
+        
+    url = f"https://{host_header}/Trade/FundTrade/OrderResult"
+    
+    from urllib.parse import quote
+    headers = {
+        "Accept": "*/*",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json; charset=utf-8",
+        "Host": host_header,
+        # Referer 中包含中文 "品种A"，需要进行 URL 编码
+        "Referer": f"https://mpservice.com/fund4046e6539c4c47/release/pages/buy-fund/result?key=trad-result-params-tradeno&enterTag={quote('品种A')}",
+        "User-Agent": "okhttp/3.12.13",
+        "clientInfo": "ttjj-ZTE 7534N-Android-11",
+        "gtoken": "ceaf-4a997831b1b3b90849f585f98ca6f30e",
+        "mp_instance_id": "92",
+        "traceparent": "00-0000000046aa4cae0000019671a9326e-0000000000000000-01",
+        "tracestate": "pid=0xc14bf30,taskid=0x10c0d09"
+    }
+
+    # 构造 payload
+    payload = {
+        "ServerVersion": "6.7.1",
+        "parentAppSerialNo": "",
+        "CustomerNo": u.customer_no,
+        "PhoneType": "Android",
+        "businType": business_type,
+        "MobileKey": MOBILE_KEY,
+        "Version": "6.7.1",
+        "UserId": u.customer_no,
+        "appSerialNo": app_serial_no, 
+        "UToken": u.u_token,
+        "AppType": "ttjj",
+        "tradeModeType": "",
+        "CToken": u.c_token
+    }
+    
+    try:
+        # 记录请求信息以便调试
+        logger.info(f"get_trade_order_result 请求 URL: {url}")
+        logger.info(f"get_trade_order_result 请求 Headers: {json.dumps(headers, ensure_ascii=False)}")
+        logger.info(f"get_trade_order_result 请求 Payload: {json.dumps(payload, ensure_ascii=False)}")
+        
+        response = requests.post(url, headers=headers, json=payload, verify=False, timeout=10)
+        response.raise_for_status()
+        resp_json = response.json()
+        
+        # 检查是否需要刷新 Token
+        if not resp_json.get("Success", False): # 注意这里是 Success 而不是 Succeed
+            msg = resp_json.get("Message") or ""
+            code = resp_json.get("Code", 0)
+            # 兼容可能的错误码
+            if code == 1006 or "token" in msg.lower() or "设备" in msg:
+                logger.warning(f"检测到Token/设备ID不一致(Code={code}, Msg={msg})，尝试强制刷新Token并重试...")
+                u2 = ensure_user_fresh(user, force_refresh=True)
+                # 更新 Token 后重试
+                payload["UToken"] = u2.u_token
+                payload["CToken"] = u2.c_token
+                
+                # 更新 session adapter 中的 host (如果 index 变了)
+                host_header2 = f"tradeapilvs{u2.index}.1234567.com.cn"
+                if not u2.index:
+                    host_header2 = "tradeapilvs5.1234567.com.cn"
+                url2 = f"https://{host_header2}/Trade/FundTrade/OrderResult"
+                headers["Host"] = host_header2
+                response = requests.post(url2, headers=headers, json=payload, verify=False, timeout=10)
+                response.raise_for_status()
+                resp_json = response.json()
+                
+        return resp_json
+
+    except Exception as e:
+        logger.error(f"获取交易结果失败: {e}")
+        return {}
 
 def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Share]:
     """
@@ -552,26 +641,46 @@ if __name__ == "__main__":
     
     # 配置日志
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    # 打印用户信息
-    logger.info("开始获取交易列表")
-    logger.info(f"用户信息: customer_no={DEFAULT_USER.customer_no}")
-    
-    # 测试新接口 GetOneFundTranInfos
-    fund_code = "011707" # 测试基金
-    logger.info(f"测试 GetOneFundTranInfos 接口, 基金代码: {fund_code}")
-    
-    # 验证调用已按你要求改成 DateType=3 和 page_size=20
-    trades = get_one_fund_tran_infos(DEFAULT_USER, fund_code=fund_code, page_size=20, date_type="3")
-    
-    logger.info(f"date_type='3' 获取到 {len(trades)} 条交易记录")
-    if trades:
-        dates = []
-        for t in trades:
-            d = getattr(t, 'strike_start_date', None) or getattr(t, 'apply_work_day', None)
-            if d:
-                dates.append(d)
-        
-        if dates:
-            logger.info(f"日期范围: {min(dates)} 到 {max(dates)}")
 
+    # 测试遍历交易列表查询结果
+    logger.info("开始获取交易列表并逐个查询结果...")
+    
+    # 获取最近 20 条交易记录
+    trades = get_trades_list(DEFAULT_USER, page_size=20, date_type="1")
+    logger.info(f"获取到 {len(trades)} 条交易记录")
+    
+    for i, trade in enumerate(trades):
+        app_serial_no = getattr(trade, 'busin_serial_no', None) or getattr(trade, 'id', None)
+        if not app_serial_no:
+            logger.warning(f"第 {i+1} 条交易无流水号，跳过: {trade}")
+            continue
+            
+        # 确定 business_type
+        # 优先使用 business_code (数字编码), 其次尝试 business_type (可能是中文描述)
+        # 如果 business_type 是数字，也可以用
+        b_code = getattr(trade, 'business_code', None)
+        b_type = getattr(trade, 'business_type', None)
+        
+        # target_business_type = "22" # 默认值
+        
+        if b_code:
+            target_business_type = str(b_code)
+        elif b_type and str(b_type).isdigit():
+             target_business_type = str(b_type)
+        elif b_type:
+             target_business_type = str(b_type)
+        
+        product_name = getattr(trade, 'product_name', '未知')
+        logger.info(f"正在查询第 {i+1}/{len(trades)} 条交易结果: serial_no={app_serial_no}, type={target_business_type}, name={product_name}")
+        
+        try:
+            result = get_trade_order_result(DEFAULT_USER, app_serial_no, business_type=target_business_type)
+            # 简略打印结果
+            success = result.get("Success", False)
+            msg = result.get("ErrorMessage") or result.get("Message")
+            logger.info(f"查询结果: Success={success}, Msg={msg}")
+        except Exception as e:
+            logger.error(f"查询异常: {e}")
+            
+    logger.info("测试完成")
+    

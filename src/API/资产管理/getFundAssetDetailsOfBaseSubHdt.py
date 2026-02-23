@@ -1,5 +1,13 @@
 import logging
 import requests
+import sys
+import os
+
+# Add root dir to sys.path
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+
 from src.common.logger import get_logger
 from src.common.requests_session import session
 from src.common.constant import SERVER_VERSION, PHONE_TYPE, MOBILE_KEY
@@ -123,3 +131,28 @@ def get_fund_asset_details_of_base_sub_hdt(user, fund_code: str, with_meta: bool
         if with_meta:
             return None, {"token_error": False, "first_error": str(e)}
         return None
+
+if __name__ == "__main__":
+    from src.common.constant import DEFAULT_USER
+    
+    # Configure logging to stdout
+    logging.basicConfig(level=logging.INFO)
+    
+    # Test fund code: 华宝海外科技股票(QDII-LOF)C (017204)
+    test_fund_code = "017204"
+    print(f"Testing get_fund_asset_details_of_base_sub_hdt for fund {test_fund_code}...")
+    
+    result = get_fund_asset_details_of_base_sub_hdt(DEFAULT_USER, test_fund_code)
+    
+    if result:
+        print("\n" + "="*50)
+        print(f"Fund Name: {result.fund_name}")
+        print(f"Fund Code: {result.fund_code}")
+        print(f"Hold Profit: {result.hold_profit}")
+        print(f"Hold Profit Rate: {result.hold_profit_rate}%")
+        print(f"Total Asset Value: {result.asset_value}")
+        print(f"Total Profit: {result.profit_value}")
+        print(f"Available Vol: {result.available_vol}")
+        print("="*50 + "\n")
+    else:
+        print("Failed to get asset details.")

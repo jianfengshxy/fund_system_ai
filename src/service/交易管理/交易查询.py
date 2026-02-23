@@ -233,7 +233,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s') # 简化日志格式，只输出message
     logger = logging.getLogger("TradeQuery")
     
-    fund_code = "161226"
+    fund_code = "016531"
     
     # 1. 获取当前持仓资产详情
     from src.service.资产管理.get_fund_asset_detail import get_fund_total_asset_detail

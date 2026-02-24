@@ -366,7 +366,7 @@ resources:
         triggerConfig:
           payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "马丁格尔plus","total_budget": 1000000.0}'
           cronExpression: "CRON_TZ=Asia/Shanghai 4 55 14 * * 1-5"
-          enable: false
+          enable: true
 
   increase_all_fund_plans:
       component: ${vars.common.component}

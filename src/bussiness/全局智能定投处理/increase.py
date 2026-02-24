@@ -148,7 +148,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         for i, trade in enumerate(trades):
             logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
             try:
-                revoke_order(user, trade.busin_serial_no, trade.business_type, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+                revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
                 logger.info("     回撤成功")
             except Exception as e:
                 logger.error(f"     回撤失败: {e}")

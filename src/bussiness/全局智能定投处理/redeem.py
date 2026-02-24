@@ -206,7 +206,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             logger.info(f"【风控状态】活期宝占比{hqb_ratio_percent:.2f}% >= {HQB_RATIO_THRESHOLD}%阈值，启用波动率止盈模式。")
 
         #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于PROFIT_THRESHOLD_FOR_LOW_BALANCE，且投资次数小于5.0次，且当日估值增长率大于0.5%，立即卖出费率为0的份额
-        if estimated_profit_rate > PROFIT_THRESHOLD_FOR_LOW_BALANCE and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type == '000' and "QDII" not in fund_name and times < 5.0 and estimated_change > 0.5:
+        if estimated_profit_rate > 1.0 and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type == '000' and "QDII" not in fund_name and times < 5.0 and estimated_change > 0.5:
             logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:{PROFIT_THRESHOLD_FOR_LOW_BALANCE},投资次数:{times},估值增长率:{estimated_change}.")
             sell_0_fee_shares(user,sub_account_no,fund_code,shares)
             return True

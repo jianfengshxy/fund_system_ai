@@ -808,9 +808,9 @@ if __name__ == "__main__":
 
     # 8. Custom Portfolio
     p_custom = '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 5000.0,"total_budget": 200000.0},{"sub_account_name": "快速止盈", "amount": 30000.0,"total_budget": 1000000.0}]}'
-    invoke(add_new_custom, p_custom, "add_new_custom")
+    # invoke(add_new_custom, p_custom, "add_new_custom")
     # invoke(increase_custom, p_custom, "increase_custom")
-    # invoke(redeem_custom, p_custom, "redeem_custom")
+    invoke(redeem_custom, p_custom, "redeem_custom")
 
     # 9. Daily Task
     # p_daily = '{"account": "13918199137","password": "sWX15706","sub_account_name": "飞龙在天","total_budget": 1000000.0,"fund_type": "non_index"}'

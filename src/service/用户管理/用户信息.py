@@ -128,6 +128,15 @@ def invalidate_user_cache(account: str, password: str):
     with _cache_lock:
         _user_cache.pop(key, None)
 
+def update_user_cache(user):
+    """
+    主动更新用户缓存（内存+文件），通常在重新登录获取新token后调用
+    """
+    if not user:
+        return
+    _set_user_cache(user)
+    _save_file_cache(user)
+
 def get_user_all_info(account: str, password: str):
     cached = _get_cached_user(account, password)
     if cached is not None:

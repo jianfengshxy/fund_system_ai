@@ -10,7 +10,7 @@ if __name__ == "__main__":
         sys.path.insert(0, root_dir)
 
 from src.API._core.client import default_client
-from src.common.constant import PHONE_TYPE, SERVER_VERSION
+from src.common.constant import PHONE_TYPE, SERVER_VERSION, MOBILE_KEY
 from src.common.logger import get_logger
 from src.domain.user.User import User
 
@@ -113,10 +113,10 @@ def login_passport(user: User) -> User:
         'Host': f'tradeapilvs{user.index}.1234567.com.cn',
         'Accept': '*/*',
         'GTOKEN': 'ceaf-5ec1aeaf313a267434fbe314a1575707',
-        'clientInfo': 'ttjj-iPhone 11 Pro-iOS-iOS16.2',
+        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
         'MP-VERSION': '2.2.5',
         'Accept-Language': 'zh-Hans-CN;q=1',
-        'User-Agent': 'EMProjJijin/6.6.9 (iPhone; iOS 16.2; Scale/3.00)',
+        'User-Agent': 'okhttp/3.12.13',
         'Referer': 'https://mpservice.com/8543c2ac1ae2a93335b443a3f9f1028f/release/pages/index/index'
     }
     
@@ -124,12 +124,12 @@ def login_passport(user: User) -> User:
         'AppType': 'ttjj',
         'CToken': user.c_token,
         'CustomerNo': user.customer_no,
-        'MobileKey': '6A464B04-3930-4D99-AFAD-E40BE6727075',
-        'PhoneType': 'Iphone',
-        'ServerVersion': '6.6.9',
+        'MobileKey': MOBILE_KEY,
+        'PhoneType': PHONE_TYPE,
+        'ServerVersion': SERVER_VERSION,
         'UToken': user.u_token,
         'UserId': user.customer_no,
-        'Version': '6.6.9',
+        'Version': SERVER_VERSION,
         'ctoken': user.c_token,
         'userId': user.customer_no,
         'utoken': user.u_token

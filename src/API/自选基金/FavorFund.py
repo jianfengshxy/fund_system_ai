@@ -111,62 +111,102 @@ def add_to_favorites(
     logger = get_logger("FavorFund.add")
     extra = {"account": getattr(u, 'mobile_phone', None) or getattr(u, 'account', None), "action": "favor_add", "fund_code": fund_code}
     
-    try:
-        form_data = dict(params)
-        resp = session.post(url, headers=headers, data=form_data, verify=False, timeout=10)
-        if resp.status_code == 405:
-            resp = session.get(full_url, headers=headers, verify=False, timeout=10)
-        resp.raise_for_status()
-        json_data = resp.json()
+    max_retries = 1
+    for attempt in range(max_retries + 1):
+        params = [
+            ("MobileKey", MOBILE_KEY),
+            ("actionparam", actionparam),
+            ("appType", "ttjj"),
+            ("appVersion", SERVER_VERSION),
+            ("ctoken", u.c_token),
+            ("deviceid", MOBILE_KEY),
+            ("favorversion", favor_version),
+            ("passportctoken", getattr(u, "passport_ctoken", None)),
+            ("passportid", getattr(u, "passport_id", None)),
+            ("passportutoken", getattr(u, "passport_utoken", None)),
+            ("plat", "Iphone"),
+            ("product", "EFund"),
+            ("uid", u.customer_no),
+            ("utoken", u.u_token),
+            ("version", SERVER_VERSION),
+        ]
+        query = urllib.parse.urlencode(params)
+        full_url = f"{url}?{query}"
 
-        success = json_data.get("Success", json_data.get("success", False))
-        error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
-        first_error = (
-            json_data.get("FirstError")
-            or json_data.get("ErrMsg")
-            or json_data.get("ErrorMessage")
-            or json_data.get("Message")
-        )
-        data = json_data.get("Data", json_data.get("data"))
+        try:
+            form_data = dict(params)
+            resp = session.post(url, headers=headers, data=form_data, verify=False, timeout=10)
+            if resp.status_code == 405:
+                resp = session.get(full_url, headers=headers, verify=False, timeout=10)
+            resp.raise_for_status()
+            json_data = resp.json()
 
-        if not success and error_code == 63117 and isinstance(data, dict):
-            new_version = data.get("version") or data.get("Version")
-            if new_version and new_version != favor_version:
-                params_retry = list(params)
-                for i, (k, v) in enumerate(params_retry):
-                    if k == "favorversion":
-                        params_retry[i] = (k, new_version)
-                        break
-                form_retry = dict(params_retry)
-                resp2 = session.post(url, headers=headers, data=form_retry, verify=False, timeout=10)
-                if resp2.status_code == 405:
-                    query_retry = urllib.parse.urlencode(params_retry)
-                    resp2 = session.get(f"{url}?{query_retry}", headers=headers, verify=False, timeout=10)
-                resp2.raise_for_status()
-                json_data2 = resp2.json()
-                success = json_data2.get("Success", json_data2.get("success", False))
-                error_code = json_data2.get("ErrorCode", json_data2.get("errorCode"))
-                first_error = (
-                    json_data2.get("FirstError")
-                    or json_data2.get("ErrMsg")
-                    or json_data2.get("ErrorMessage")
-                    or json_data2.get("Message")
-                )
-                data = json_data2.get("Data", json_data2.get("data"))
+            success = json_data.get("Success", json_data.get("success", False))
+            error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
 
-        return ApiResponse(
-            Success=bool(success),
-            ErrorCode=error_code,
-            Data=data,
-            FirstError=first_error,
-            DebugError=json_data.get("hasWrongToken"),
-        )
-    except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}", extra=extra)
-        return ApiResponse(False, "REQUEST_ERROR", None, f"请求失败: {str(e)}", None)
-    except Exception as e:
-        logger.error(f"解析失败: {str(e)}", extra=extra)
-        return ApiResponse(False, "UNKNOWN_ERROR", None, f"未知错误: {str(e)}", None)
+            # Handle token expiration (ErrorCode 63120)
+            if not success and str(error_code) == "63120" and attempt < max_retries:
+                logger.warning(f"Token expired (63120), refreshing tokens and retrying... Attempt {attempt+1}/{max_retries}", extra=extra)
+                u_refreshed = _refresh_user_tokens(u)
+                if u_refreshed:
+                    u = u_refreshed
+                    # Also update favor_version if possible? No, version comes from get_favor_group
+                    continue 
+                else:
+                    logger.error("Failed to refresh tokens", extra=extra)
+
+            first_error = (
+                json_data.get("FirstError")
+                or json_data.get("ErrMsg")
+                or json_data.get("ErrorMessage")
+                or json_data.get("Message")
+            )
+            data = json_data.get("Data", json_data.get("data"))
+
+            if not success and str(error_code) == "63117" and isinstance(data, dict):
+                new_version = data.get("version") or data.get("Version")
+                if new_version and new_version != favor_version:
+                    favor_version = new_version # Update for next loop if needed, but we retry immediately here
+                    params_retry = list(params)
+                    for i, (k, v) in enumerate(params_retry):
+                        if k == "favorversion":
+                            params_retry[i] = (k, new_version)
+                            break
+                    form_retry = dict(params_retry)
+                    resp2 = session.post(url, headers=headers, data=form_retry, verify=False, timeout=10)
+                    if resp2.status_code == 405:
+                        query_retry = urllib.parse.urlencode(params_retry)
+                        resp2 = session.get(f"{url}?{query_retry}", headers=headers, verify=False, timeout=10)
+                    resp2.raise_for_status()
+                    json_data2 = resp2.json()
+                    success = json_data2.get("Success", json_data2.get("success", False))
+                    error_code = json_data2.get("ErrorCode", json_data2.get("errorCode"))
+                    first_error = (
+                        json_data2.get("FirstError")
+                        or json_data2.get("ErrMsg")
+                        or json_data2.get("ErrorMessage")
+                        or json_data2.get("Message")
+                    )
+                    data = json_data2.get("Data", json_data2.get("data"))
+
+            return ApiResponse(
+                Success=bool(success),
+                ErrorCode=error_code,
+                Data=data,
+                FirstError=first_error,
+                DebugError=json_data.get("hasWrongToken"),
+            )
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries:
+                 logger.warning(f"Request failed, retrying... Attempt {attempt+1}/{max_retries}: {str(e)}", extra=extra)
+                 continue
+            logger.error(f"请求失败: {str(e)}", extra=extra)
+            return ApiResponse(False, "REQUEST_ERROR", None, f"请求失败: {str(e)}", None)
+        except Exception as e:
+            logger.error(f"解析失败: {str(e)}", extra=extra)
+            return ApiResponse(False, "UNKNOWN_ERROR", None, f"未知错误: {str(e)}", None)
+    
+    return ApiResponse(False, "UNKNOWN_ERROR", None, "Max retries exceeded", None)
 
 
 def _build_headers_for_add() -> Dict[str, str]:
@@ -201,6 +241,8 @@ def _build_headers_for_getgroup() -> Dict[str, str]:
 
 def _refresh_user_tokens(user: User) -> Optional[User]:
     from src.API.登录接口.login import login, login_passport, inference_passport_for_bind
+    from src.service.用户管理.用户信息 import update_user_cache
+
     u0 = login(user.account, user.password)
     if not u0:
         return None
@@ -208,7 +250,12 @@ def _refresh_user_tokens(user: User) -> Optional[User]:
     if not u1:
         return None
     u2 = inference_passport_for_bind(u1)
-    return u2 or u1
+    
+    final_user = u2 or u1
+    if final_user:
+        update_user_cache(final_user)
+        
+    return final_user
 
 def _ensure_auth_ready(user: Optional[User]) -> User:
     u = _get_user(user)
@@ -244,42 +291,60 @@ def get_favor_group(
     url = f"https://{FUND_FAVOR_HOST}/favor/fcode/getgroup"
     headers = _build_headers_for_getgroup()
 
-    form = {
-        "ctoken": u.c_token,
-        "deviceid": MOBILE_KEY,
-        "favorversion": favor_version,
-        "fundtype": str(fund_type),
-        "groupids": group_ids,
-        "passportctoken": getattr(u, "passport_ctoken", None),
-        "passportid": getattr(u, "passport_id", None),
-        "passportutoken": getattr(u, "passport_utoken", None),
-        "plat": plat,
-        "product": "EFund",
-        "uid": u.customer_no,
-        "utoken": u.u_token,
-        "version": SERVER_VERSION,
-    }
+    max_retries = 1
+    
+    for attempt in range(max_retries + 1):
+        form = {
+            "ctoken": u.c_token,
+            "deviceid": MOBILE_KEY,
+            "favorversion": favor_version,
+            "fundtype": str(fund_type),
+            "groupids": group_ids,
+            "passportctoken": getattr(u, "passport_ctoken", None),
+            "passportid": getattr(u, "passport_id", None),
+            "passportutoken": getattr(u, "passport_utoken", None),
+            "plat": plat,
+            "product": "EFund",
+            "uid": u.customer_no,
+            "utoken": u.u_token,
+            "version": SERVER_VERSION,
+        }
 
-    logger = get_logger("FavorFund.getgroup")
-    extra = {"account": getattr(u, 'mobile_phone', None) or getattr(u, 'account', None), "action": "favor_getgroup"}
-    try:
-        resp = session.post(url, headers=headers, data=form, verify=False, timeout=10)
-        resp.raise_for_status()
-        json_data = resp.json()
+        logger = get_logger("FavorFund.getgroup")
+        extra = {"account": getattr(u, 'mobile_phone', None) or getattr(u, 'account', None), "action": "favor_getgroup"}
+        try:
+            resp = session.post(url, headers=headers, data=form, verify=False, timeout=10)
+            resp.raise_for_status()
+            json_data = resp.json()
 
-        success = json_data.get("Success", json_data.get("success", False))
-        error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
-        first_error = json_data.get("FirstError") or json_data.get("ErrMsg") or json_data.get("ErrorMessage") or json_data.get("Message")
-        data = json_data.get("Data", json_data.get("data"))
+            success = json_data.get("Success", json_data.get("success", False))
+            error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
+            
+            # Handle token expiration (ErrorCode 63120)
+            if not success and str(error_code) == "63120" and attempt < max_retries:
+                logger.warning(f"Token expired (63120), refreshing tokens and retrying... Attempt {attempt+1}/{max_retries}", extra=extra)
+                u_refreshed = _refresh_user_tokens(u)
+                if u_refreshed:
+                    u = u_refreshed
+                    continue # Retry with new user tokens
+                else:
+                    logger.error("Failed to refresh tokens", extra=extra)
 
-        
+            if not success:
+                logger.warning(f"get_favor_group (singular) failed: {json_data}", extra=extra)
 
-        return ApiResponse(bool(success), error_code, data, first_error, json_data.get("hasWrongToken"))
-    except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}", extra=extra)
-        return ApiResponse(False, "REQUEST_ERROR", None, f"请求失败: {str(e)}", None)
-    except Exception as e:
-        logger.error(f"解析失败: {str(e)}", extra=extra)
+            first_error = json_data.get("FirstError") or json_data.get("ErrMsg") or json_data.get("ErrorMessage") or json_data.get("Message")
+            data = json_data.get("Data", json_data.get("data"))
+
+            return ApiResponse(bool(success), error_code, data, first_error, json_data.get("hasWrongToken"))
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries:
+                 logger.warning(f"Request failed, retrying... Attempt {attempt+1}/{max_retries}: {str(e)}", extra=extra)
+                 continue
+            logger.error(f"请求失败: {str(e)}", extra=extra)
+            return ApiResponse(False, "REQUEST_ERROR", None, f"请求失败: {str(e)}", None)
+        except Exception as e:
+            logger.error(f"解析失败: {str(e)}", extra=extra)
     return ApiResponse(False, "UNKNOWN_ERROR", None, f"未知错误: {str(e)}", None)
 
 
@@ -298,80 +363,96 @@ def remove_from_favorites(
     except Exception:
         current_version = None
     favor_version = current_version or "-2000"
-    params = [
-        ("MobileKey", MOBILE_KEY),
-        ("actionparam", actionparam),
-        ("appType", "ttjj"),
-        ("appVersion", SERVER_VERSION),
-        ("ctoken", u.c_token),
-        ("deviceid", MOBILE_KEY),
-        ("favorversion", favor_version),
-        ("passportctoken", u.passport_ctoken),
-        ("passportid", u.passport_id),
-        ("passportutoken", u.passport_utoken),
-        ("plat", "Iphone"),
-        ("product", "EFund"),
-        ("uid", u.customer_no),
-        ("utoken", u.u_token),
-        ("version", SERVER_VERSION),
-    ]
     headers = _build_headers_for_add()
     endpoints = [
         f"https://{FUND_FAVOR_HOST}/favor/fcode/del",
     ]
     last_resp = None
+    
+    max_retries = 1
     for url in endpoints:
-        try:
-            form_data = dict(params)
-            resp = session.post(url, headers=headers, data=form_data, verify=False, timeout=10)
-            if resp.status_code == 405:
-                query = urllib.parse.urlencode(params)
-                resp = session.get(f"{url}?{query}", headers=headers, verify=False, timeout=10)
-            resp.raise_for_status()
-            json_data = resp.json()
-            success = json_data.get("Success", json_data.get("success", False))
-            error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
-            first_error = (
-                json_data.get("FirstError")
-                or json_data.get("ErrMsg")
-                or json_data.get("ErrorMessage")
-                or json_data.get("Message")
-            )
-            data = json_data.get("Data", json_data.get("data"))
-            last_resp = ApiResponse(bool(success), error_code, data, first_error, json_data.get("hasWrongToken"))
-            if success:
-                return last_resp
-            if not success and error_code == 63117 and isinstance(data, dict):
-                new_version = data.get("version") or data.get("Version")
-                if new_version and new_version != favor_version:
-                    params_retry = list(params)
-                    for i, (k, v) in enumerate(params_retry):
-                        if k == "favorversion":
-                            params_retry[i] = (k, new_version)
-                            break
-                    form_retry = dict(params_retry)
-                    resp2 = session.post(url, headers=headers, data=form_retry, verify=False, timeout=10)
-                    if resp2.status_code == 405:
-                        query_retry = urllib.parse.urlencode(params_retry)
-                        resp2 = session.get(f"{url}?{query_retry}", headers=headers, verify=False, timeout=10)
-                    resp2.raise_for_status()
-                    json_data2 = resp2.json()
-                    success2 = json_data2.get("Success", json_data2.get("success", False))
-                    error_code2 = json_data2.get("ErrorCode", json_data2.get("errorCode"))
-                    first_error2 = (
-                        json_data2.get("FirstError")
-                        or json_data2.get("ErrMsg")
-                        or json_data2.get("ErrorMessage")
-                        or json_data2.get("Message")
-                    )
-                    data2 = json_data2.get("Data", json_data2.get("data"))
-                    last_resp = ApiResponse(bool(success2), error_code2, data2, first_error2, json_data2.get("hasWrongToken"))
-                    if success2:
-                        return last_resp
-        except requests.exceptions.RequestException:
-            continue
-        except Exception:
-            continue
+        for attempt in range(max_retries + 1):
+            params = [
+                ("MobileKey", MOBILE_KEY),
+                ("actionparam", actionparam),
+                ("appType", "ttjj"),
+                ("appVersion", SERVER_VERSION),
+                ("ctoken", u.c_token),
+                ("deviceid", MOBILE_KEY),
+                ("favorversion", favor_version),
+                ("passportctoken", getattr(u, "passport_ctoken", None)),
+                ("passportid", getattr(u, "passport_id", None)),
+                ("passportutoken", getattr(u, "passport_utoken", None)),
+                ("plat", "Iphone"),
+                ("product", "EFund"),
+                ("uid", u.customer_no),
+                ("utoken", u.u_token),
+                ("version", SERVER_VERSION),
+            ]
+            
+            try:
+                form_data = dict(params)
+                resp = session.post(url, headers=headers, data=form_data, verify=False, timeout=10)
+                if resp.status_code == 405:
+                    query = urllib.parse.urlencode(params)
+                    resp = session.get(f"{url}?{query}", headers=headers, verify=False, timeout=10)
+                resp.raise_for_status()
+                json_data = resp.json()
+                success = json_data.get("Success", json_data.get("success", False))
+                error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
+                
+                # Handle token expiration (ErrorCode 63120)
+                if not success and str(error_code) == "63120" and attempt < max_retries:
+                    u_refreshed = _refresh_user_tokens(u)
+                    if u_refreshed:
+                        u = u_refreshed
+                        continue
+                
+                first_error = (
+                    json_data.get("FirstError")
+                    or json_data.get("ErrMsg")
+                    or json_data.get("ErrorMessage")
+                    or json_data.get("Message")
+                )
+                data = json_data.get("Data", json_data.get("data"))
+                last_resp = ApiResponse(bool(success), error_code, data, first_error, json_data.get("hasWrongToken"))
+                if success:
+                    return last_resp
+                if not success and str(error_code) == "63117" and isinstance(data, dict):
+                    new_version = data.get("version") or data.get("Version")
+                    if new_version and new_version != favor_version:
+                        favor_version = new_version # Update for next retry if needed
+                        params_retry = list(params)
+                        for i, (k, v) in enumerate(params_retry):
+                            if k == "favorversion":
+                                params_retry[i] = (k, new_version)
+                                break
+                        form_retry = dict(params_retry)
+                        resp2 = session.post(url, headers=headers, data=form_retry, verify=False, timeout=10)
+                        if resp2.status_code == 405:
+                            query_retry = urllib.parse.urlencode(params_retry)
+                            resp2 = session.get(f"{url}?{query_retry}", headers=headers, verify=False, timeout=10)
+                        resp2.raise_for_status()
+                        json_data2 = resp2.json()
+                        success2 = json_data2.get("Success", json_data2.get("success", False))
+                        error_code2 = json_data2.get("ErrorCode", json_data2.get("errorCode"))
+                        first_error2 = (
+                            json_data2.get("FirstError")
+                            or json_data2.get("ErrMsg")
+                            or json_data2.get("ErrorMessage")
+                            or json_data2.get("Message")
+                        )
+                        data2 = json_data2.get("Data", json_data2.get("data"))
+                        last_resp = ApiResponse(bool(success2), error_code2, data2, first_error2, json_data2.get("hasWrongToken"))
+                        if success2:
+                            return last_resp
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries:
+                    continue
+                last_resp = ApiResponse(False, "REQUEST_ERROR", None, str(e), None)
+            except Exception as e:
+                last_resp = ApiResponse(False, "UNKNOWN_ERROR", None, str(e), None)
+                
     return last_resp or ApiResponse(False, "UNKNOWN_ERROR", None, "未知错误", None)
 
 
@@ -436,37 +517,64 @@ def get_favor_groups(
     u = _ensure_auth_ready(user)
     url = f"https://{FUND_FAVOR_HOST}/favor/group/get"
     headers = _build_headers_for_getgroup()
-    form = {
-        "ctoken": u.c_token,
-        "deviceid": MOBILE_KEY,
-        "favorversion": favor_version,
-        "passportctoken": getattr(u, "passport_ctoken", None),
-        "passportid": getattr(u, "passport_id", None),
-        "passportutoken": getattr(u, "passport_utoken", None),
-        "plat": plat,
-        "product": "EFund",
-        "uid": u.customer_no,
-        "utoken": u.u_token,
-        "version": SERVER_VERSION,
-    }
-    logger = get_logger("FavorFund.group_get")
-    extra = {"account": getattr(u, 'mobile_phone', None) or getattr(u, 'account', None), "action": "favor_group_get"}
-    try:
-        resp = session.post(url, headers=headers, data=form, verify=False, timeout=10)
-        resp.raise_for_status()
-        json_data = resp.json()
-        success = json_data.get("Success", json_data.get("success", False))
-        error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
-        first_error = json_data.get("FirstError") or json_data.get("ErrMsg") or json_data.get("ErrorMessage") or json_data.get("Message")
-        data = json_data.get("Data", json_data.get("data"))
+
+    max_retries = 1
+    
+    for attempt in range(max_retries + 1):
+        form = {
+            "ctoken": u.c_token,
+            "deviceid": MOBILE_KEY,
+            "favorversion": favor_version,
+            "passportctoken": getattr(u, "passport_ctoken", None),
+            "passportid": getattr(u, "passport_id", None),
+            "passportutoken": getattr(u, "passport_utoken", None),
+            "plat": plat,
+            "product": "EFund",
+            "uid": u.customer_no,
+            "utoken": u.u_token,
+            "version": SERVER_VERSION,
+        }
         
-        return ApiResponse(bool(success), error_code, data, first_error, json_data.get("hasWrongToken"))
-    except requests.exceptions.RequestException as e:
-        logger.error(f"请求失败: {str(e)}", extra=extra)
-        return ApiResponse(False, "REQUEST_ERROR", None, f"请求失败: {str(e)}", None)
-    except Exception as e:
-        logger.error(f"解析失败: {str(e)}", extra=extra)
-        return ApiResponse(False, "UNKNOWN_ERROR", None, f"未知错误: {str(e)}", None)
+        logger = get_logger("FavorFund.group_get")
+        extra = {"account": getattr(u, 'mobile_phone', None) or getattr(u, 'account', None), "action": "favor_group_get"}
+        
+        try:
+            resp = session.post(url, headers=headers, data=form, verify=False, timeout=10)
+            resp.raise_for_status()
+            json_data = resp.json()
+            
+            success = json_data.get("Success", json_data.get("success", False))
+            error_code = json_data.get("ErrorCode", json_data.get("errorCode"))
+            
+            # Handle token expiration (ErrorCode 63120)
+            if not success and str(error_code) == "63120" and attempt < max_retries:
+                logger.warning(f"Token expired (63120), refreshing tokens and retrying... Attempt {attempt+1}/{max_retries}", extra=extra)
+                u_refreshed = _refresh_user_tokens(u)
+                if u_refreshed:
+                    u = u_refreshed
+                    continue # Retry with new user tokens
+                else:
+                    logger.error("Failed to refresh tokens", extra=extra)
+
+            if not success:
+                logger.warning(f"get_favor_groups (plural) failed: {json_data}", extra=extra)
+
+            first_error = json_data.get("FirstError") or json_data.get("ErrMsg") or json_data.get("ErrorMessage") or json_data.get("Message")
+            data = json_data.get("Data", json_data.get("data"))
+            
+            return ApiResponse(bool(success), error_code, data, first_error, json_data.get("hasWrongToken"))
+            
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries:
+                 logger.warning(f"Request failed, retrying... Attempt {attempt+1}/{max_retries}: {str(e)}", extra=extra)
+                 continue
+            logger.error(f"请求失败: {str(e)}", extra=extra)
+            return ApiResponse(False, "REQUEST_ERROR", None, f"请求失败: {str(e)}", None)
+        except Exception as e:
+            logger.error(f"解析失败: {str(e)}", extra=extra)
+            return ApiResponse(False, "UNKNOWN_ERROR", None, f"未知错误: {str(e)}", None)
+            
+    return ApiResponse(False, "UNKNOWN_ERROR", None, "Max retries exceeded", None)
 
 if __name__ == "__main__":
     # 演示：打印指定分组内的全部基金（结构化格式）

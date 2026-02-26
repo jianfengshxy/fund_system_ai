@@ -199,6 +199,12 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
             hqb_ratio_percent = 0.0
             logger.info(f"银行卡余额：{CurrentRealBalance}, 强制活期宝占比: 0.0%")
         
+        # 新增逻辑：指数型基金000，且不含QDII，且100日排名>90（极高位置），卖出0费率份额
+        if fund_type == '000' and "QDII" not in fund_name and rank_100 is not None and rank_100 > 90:
+            logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：指数基金(000)且非QDII，100日排名{rank_100}>90(极高位置)，赎回0费率份额")
+            sell_0_fee_shares(user, sub_account_no, fund_code, shares)
+            return True
+
         # 添加风控状态日志
         if hqb_ratio_percent < HQB_RATIO_THRESHOLD:
             logger.info(f"【风控状态】活期宝占比{hqb_ratio_percent:.2f}% < {HQB_RATIO_THRESHOLD}%阈值，强制启用{PROFIT_THRESHOLD_FOR_LOW_BALANCE}%止盈模式。")

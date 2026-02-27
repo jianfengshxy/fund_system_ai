@@ -60,7 +60,7 @@ vars:
   # 自定义组合共享 payload（避免三处重复维护）
   custom_portfolio_redeem_payload: '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 10000.0},{"sub_account_name": "快速止盈", "amount": 30000.0}]}'
   custom_portfolio_add_payload: '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 10000.0, "total_budget": 200000.0},{"sub_account_name": "快速止盈", "amount": 30000.0, "total_budget": 1000000.0}]}'
-  custom_portfolio_increase_payload: '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 10000.0},{"sub_account_name": "快速止盈", "amount": 10000.0}]}'
+  custom_portfolio_increase_payload: '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 10000.0},{"sub_account_name": "快速止盈", "amount": 20000.0}]}'
 
   # 定投固定比率止盈配置
   fixed_ratio_redeem_payload: '{"account": "13918199137", "password": "sWX15706", "fundcodelist": [{"fundcode": "012863", "stoprate": "2.0"}, {"fundcode": "008327", "stoprate": "2.0"}, {"fundcode": "012729", "stoprate": "2.0"}, {"fundcode": "020274", "stoprate": "2.0"}, {"fundcode": "004433", "stoprate": "2.0"}, {"fundcode": "011707", "stoprate": "5.0"}, {"fundcode": "021740", "stoprate": "2.0"}, {"fundcode": "020412", "stoprate": "2.0"}, {"fundcode": "025857", "stoprate": "2.0"}, {"fundcode": "024195", "stoprate": "2.0"}, {"fundcode": "008888", "stoprate": "2.0"}, {"fundcode": "011103", "stoprate": "2.0"}]}'

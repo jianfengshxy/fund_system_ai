@@ -1,0 +1,7 @@
+目的: 同步总体账户每个基金的资产和收益情况(不用分组，需要知道所有策略综合起来的总体效率)
+1.调用：get_fund_asset_details_of_base_sub_hdt
+    获取总体账户下每个基金的情况，数据表结构参考user_sub_account_fund_asset_daily 的
+	字段：
+
+ 新建一张表同步总账户下每个基金的资产和和收益情况，同步数据到表中，(因为是总账户的统计情况，所有没有sub_account_no和sub_account_name)
+所以记录总体记录就可以了

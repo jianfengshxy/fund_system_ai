@@ -1,0 +1,74 @@
+目的: 统计每个子账户下每个基金的资产变化(每一个子账户都代表一个策略，后面要统计资金使用率和收益，最后分析策略的效率)
+1. 参考接口get_asset_list_of_sub 可以获取每个子账户下所有基金和资产以及相关信息
+   数据结构如下：
+   {
+				"FundName": "华富永鑫灵活配置混合C",
+				"FundCode": "001467",
+				"MjFundCode": "001467",
+				"FundType": "4",
+				"EnableSg": true,
+				"EnableRg": false,
+				"IsGDLC": false,
+				"FundDerivativeTypeList": [
+					"0"
+				],
+				"UnifiedType": "HH",
+				"FinancialType": "",
+				"FundNav": "2.3524",
+				"Navdate": "02-27",
+				"UnitAccrual": "0.0000",
+				"UnConfirmedBuyShare": "0.00",
+				"Tips": [],
+				"HoldProfit": "881.92",
+				"NoFormatHoldProfit": 881.92,
+				"HoldProfitRate": "1.26%",
+				"ConstantProfit": "881.92",
+				"NoFormatConstantProfit": 881.92,
+				"ConstantProfitRate": "1.26%",
+				"ProfitValue": "881.92",
+				"NoFormatProfitValue": 881.92,
+				"ToOrYesDayProfit": false,
+				"DailyProfit": "0.00",
+				"NoFormatDailyProfit": 0,
+				"AssetValue": "70879.15",
+				"NoFormatAssetValue": 70879.15,
+				"AvailableVol": 30130.57,
+				"IncomeType": "",
+				"ModelType": 2,
+				"OnWayTransactionDesc": null,
+				"OnWayTransactionCount": 0,
+				"FundNoShareTip": null,
+				"RiskLevel": 0,
+				"LastProfit": "--"
+			},
+    
+  创建一张表记录用户各个子账户的基金的资产情况（一个用户customer_no ,一个sub_account_no，一个fund_code 和 日期Navdate
+
+  构成主键唯一）,这张表记录号上面数据结构的信息。
+  				"FundName": "华富永鑫灵活配置混合C",
+				"FundCode": "001467",
+				"MjFundCode": "001467",
+				"FundType": "4",
+				"UnifiedType": "HH",
+				"FinancialType": "",
+				"FundNav": "2.3524",
+				"Navdate": "02-27",//这里代码要处理好加上年，yyyy-mm-dd
+				"UnitAccrual": "0.0000",
+				"UnConfirmedBuyShare": "0.00",
+				"HoldProfit": "881.92",
+				"NoFormatHoldProfit": 881.92,
+				"HoldProfitRate": "1.26%", // 这里只需要记录1.26 
+				"ConstantProfit": "881.92",
+				"NoFormatConstantProfit": 881.92,
+				"ConstantProfitRate": "1.26%", // 这里只需要记录1.26 
+				"ProfitValue": "881.92",
+				"NoFormatProfitValue": 881.92,
+				"ToOrYesDayProfit": false,
+				"DailyProfit": "0.00",
+				"NoFormatDailyProfit": 0,
+				"AssetValue": "70879.15",
+				"NoFormatAssetValue": 70879.15,
+				"AvailableVol": 30130.57,
+				"ModelType": 2,
+				"OnWayTransactionCount": 0, 
+   然后封装一个服务去同步子账户的每个基金的盈亏信息

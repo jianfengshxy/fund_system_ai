@@ -65,6 +65,8 @@ from src.bussiness.黄金异次元.redeem import redeem as gold_dimension_redeem
 from src.service.数据同步.sync_user_asset import sync_user_daily_asset
 from src.service.数据同步.sync_user_trade import sync_user_weekly_trades
 from src.service.数据同步.sync_sub_account_asset import sync_sub_account_daily_asset
+from src.service.数据同步.sync_sub_account_fund_asset import sync_sub_account_fund_asset_daily
+from src.service.数据同步.sync_total_account_fund_asset import sync_total_account_fund_asset_daily
 # 初始化日志记录器
 from src.common.logger import get_logger
 logger = get_logger(__name__)
@@ -309,6 +311,8 @@ def daily_task(event, context):
         sync_user_daily_asset(DEFAULT_USER)
         sync_user_weekly_trades(DEFAULT_USER)
         sync_sub_account_daily_asset(DEFAULT_USER)
+        sync_sub_account_fund_asset_daily(DEFAULT_USER)
+        sync_total_account_fund_asset_daily(DEFAULT_USER)
     except Exception as e:
         logger.error(f"同步用户资产数据失败: {e}")
         

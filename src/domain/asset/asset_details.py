@@ -13,6 +13,8 @@ class AssetDetails:
         self.available_vol = None
         self.on_way_transaction_count = None
         self.asset_rank = 0.0
+        self.fund_nav = None
+        self.nav_date = None
         
     def to_dict(self):
         return {
@@ -29,6 +31,8 @@ class AssetDetails:
             'available_vol': self.available_vol,
             'on_way_transaction_count': self.on_way_transaction_count,
             'asset_rank': self.asset_rank,
+            'fund_nav': self.fund_nav,
+            'nav_date': self.nav_date,
             'estimated_change': getattr(self, 'estimated_change', 0.0) # 确保 estimated_change 存在
         }
 
@@ -46,5 +50,7 @@ class AssetDetails:
             asset_value={self.asset_value},
             available_vol={self.available_vol},
             on_way_transaction_count={self.on_way_transaction_count},
-            asset_rank = {self.asset_rank}
+            asset_rank = {self.asset_rank},
+            fund_nav={self.fund_nav},
+            nav_date={self.nav_date}
         )"""

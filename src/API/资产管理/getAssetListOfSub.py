@@ -138,6 +138,8 @@ def get_asset_list_of_sub(user, sub_account_no, with_meta: bool = False):
         asset_detail.fund_name = asset.get("FundName")
         asset_detail.fund_code = asset.get("FundCode")
         asset_detail.fund_type = asset.get("FundType")
+        asset_detail.fund_nav = asset.get("FundNav")
+        asset_detail.nav_date = asset.get("Navdate")
         hold_profit_str = asset.get("HoldProfit", 0)
         if hold_profit_str in ("--", "", None):
             asset_detail.hold_profit = 0.0

@@ -119,6 +119,10 @@ def get_fund_asset_details_of_base_sub_hdt(user, fund_code: str, with_meta: bool
         # AvailableShare / AvailableVol
         asset_detail.available_vol = clean_num(data.get("AvailableShare"))
         
+        # FundNav and NavDate
+        asset_detail.fund_nav = clean_num(data.get("UnitNav") or data.get("FundNav"))
+        asset_detail.nav_date = data.get("NavDate") or data.get("FDate")
+
         # OnWayTransactionCount is not explicitly in the top level Data, maybe 0 default
         asset_detail.on_way_transaction_count = 0 
         

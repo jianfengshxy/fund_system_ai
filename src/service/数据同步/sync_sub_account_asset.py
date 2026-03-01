@@ -18,6 +18,7 @@ from src.API.资产管理.getFundAssetListOfBaseV3 import get_fund_asset_list_of
 from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
 from src.API.组合管理.SubAccountMrg import getSubAssetMultList
 from src.service.定投管理.定投查询.定投查询 import get_target_profit_plan_details
+from src.API.工具.utils import get_fund_system_time_trade
 from src.common.constant import DEFAULT_USER
 
 logger = get_logger("SyncSubAccountAsset")
@@ -64,6 +65,12 @@ def sync_sub_account_daily_asset(user: User):
     3. Target Profit Plans
     """
     try:
+        # Check if today is a trading day
+        trade_status = get_fund_system_time_trade(user)
+        if not trade_status.Success or not trade_status.Data.get("IsTrade"):
+            logger.info("Current day is not a trading day, skipping sync.")
+            return
+
         # 1. Ensure table exists
         create_table_if_not_exists()
         

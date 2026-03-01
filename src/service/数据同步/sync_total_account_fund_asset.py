@@ -17,6 +17,7 @@ from src.API.资产管理.getFundAssetDetailsOfBaseSubHdt import get_fund_asset_
 from src.API.资产管理.getFundAssetListOfBaseV3 import get_fund_asset_list_of_base_v3
 from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
 from src.API.组合管理.SubAccountMrg import getSubAssetMultList
+from src.API.工具.utils import get_fund_system_time_trade
 from src.common.constant import DEFAULT_USER
 
 logger = get_logger("SyncTotalAccountFundAsset")
@@ -133,6 +134,12 @@ def sync_total_account_fund_asset_daily(user: User):
     Iterates all funds and calls get_fund_asset_details_of_base_sub_hdt for each.
     """
     try:
+        # Check if today is a trading day
+        trade_status = get_fund_system_time_trade(user)
+        if not trade_status.Success or not trade_status.Data.get("IsTrade"):
+            logger.info("Current day is not a trading day, skipping sync.")
+            return
+
         # 1. Ensure table exists
         create_table_if_not_exists()
         

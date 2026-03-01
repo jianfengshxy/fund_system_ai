@@ -76,6 +76,12 @@ def sync_user_weekly_trades(user: User):
     Sync user weekly trade records to database
     """
     try:
+        # Check if today is a trading day
+        trade_status = get_fund_system_time_trade(user)
+        if not trade_status.Success or not trade_status.Data.get("IsTrade"):
+            logger.info("Current day is not a trading day, skipping sync.")
+            return
+
         # 1. Ensure table exists
         create_table_if_not_exists()
 

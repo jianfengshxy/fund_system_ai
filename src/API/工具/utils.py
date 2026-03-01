@@ -1,4 +1,5 @@
 from typing import Any, Dict
+from datetime import datetime
 
 if __name__ == "__main__":
     import os
@@ -77,11 +78,50 @@ def get_fund_system_time_trade(user) -> ApiResponse[Dict[str, Any]]:
         )
 
 
-__all__ = ["get_fund_system_time_trade"]
+def is_long_holiday(user) -> bool:
+    """
+    判断是否为长假期（距离下一个交易日超过3天）
+    逻辑：LastTwoTradeDays 里面的第一个交易日 和 SystemTime 的间隔时间大于3天
+    """
+    resp = get_fund_system_time_trade(user)
+    if not resp.Success or not resp.Data:
+        return False
+    
+    data = resp.Data
+    system_time_str = data.get("SystemTime")
+    last_two_trade_days = data.get("LastTwoTradeDays")
+    
+    if not system_time_str or not last_two_trade_days or len(last_two_trade_days) < 1:
+        return False
+        
+    try:
+        # Parse system time
+        # Format: "2026-03-01 22:55:05"
+        system_dt = datetime.strptime(system_time_str, "%Y-%m-%d %H:%M:%S")
+        
+        # Parse next trade day
+        # Format: "2026-03-02"
+        next_trade_str = last_two_trade_days[0].strip()
+        next_trade_dt = datetime.strptime(next_trade_str, "%Y-%m-%d")
+        
+        # Calculate difference in days
+        diff = next_trade_dt.date() - system_dt.date()
+        
+        # Return True if interval is greater than 3 days
+        return diff.days > 3
+        
+    except Exception as e:
+        logger = get_logger("is_long_holiday")
+        logger.error(f"Error checking holiday status: {e}")
+        return False
+
+
+__all__ = ["get_fund_system_time_trade", "is_long_holiday"]
 
 if __name__ == "__main__":
     ret = get_fund_system_time_trade(DEFAULT_USER)
     if ret.Success:
         print(ret.Data)  # {'SystemTime': '...', 'IsTrade': True/False, 'LastTwoTradeDays': [...]}
+        print(f"Is Long Holiday: {is_long_holiday(DEFAULT_USER)}")
     else:
         print(ret.FirstError)

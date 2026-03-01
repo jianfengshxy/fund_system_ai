@@ -5,6 +5,7 @@ from typing import Optional
 from src.domain.user.User import User
 from src.domain.trade.TradeResult import TradeResult
 from src.service.公共服务.trade_time_service import is_trading_time
+from src.API.工具.utils import is_long_holiday
 from src.API.交易管理.buyMrg import commit_order as api_commit_order
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.common.errors import RetriableError, ValidationError, TradePasswordError
@@ -21,6 +22,11 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
     # 1) 交易时间判断
     if not is_trading_time(user):
         logger.info(f"{user.customer_name} 当前非交易时间，跳过提交订单", extra=extra)
+        return None
+
+    # 1.1) 长假期判断：如果是长假期前（距离下一个交易日超过3天），暂停买入，避免持仓时间过长不可控
+    if is_long_holiday(user):
+        logger.info(f"{user.customer_name} 当前处于长假期前夕（距下一交易日>3天），暂停买入以规避长假风险", extra=extra)
         return None
 
     # 2) 获取银行卡信息（下单所需 + 余额保护）

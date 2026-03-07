@@ -304,9 +304,9 @@ def redeem_all_fund_plans(event, context):
 
 #每日任务
 def daily_task(event, context):
-    # save_fund_investment_indicators(DEFAULT_USER)
-    # add_frequent_funds_to_fast_profit_group(user=DEFAULT_USER, group_name="快速止盈")
-    # remove_infrequent_funds_from_group(user=DEFAULT_USER, group_name="快速止盈")
+    save_fund_investment_indicators(DEFAULT_USER)
+    add_frequent_funds_to_fast_profit_group(user=DEFAULT_USER, group_name="快速止盈")
+    remove_infrequent_funds_from_group(user=DEFAULT_USER, group_name="快速止盈")
     try:
         sync_user_daily_asset(DEFAULT_USER)
         sync_user_weekly_trades(DEFAULT_USER)

@@ -46,7 +46,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)    
 
-def increase(user: User, plan_detail: FundPlanDetail) -> bool:
+from typing import Optional
+from src.domain.asset.asset_details import AssetDetails
+
+def increase(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Optional[AssetDetails] = None) -> bool:
     # 顶部导入片段
     import logging
     logger.info(f"========== 开始执行加仓算法 ==========")
@@ -126,7 +129,10 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     # 如果 hqb_risk_passed 为 False，说明 占比 < 10%
     
     try:
-        asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
+        if pre_fetched_asset_detail is not None:
+             asset_detail = pre_fetched_asset_detail
+        else:
+             asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
     except Exception as e:
         logger.error(f"{fund_name}({fund_code}) 获取资产详情失败: {e}")
         return False
@@ -508,9 +514,134 @@ def increase_all_fund_plans(user: User):
         logger.error(f"获取基金计划详情失败: {e}")
         return
     
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [executor.submit(increase, user, plan_detail) 
-                  for plan_detail in fund_plan_details]
+    # 1. 计划过滤：定投日 OR 存在待回撤交易（补单/异常检测）
+    # 获取所有待回撤交易（用于捕获非定投日但有延迟交易的情况）
+    pending_revocable_trades_map = {}
+    try:
+        # date_type="1" (近1月) 覆盖补单场景
+        all_revocable_trades = get_trades_list(user, status="7", date_type="1")
+        for trade in all_revocable_trades:
+            if trade.fund_code and trade.sub_account_no:
+                # 唯一标识：组合账号 + 基金代码
+                key = (trade.sub_account_no, trade.fund_code)
+                if key not in pending_revocable_trades_map:
+                    pending_revocable_trades_map[key] = []
+                pending_revocable_trades_map[key].append(trade)
+                
+        logger.info(f"全局检测：发现 {len(pending_revocable_trades_map)} 个(组合,基金)存在待回撤交易 (用于补单风控)")
+    except Exception as e:
+        logger.warning(f"全局检测待回撤交易失败（将仅处理今日定投计划）: {e}")
+
+    current_date = datetime.now()
+    day_of_month = current_date.day
+    day_of_week = current_date.weekday() + 1  # 1-7
+    
+    valid_plans = []
+    for plan in fund_plan_details:
+        period_type = plan.rationPlan.periodType
+        period_value = int(plan.rationPlan.periodValue)
+        fund_code = plan.rationPlan.fundCode
+        sub_account_no = plan.rationPlan.subAccountNo
+        
+        is_scheduled = False
+        # 周定投 (1)
+        if period_type == 1:
+            if period_value == day_of_week:
+                is_scheduled = True
+        # 月定投 (3)
+        elif period_type == 3:
+            if period_value == day_of_month:
+                is_scheduled = True
+        # 日定投 (4)
+        elif period_type == 3:
+                is_scheduled = True
+        # 其他类型 (双周定投定投 2 等) - 
+        else:
+            is_scheduled = True
+             
+        # 核心逻辑：定投日 OR 存在待回撤交易（补单/异常交易）
+        # 检查 (sub_account_no, fund_code) 是否在待回撤集合中
+        revocable_trades = pending_revocable_trades_map.get((sub_account_no, fund_code))
+        
+        if is_scheduled:
+            valid_plans.append(plan)
+        elif revocable_trades:
+            # 非定投日，但存在待回撤交易 -> 执行撤单
+            logger.info(f"计划 {plan.rationPlan.fundName}({fund_code}) 非定投日，但组合{sub_account_no}存在待回撤交易，正在撤单...")
+            for trade in revocable_trades:
+                try:
+                    res = revoke_order(
+                        user, 
+                        trade.busin_serial_no, 
+                        trade.business_type, 
+                        trade.fund_code, 
+                        trade.amount, 
+                        sub_account_no=trade.sub_account_no
+                    )
+                    if res.get("Success"):
+                         logger.info(f"撤单成功: {trade.fund_code} - {trade.busin_serial_no}")
+                    else:
+                         logger.error(f"撤单失败: {trade.fund_code} - {res.get('Message')}")
+                except Exception as e:
+                    logger.error(f"撤单异常: {e}")
+            # 不再加入 valid_plans，避免后续重复处理
+            
+    # 打印有效定投计划详情
+    if valid_plans:
+        logger.info(f"========== 有效定投计划详情 (共{len(valid_plans)}个) ==========")
+        for i, plan_detail in enumerate(valid_plans):
+            plan = plan_detail.rationPlan
+            p_type_map = {1: "周定投",  2: "双周定投",3: "月定投", 4: "日定投"}
+            p_type_str = p_type_map.get(plan.periodType, f"未知类型({plan.periodType})")
+            
+            # 格式化定投周期描述
+            period_desc = f"{p_type_str}"
+            if plan.periodType == 1:
+                period_desc += f"-周{plan.periodValue}"
+            elif plan.periodType == 3:
+                period_desc += f"-{plan.periodValue}号"
+                
+            logger.info(f"[{i+1}] 计划ID: {plan.planId} | 基金: {plan.fundName}({plan.fundCode}) | "
+                        f"组合: {plan.subAccountName}({plan.subAccountNo}) | 周期: {period_desc} | 额度: {plan.amount}")
+        logger.info("======================================================")
+
+    logger.info(f"经过日期与补单检测后，剩余{len(valid_plans)}个计划需要执行 (原{len(fund_plan_details)}个)")
+    
+    if not valid_plans:
+        logger.info("今日无定投计划需要执行，结束。")
+        return
+
+    # 2. 资产预过滤：按组合账号批量获取资产
+    # 提取所有涉及的组合账号
+    sub_accounts = set(plan.rationPlan.subAccountNo for plan in valid_plans)
+    logger.info(f"涉及组合账号: {sub_accounts}，开始批量预取资产...")
+    
+    # (sub_account_no, fund_code) -> AssetDetails
+    assets_map = {}
+    
+    for sub_account in sub_accounts:
+        try:
+            # 获取该组合下的所有资产
+            assets = get_asset_list_of_sub(user, sub_account)
+            if assets:
+                for asset in assets:
+                    key = (sub_account, asset.fund_code)
+                    assets_map[key] = asset
+            logger.info(f"组合 {sub_account} 预取资产成功，共 {len(assets)} 条记录")
+        except Exception as e:
+            logger.error(f"组合 {sub_account} 预取资产失败: {e}")
+            
+    # 3. 执行加仓逻辑
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        futures = []
+        for plan_detail in valid_plans:
+            sub_account = plan_detail.rationPlan.subAccountNo
+            fund_code = plan_detail.rationPlan.fundCode
+            
+            # 从 map 中获取预取的资产详情 (如果没有则为 None)
+            pre_fetched_asset = assets_map.get((sub_account, fund_code))
+            
+            futures.append(executor.submit(increase, user, plan_detail, pre_fetched_asset))
         
     results = []
     for i, future in enumerate(futures):

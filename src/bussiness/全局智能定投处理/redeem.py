@@ -49,6 +49,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from src.domain.asset.asset_details import AssetDetails
+
 def default_user_redeem_all_fund_plans():
     """默认用户批量止盈"""
     # 打印测试开始信息
@@ -60,16 +62,53 @@ def default_user_redeem_all_fund_plans():
 def redeem_all_fund_plans(user: User):
     fund_plan_details = get_all_fund_plan_details(user)
     
+    # 资产预过滤：按组合账号批量获取资产
+    # 提取所有涉及的组合账号
+    sub_accounts = set(plan.rationPlan.subAccountNo for plan in fund_plan_details)
+    logger.info(f"涉及组合账号: {sub_accounts}，开始批量预取资产...")
+    
+    # (sub_account_no, fund_code) -> AssetDetails
+    assets_map = {}
+    
+    for sub_account in sub_accounts:
+        try:
+            # 获取该组合下的所有资产
+            assets = get_asset_list_of_sub(user, sub_account)
+            if assets:
+                for asset in assets:
+                    key = (sub_account, asset.fund_code)
+                    assets_map[key] = asset
+            # logger.info(f"组合 {sub_account} 预取资产成功，共 {len(assets)} 条记录")
+        except Exception as e:
+            logger.error(f"组合 {sub_account} 预取资产失败: {e}")
+
+    # 过滤出有持仓的计划
+    redeemable_plans = []
+    for plan in fund_plan_details:
+        sub_account = plan.rationPlan.subAccountNo
+        fund_code = plan.rationPlan.fundCode
+        
+        asset = assets_map.get((sub_account, fund_code))
+        # 只有持有资产且资产价值大于0的才需要执行止盈检查
+        if asset and asset.asset_value > 0:
+            redeemable_plans.append((plan, asset))
+            
+    logger.info(f"经过资产过滤后，剩余{len(redeemable_plans)}个计划需要执行止盈 (原{len(fund_plan_details)}个)")
+    
+    if not redeemable_plans:
+        logger.info("无持仓计划需要止盈，结束。")
+        return
+
     with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [executor.submit(redeem, user, plan_detail) 
-                  for plan_detail in fund_plan_details]
+        futures = [executor.submit(redeem, user, plan_detail, asset) 
+                  for plan_detail, asset in redeemable_plans]
         
     results = [future.result() for future in futures]
     logger.info(f"{user.customer_name}有{len(results)}个定投计划执行止盈操作.")
     
 
 # 止盈算法实现
-def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
+def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Optional[AssetDetails] = None) -> bool:
     """
     止盈算法实现
 
@@ -94,12 +133,17 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
     sub_account_no = plan_detail.rationPlan.subAccountNo
     sub_account_name = plan_detail.rationPlan.subAccountName
     
-    # 获取银行份额信息，添加异常处理
-    try:
-        shares = get_bank_shares(user, sub_account_no, fund_code)
-    except Exception as e:
-        logger.warning(f"获取银行份额信息失败，将使用空份额列表继续处理: {e}")
-        shares = []  # 使用空列表继续处理，而不是失败
+    shares = None
+    
+    def get_shares_lazy():
+        nonlocal shares
+        if shares is None:
+             try:
+                 shares = get_bank_shares(user, sub_account_no, fund_code)
+             except Exception as e:
+                 logger.warning(f"获取银行份额信息失败: {e}")
+                 shares = []
+        return shares
     
     period_type = plan_detail.rationPlan.periodType
     period_value = plan_detail.rationPlan.periodValue
@@ -108,7 +152,10 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
     stop_rate = 1.0
     
     try:
-        asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
+        if pre_fetched_asset_detail is not None:
+             asset_detail = pre_fetched_asset_detail
+        else:
+             asset_detail = get_fund_asset_detail(user, sub_account_no, fund_code)
         
         if asset_detail is not None:
             plan_assets = asset_detail.asset_value
@@ -135,7 +182,7 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
     logger.info(f"收益率计算：当前收益率{current_profit_rate}%，估值变化{estimated_change}%，预估收益率{estimated_profit_rate}%")
     logger.info(f"其他指标：波动率{volatility}%，100日排名{rank_100}，投资次数{times}")
    
-    if shares == []:
+    if asset_detail.available_vol <= 0.01:
         # logger.info("份额为空，返回False")
         return False
         
@@ -143,89 +190,88 @@ def redeem(user: User, plan_detail: FundPlanDetail) -> bool:
         logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}的收益率{estimated_profit_rate}小于1.0.")
         return True
  
-    if shares is not None:
-        logger.info("开始检查止盈条件...")
+    logger.info("开始检查止盈条件...")
         
-        # 趋势门槛：只有净值低于5日均值时才允许止盈
-        est_nav = getattr(fund_info, 'estimated_value', None)
-        prev_nav = getattr(fund_info, 'nav', None)
-        nav5 = getattr(fund_info, 'nav_5day_avg', None)
-        try:
-            est_val = float(est_nav) if est_nav is not None else (float(prev_nav) if prev_nav is not None else None)
-            nav5_val = float(nav5) if nav5 is not None else None
-        except Exception:
-            est_val = None
-            nav5_val = None
+    # 趋势门槛：只有净值低于5日均值时才允许止盈
+    est_nav = getattr(fund_info, 'estimated_value', None)
+    prev_nav = getattr(fund_info, 'nav', None)
+    nav5 = getattr(fund_info, 'nav_5day_avg', None)
+    try:
+        est_val = float(est_nav) if est_nav is not None else (float(prev_nav) if prev_nav is not None else None)
+        nav5_val = float(nav5) if nav5 is not None else None
+    except Exception:
+        est_val = None
+        nav5_val = None
 
-        if est_val is None or nav5_val is None:
-            logger.info(f"止盈趋势门槛检查：缺少用于对比的净值（estimated_value={est_nav}, prev_nav={prev_nav}, nav_5day_avg={nav5}），跳过止盈")
-            return True
+    if est_val is None or nav5_val is None:
+        logger.info(f"止盈趋势门槛检查：缺少用于对比的净值（estimated_value={est_nav}, prev_nav={prev_nav}, nav_5day_avg={nav5}），跳过止盈")
+        return True
 
-        # 更新：止盈点 = 波动率，限制在3.0到10.0之间）
-        stop_rate = min(max(float(volatility), 3.0), 10.0)
-        logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（不低于3.0）")
- 
-        if asset_detail.fund_type == 'a' and estimated_profit_rate > 3.0:
-            logger.info(f"{customer_name}的止盈操作开始：QDII基金{fund_name}{fund_code}预估收益{estimated_profit_rate},赎回0费率份额,实际止盈点:3.0")
-            sell_0_fee_shares(user,sub_account_no,fund_code,shares)
+    # 更新：止盈点 = 波动率，限制在3.0到10.0之间）
+    stop_rate = min(max(float(volatility), 3.0), 10.0)
+    logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（不低于3.0）")
 
-        if estimated_profit_rate > stop_rate:
-            logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},实际止盈点:{stop_rate}")
-            sell_low_fee_shares(user,sub_account_no,fund_code,shares)
-            return True
-        else:
-            logger.info(f"基本止盈条件检查：预估收益{estimated_profit_rate} <= 止盈点{stop_rate}，不满足条件")
+    if asset_detail.fund_type == 'a' and estimated_profit_rate > 3.0:
+        logger.info(f"{customer_name}的止盈操作开始：QDII基金{fund_name}{fund_code}预估收益{estimated_profit_rate},赎回0费率份额,实际止盈点:3.0")
+        sell_0_fee_shares(user,sub_account_no,fund_code,get_shares_lazy())
+
+    if estimated_profit_rate > stop_rate:
+        logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},实际止盈点:{stop_rate}")
+        sell_low_fee_shares(user,sub_account_no,fund_code,get_shares_lazy())
+        return True
+    else:
+        logger.info(f"基本止盈条件检查：预估收益{estimated_profit_rate} <= 止盈点{stop_rate}，不满足条件")
+        
+    # 获取活期宝银行卡列表
+    logger.info("开始检查银行卡余额相关条件...")
+    hqb_ratio_percent = 0.0
+    
+    try:
+        asset_response = GetMyAssetMainPartAsync(user)
+        if asset_response.Success and asset_response.Data:
+            CurrentRealBalance = asset_response.Data.get('HqbValue', 0.0)
+            TotalAssetValue = asset_response.Data.get('TotalValue', 0.0)
             
-        # 获取活期宝银行卡列表
-        logger.info("开始检查银行卡余额相关条件...")
+            if TotalAssetValue > 0:
+                hqb_ratio_percent = (CurrentRealBalance / TotalAssetValue) * 100.0
+            
+            logger.info(f"从资产API获取: HqbValue={CurrentRealBalance}, TotalValue={TotalAssetValue}, HqbRatio={hqb_ratio_percent:.2f}%")
+        else:
+            raise Exception("资产API调用失败")
+    except Exception as e:
+        logger.warning(f"获取资产信息失败，回退到原银行卡信息(无法计算占比，默认0%): {str(e)}")
+        bank_card_info = user.max_hqb_bank    
+        CurrentRealBalance = bank_card_info.CurrentRealBalance
         hqb_ratio_percent = 0.0
-        
-        try:
-            asset_response = GetMyAssetMainPartAsync(user)
-            if asset_response.Success and asset_response.Data:
-                CurrentRealBalance = asset_response.Data.get('HqbValue', 0.0)
-                TotalAssetValue = asset_response.Data.get('TotalValue', 0.0)
-                
-                if TotalAssetValue > 0:
-                    hqb_ratio_percent = (CurrentRealBalance / TotalAssetValue) * 100.0
-                
-                logger.info(f"从资产API获取: HqbValue={CurrentRealBalance}, TotalValue={TotalAssetValue}, HqbRatio={hqb_ratio_percent:.2f}%")
-            else:
-                raise Exception("资产API调用失败")
-        except Exception as e:
-            logger.warning(f"获取资产信息失败，回退到原银行卡信息(无法计算占比，默认0%): {str(e)}")
-            bank_card_info = user.max_hqb_bank    
-            CurrentRealBalance = bank_card_info.CurrentRealBalance
-            hqb_ratio_percent = 0.0
-            logger.info(f"银行卡余额：{CurrentRealBalance}, 强制活期宝占比: 0.0%")
-        
-        # 新增逻辑：指数型基金000，且不含QDII，且100日排名>90（极高位置），卖出0费率份额
-        if fund_type == '000' and "QDII" not in fund_name and rank_100 is not None and rank_100 > 90:
-            logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：指数基金(000)且非QDII，100日排名{rank_100}>90(极高位置)，赎回0费率份额")
-            sell_0_fee_shares(user, sub_account_no, fund_code, shares)
-            return True
+        logger.info(f"银行卡余额：{CurrentRealBalance}, 强制活期宝占比: 0.0%")
+    
+    # 新增逻辑：指数型基金000，且不含QDII，且100日排名>90（极高位置），卖出0费率份额
+    if fund_type == '000' and "QDII" not in fund_name and rank_100 is not None and rank_100 > 90:
+        logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：指数基金(000)且非QDII，100日排名{rank_100}>90(极高位置)，赎回0费率份额")
+        sell_0_fee_shares(user, sub_account_no, fund_code, get_shares_lazy())
+        return True
 
-        # 添加风控状态日志
-        if hqb_ratio_percent < HQB_RATIO_THRESHOLD:
-            logger.info(f"【风控状态】活期宝占比{hqb_ratio_percent:.2f}% < {HQB_RATIO_THRESHOLD}%阈值，强制启用{PROFIT_THRESHOLD_FOR_LOW_BALANCE}%止盈模式。")
-        else:
-            logger.info(f"【风控状态】活期宝占比{hqb_ratio_percent:.2f}% >= {HQB_RATIO_THRESHOLD}%阈值，启用波动率止盈模式。")
+    # 添加风控状态日志
+    if hqb_ratio_percent < HQB_RATIO_THRESHOLD:
+        logger.info(f"【风控状态】活期宝占比{hqb_ratio_percent:.2f}% < {HQB_RATIO_THRESHOLD}%阈值，强制启用{PROFIT_THRESHOLD_FOR_LOW_BALANCE}%止盈模式。")
+    else:
+        logger.info(f"【风控状态】活期宝占比{hqb_ratio_percent:.2f}% >= {HQB_RATIO_THRESHOLD}%阈值，启用波动率止盈模式。")
 
-        #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于PROFIT_THRESHOLD_FOR_LOW_BALANCE，且投资次数小于5.0次，且当日估值增长率大于0.5%，立即卖出费率为0的份额
-        if estimated_profit_rate > 1.0 and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type == '000' and "QDII" not in fund_name and times < 5.0 and estimated_change > 0.5:
-            logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:{PROFIT_THRESHOLD_FOR_LOW_BALANCE},投资次数:{times},估值增长率:{estimated_change}.")
-            sell_0_fee_shares(user,sub_account_no,fund_code,shares)
-            return True
-        else:
-            logger.info(f"{fund_name}{fund_code}余额条件检查未通过：预估收益{estimated_profit_rate} vs 阈值{PROFIT_THRESHOLD_FOR_LOW_BALANCE}，活期宝占比{hqb_ratio_percent:.2f}% vs 阈值{HQB_RATIO_THRESHOLD}%，基金类型{fund_type}，估值变化{fund_info.estimated_change}")
-            
-        #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于3.0，且投资次数小于5.0次，立即卖出费率为0的份额
-        if estimated_profit_rate > 3.0 and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type in ['001','002'] and rank_100 is not None and rank_100 > 80 and times < 5.0 and estimated_change > 0.5:
-            logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0, 100日排名:{rank_100},投资次数:{times}.")
-            sell_0_fee_shares(user,sub_account_no,fund_code,shares)
-            return True
-        else:
-            logger.info(f"{fund_name}{fund_code}余额条件检查未通过：预估收益{estimated_profit_rate} vs 3.0，活期宝占比{hqb_ratio_percent:.2f}% vs 阈值{HQB_RATIO_THRESHOLD}%，基金类型{fund_type}，排名{rank_100}")
+    #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于PROFIT_THRESHOLD_FOR_LOW_BALANCE，且投资次数小于5.0次，且当日估值增长率大于0.5%，立即卖出费率为0的份额
+    if estimated_profit_rate > 1.0 and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type == '000' and "QDII" not in fund_name and times < 5.0 and estimated_change > 0.5:
+        logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:{PROFIT_THRESHOLD_FOR_LOW_BALANCE},投资次数:{times},估值增长率:{estimated_change}.")
+        sell_0_fee_shares(user,sub_account_no,fund_code,get_shares_lazy())
+        return True
+    else:
+        logger.info(f"{fund_name}{fund_code}余额条件检查未通过：预估收益{estimated_profit_rate} vs 阈值{PROFIT_THRESHOLD_FOR_LOW_BALANCE}，活期宝占比{hqb_ratio_percent:.2f}% vs 阈值{HQB_RATIO_THRESHOLD}%，基金类型{fund_type}，估值变化{fund_info.estimated_change}")
+        
+    #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于3.0，且投资次数小于5.0次，立即卖出费率为0的份额
+    if estimated_profit_rate > 3.0 and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type in ['001','002'] and rank_100 is not None and rank_100 > 80 and times < 5.0 and estimated_change > 0.5:
+        logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0, 100日排名:{rank_100},投资次数:{times}.")
+        sell_0_fee_shares(user,sub_account_no,fund_code,get_shares_lazy())
+        return True
+    else:
+        logger.info(f"{fund_name}{fund_code}余额条件检查未通过：预估收益{estimated_profit_rate} vs 3.0，活期宝占比{hqb_ratio_percent:.2f}% vs 阈值{HQB_RATIO_THRESHOLD}%，基金类型{fund_type}，排名{rank_100}")
     logger.info("所有止盈条件都不满足，返回True")
     return True
 

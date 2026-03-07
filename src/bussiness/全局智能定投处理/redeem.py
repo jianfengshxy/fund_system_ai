@@ -99,7 +99,7 @@ def redeem_all_fund_plans(user: User):
         logger.info("无持仓计划需要止盈，结束。")
         return
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=1) as executor:
         futures = [executor.submit(redeem, user, plan_detail, asset) 
                   for plan_detail, asset in redeemable_plans]
         

@@ -304,9 +304,9 @@ def redeem_all_fund_plans(event, context):
 
 #每日任务
 def daily_task(event, context):
-    save_fund_investment_indicators(DEFAULT_USER)
-    add_frequent_funds_to_fast_profit_group(user=DEFAULT_USER, group_name="快速止盈")
-    remove_infrequent_funds_from_group(user=DEFAULT_USER, group_name="快速止盈")
+    # save_fund_investment_indicators(DEFAULT_USER)
+    # add_frequent_funds_to_fast_profit_group(user=DEFAULT_USER, group_name="快速止盈")
+    # remove_infrequent_funds_from_group(user=DEFAULT_USER, group_name="快速止盈")
     try:
         sync_user_daily_asset(DEFAULT_USER)
         sync_user_weekly_trades(DEFAULT_USER)
@@ -814,11 +814,11 @@ if __name__ == "__main__":
     p_custom = '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 5000.0,"total_budget": 200000.0},{"sub_account_name": "快速止盈", "amount": 30000.0,"total_budget": 1000000.0}]}'
     # invoke(add_new_custom, p_custom, "add_new_custom")
     # invoke(increase_custom, p_custom, "increase_custom")
-    invoke(redeem_custom, p_custom, "redeem_custom")
+    # invoke(redeem_custom, p_custom, "redeem_custom")
 
     # 9. Daily Task
-    # p_daily = '{"account": "13918199137","password": "sWX15706","sub_account_name": "飞龙在天","total_budget": 1000000.0,"fund_type": "non_index"}'
-    # invoke(daily_task, p_daily, "daily_task")
+    p_daily = '{"account": "13918199137","password": "sWX15706","sub_account_name": "飞龙在天","total_budget": 1000000.0,"fund_type": "non_index"}'
+    invoke(daily_task, p_daily, "daily_task")
 
     # 10. Batch Operations
     # invoke(increase_all_fund_plans, p_daily, "increase_all_fund_plans")

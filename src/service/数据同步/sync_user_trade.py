@@ -16,6 +16,7 @@ from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
 from src.db.database_connection import DatabaseConnection
 from src.common.logger import get_logger
 from src.domain.user.User import User
+from src.API.工具.utils import get_fund_system_time_trade
 from src.common.constant import DEFAULT_USER
 
 logger = get_logger("SyncUserTrade")

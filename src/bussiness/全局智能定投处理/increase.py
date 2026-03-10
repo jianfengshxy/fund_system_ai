@@ -100,8 +100,11 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         logger.info(f"{fund_name}({fund_code}) 查询可回撤交易 - 找到{len(trades) if trades else 0}笔可回撤的定投交易")
     except Exception as e:
         logger.error(f"查询可回撤交易失败: {e}")
-        return False      
+        return False   
 
+    if not trades:
+            logger.info(f"{fund_name}({fund_code}) [均线风控] 无可撤回交易，跳过撤单")
+            return True
     
     logger.info(f"计划详情 - 组合账号: {sub_account_no}, 组合名称: {sub_account_name}")
     logger.info(f"计划详情 - 周期类型: {period_type}, 周期值: {period_value}, 定投金额: {fund_amount}, 计划类型: {plan_type}")
@@ -225,8 +228,6 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     gate_ok = True if bypass_ma5 else bool(nav5_gate(fund_info, fund_name, fund_code, logger))
     if not gate_ok:
         logger.info(f"{fund_name}({fund_code}) [均线风控] 5日均线守卫未通过（估算净值≤5日均值）：撤回当天所有可回撤交易。资产={plan_assets:.2f} 定投金额={fund_amount:.2f}")
-        if not trades:
-            logger.info(f"{fund_name}({fund_code}) [均线风控] 无可撤回交易，跳过撤单")
         for i, trade in enumerate(trades):
             logger.info(f"{fund_name}({fund_code})  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
             try:

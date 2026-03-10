@@ -175,6 +175,28 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     elif year_val is not None and year_val <= 0:
         stop_reason = f"年收益率({year_val}%) <= 0"
     # HQB占比不足且无持仓的撤回已在上方统一处理，这里不再设置 stop_reason
+    
+    # 趋势豁免逻辑：虽然长期指标走弱，但如果短期趋势强劲，允许豁免拦截
+    if stop_reason:
+        # 1. 计算 20日均线 (使用 30日均线近似或从 fund_info 获取)
+        # 简单使用 估算净值 > 5日均线 且 涨幅 > 1.0% 作为强趋势信号
+        # 这里复用已有的 nav5_gate 逻辑判断是否站上5日线，并额外要求今日涨幅显著
+        
+        # 重新获取 5日均线状态 (前面可能没调用)
+        is_trend_strong = False
+        try:
+            ma5_ok = nav5_gate(fund_info, fund_name, fund_code, logger)
+            estimated_change = fund_info.estimated_change if fund_info.estimated_change is not None else 0.0
+            
+            # 豁免条件: 站上5日线 且 (今日大涨 > 1.5% 或 虽然长期弱但短期3个月已转正)
+            season_positive = (season_val is not None and season_val > 0)
+            
+            if ma5_ok and (estimated_change > 1.5 or season_positive):
+                is_trend_strong = True
+                logger.info(f"{fund_name}({fund_code}) [趋势豁免] 触发豁免条件 - 长期弱势({stop_reason}) 但短期强势(站上5日线 且 (涨幅{estimated_change}%>1.5% 或 季度转正))，允许继续加仓")
+                stop_reason = None # 清除拦截原因
+        except Exception as e:
+            logger.warning(f"趋势豁免判断异常: {e}")
         
     if stop_reason:
         logger.info(f"[风控拦截] 最强风控触发 - {fund_name}({fund_code}) 触发原因: {stop_reason}")

@@ -35,13 +35,18 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
                 refreshed = getFundInfo(user, fund_code)
                 if refreshed:
                     fund_info = refreshed
-            updated_fund_info = updateFundEstimatedValue(fund_info)
-            if updated_fund_info:
-                fund_info = updated_fund_info
-                fund_info_cache[fund_code] = fund_info  # 更新缓存
-                # logger.debug(f"{fund_info.fund_name}刷新基金估值信息: 估算净值={fund_info.estimated_value}, 估算涨跌={fund_info.estimated_change}%")
+            # QDII 基金 (type='a') 估值不准，直接设为 0.0
+            if hasattr(fund_info, 'fund_type') and fund_info.fund_type == 'a':
+                fund_info.estimated_change = 0.0
+                logger.debug(f"{fund_info.fund_name} (QDII) 跳过估值查询，默认涨跌幅为 0.0%")
             else:
-                logger.warning(f"{fund_info.fund_name}刷新基金估值信息失败: {fund_code}")
+                updated_fund_info = updateFundEstimatedValue(fund_info)
+                if updated_fund_info:
+                    fund_info = updated_fund_info
+                    fund_info_cache[fund_code] = fund_info  # 更新缓存
+                    # logger.debug(f"{fund_info.fund_name}刷新基金估值信息: 估算净值={fund_info.estimated_value}, 估算涨跌={fund_info.estimated_change}%")
+                else:
+                    logger.warning(f"{fund_info.fund_name}刷新基金估值信息失败: {fund_code}")
         except Exception as e:
             logger.error(f"{fund_info.fund_name}刷新基金估值信息时发生异常: {str(e)}")
         return fund_info
@@ -58,12 +63,16 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     
     # 第2步：获取基金估值信息
     try:
-        updated_fund_info = updateFundEstimatedValue(fund_info)
-        if updated_fund_info:
-            fund_info = updated_fund_info
-            logger.debug(f"{fund_info.fund_name}成功获取基金估值信息: 估算净值={fund_info.estimated_value}, 估算涨跌={fund_info.estimated_change}%")
+        if hasattr(fund_info, 'fund_type') and fund_info.fund_type == 'a':
+            fund_info.estimated_change = 0.0
+            logger.debug(f"{fund_info.fund_name} (QDII) 跳过估值查询，默认涨跌幅为 0.0%")
         else:
-            logger.warning(f"{fund_info.fund_name}获取基金估值信息失败: {fund_code}")
+            updated_fund_info = updateFundEstimatedValue(fund_info)
+            if updated_fund_info:
+                fund_info = updated_fund_info
+                logger.debug(f"{fund_info.fund_name}成功获取基金估值信息: 估算净值={fund_info.estimated_value}, 估算涨跌={fund_info.estimated_change}%")
+            else:
+                logger.warning(f"{fund_info.fund_name}获取基金估值信息失败: {fund_code}")
     except Exception as e:
         logger.error(f"{fund_info.fund_name}获取基金估值信息时发生异常: {str(e)}")
     

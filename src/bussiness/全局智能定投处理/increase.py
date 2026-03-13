@@ -361,9 +361,19 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
 
     if not is_first_investment and estimated_profit_rate > -1.0 :
         logger.info(f"{fund_name}({fund_code}) [加仓决策] 预估收益率({estimated_profit_rate:.2f}%) > -1.0%，不满足加仓条件，撤回交易")
+        
+        # 强制重新查询最新的可撤交易，防止缓存失效或状态不一致
+        try:
+            current_trades = get_trades_list(user, sub_account_no=sub_account_no, fund_code=fund_code, bus_type="4", status="7")
+            logger.info(f"{fund_name}({fund_code}) [二次确认] 重新查询可撤交易，找到 {len(current_trades)} 笔")
+            trades_to_revoke = current_trades
+        except Exception as e:
+            logger.warning(f"{fund_name}({fund_code}) [二次确认] 查询失败，使用原始列表: {e}")
+            trades_to_revoke = trades
+
         #回撤所有交易
-        for i, trade in enumerate(trades):
-            logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
+        for i, trade in enumerate(trades_to_revoke):
+            logger.info(f"  -> 执行回撤 {i+1}/{len(trades_to_revoke)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
             try:
                 revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
                 logger.info(f"     回撤成功")

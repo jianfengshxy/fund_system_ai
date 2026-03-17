@@ -122,8 +122,13 @@ def get_portfolio_details(portfolio_name):
             def _enrich(a):
                 fi = getFundInfo(DEFAULT_USER, a.fund_code)
                 if fi:
-                    ufi = updateFundEstimatedValue(fi)
-                    a.estimated_change = ufi.estimated_change if ufi else 0.0
+                    # QDII 基金 (type='a') 或 名字包含 "QDII" 估值不准，直接设为 0.0
+                    if (hasattr(fi, 'fund_type') and fi.fund_type == 'a') or \
+                       (hasattr(fi, 'fund_name') and "QDII" in fi.fund_name.upper()):
+                        a.estimated_change = 0.0
+                    else:
+                        ufi = updateFundEstimatedValue(fi)
+                        a.estimated_change = ufi.estimated_change if ufi else 0.0
                 else:
                     a.estimated_change = 0.0
                 return a

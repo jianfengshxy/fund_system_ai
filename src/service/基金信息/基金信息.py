@@ -35,8 +35,9 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
                 refreshed = getFundInfo(user, fund_code)
                 if refreshed:
                     fund_info = refreshed
-            # QDII 基金 (type='a') 估值不准，直接设为 0.0
-            if hasattr(fund_info, 'fund_type') and fund_info.fund_type == 'a':
+            # QDII 基金 (type='a') 或 名字包含 "QDII" 估值不准，直接设为 0.0
+            if (hasattr(fund_info, 'fund_type') and fund_info.fund_type == 'a') or \
+               (hasattr(fund_info, 'fund_name') and "QDII" in fund_info.fund_name.upper()):
                 fund_info.estimated_change = 0.0
                 logger.debug(f"{fund_info.fund_name} (QDII) 跳过估值查询，默认涨跌幅为 0.0%")
             else:
@@ -63,7 +64,9 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     
     # 第2步：获取基金估值信息
     try:
-        if hasattr(fund_info, 'fund_type') and fund_info.fund_type == 'a':
+        # QDII 基金 (type='a') 或 名字包含 "QDII" 估值不准，直接设为 0.0
+        if (hasattr(fund_info, 'fund_type') and fund_info.fund_type == 'a') or \
+           (hasattr(fund_info, 'fund_name') and "QDII" in fund_info.fund_name.upper()):
             fund_info.estimated_change = 0.0
             logger.debug(f"{fund_info.fund_name} (QDII) 跳过估值查询，默认涨跌幅为 0.0%")
         else:

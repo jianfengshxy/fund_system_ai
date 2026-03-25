@@ -26,6 +26,7 @@ from src.common.errors import TradePasswordError  # 新增：捕获密码错误�
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.API.交易管理.feeMrg import getFee
 from src.service.公共服务.redeem_fee_filter_service import is_high_frequency_index_fee_ok
+from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 
 # 配置日志
 logger = get_logger(__name__)
@@ -39,6 +40,11 @@ def _check_wind_vane_hqb_risk(user: User, total_budget: float, threshold: float 
     否则返回 True (通过)
     """
     try:
+        ratio_risk_passed = check_hqb_risk_allowed(user, threshold=threshold)
+        if not ratio_risk_passed:
+            logger.info(f"[加仓风向标] 风控拦截：活期宝占比低于阈值{threshold}%")
+            return False
+
         if getattr(user, "max_hqb_bank", None) is None:
             try:
                 from src.service.银行卡账户.bankAccoutService import getMaxhqbBank
@@ -62,7 +68,8 @@ def _check_wind_vane_hqb_risk(user: User, total_budget: float, threshold: float 
         if current_hqb is None:
             current_hqb = float(getattr(user, 'hqb_value', 0) or 0)
         min_req = total_budget * (threshold / 100.0)
-        
+        logger.info(f"[加仓风向标] 资金检查：活期宝余额={current_hqb:.2f}，预算阈值={min_req:.2f} (total_budget={total_budget}, threshold={threshold}%)")
+
         if current_hqb < min_req:
             logger.info(
                 f"[加仓风向标] 风控拦截：活期宝余额({current_hqb:.2f}) "

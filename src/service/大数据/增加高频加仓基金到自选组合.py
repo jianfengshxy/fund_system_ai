@@ -8,66 +8,19 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-from src.db.database_connection import DatabaseConnection
 from src.common.constant import DEFAULT_USER
 from src.API.自选基金.FavorFund import get_favor_groups, add_to_favorites, get_favor_group
 from src.API.交易管理.feeMrg import getFee
 from src.common.logger import get_logger
 from src.service.公共服务.redeem_fee_filter_service import is_high_frequency_index_fee_ok
+from src.service.大数据.高频加仓基金查询 import query_frequent_index_funds
+from src.service.基金信息.基金信息 import get_all_fund_info
 
 logger = get_logger(__name__)
 
 
-def get_frequent_index_funds(user, days: int = 30, min_appear: int = 10) -> List[Dict]:
-    """
-    Find index funds that appeared more than min_appear times in the last days trading days.
-    
-    Args:
-        user: User object (reserved for future use/filtering)
-        days: Number of days to look back
-        min_appear: Minimum number of appearances
-    """
-    try:
-        db = DatabaseConnection()
-    except Exception as e:
-        logger.error(f"Failed to connect to database: {e}")
-        return []
-
-    # 1. Get the date range for the last 'days' distinct update dates
-    recent_dates_sql = """
-        SELECT DISTINCT update_date 
-        FROM fund_investment_indicators 
-        ORDER BY update_date DESC 
-        LIMIT %s
-    """
-    recent_dates = db.execute_query(recent_dates_sql, (days,))
-    
-    if not recent_dates:
-        logger.warning("No update dates found in database.")
-        return []
-    
-    # Extract min and max date from the result
-    dates = [row['update_date'] for row in recent_dates]
-    min_date = min(dates)
-    max_date = max(dates)
-    
-    logger.info(f"Analyzing time window: {min_date} to {max_date} ({len(dates)} trading days)")
-    
-    # 2. Query for frequent index funds
-    # fund_type = '000' is typically used for Index Funds in this system
-    sql = """
-        SELECT fund_code, MAX(fund_name) as fund_name, COUNT(DISTINCT update_date) as cnt
-        FROM fund_investment_indicators
-        WHERE update_date BETWEEN %s AND %s
-          AND fund_type = '000'
-        GROUP BY fund_code
-        HAVING cnt > %s
-        ORDER BY cnt DESC
-    """
-    
-    results = db.execute_query(sql, (min_date, max_date, min_appear))
-    logger.info(f"Found {len(results)} index funds appearing > {min_appear} times.")
-    return results
+def get_frequent_index_funds(user, days: int = 180, min_appear: int = 10) -> List[Dict]:
+    return query_frequent_index_funds(user=user, days=days, min_appear=min_appear)
 
 def _collect_items(obj) -> List[Dict]:
     """Helper to recursively collect fund items from API response"""
@@ -142,7 +95,7 @@ def get_group_info(user, group_name: str) -> Tuple[int, Set[str]]:
 
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 
-def add_frequent_funds_to_fast_profit_group(user, days: int = 30, min_appear: int = 10, group_name: str = "快速止盈") -> Dict[str, int]:
+def add_frequent_funds_to_fast_profit_group(user, days: int = 180, min_appear: int = 10, group_name: str = "快速止盈") -> Dict[str, int]:
     """
     Main service function to add frequent funds to the specified group.
     
@@ -163,6 +116,29 @@ def add_frequent_funds_to_fast_profit_group(user, days: int = 30, min_appear: in
     if not frequent_funds:
         logger.info("No funds matched the criteria.")
         return {'total': 0, 'added': 0, 'skipped': 0}
+
+    deduped_by_index: Dict[str, Dict] = {}
+    for fund in frequent_funds:
+        fund_code = str(fund.get('fund_code') or '')
+        if not fund_code:
+            continue
+        index_key = f"fund:{fund_code}"
+        try:
+            info = get_all_fund_info(user, fund_code)
+            idx = getattr(info, 'index_code', None) if info else None
+            if idx:
+                index_key = f"index:{idx}"
+        except Exception:
+            pass
+
+        existing = deduped_by_index.get(index_key)
+        current_cnt = int(fund.get('cnt') or 0)
+        existing_cnt = int(existing.get('cnt') or 0) if existing else -1
+        if existing is None or current_cnt > existing_cnt:
+            deduped_by_index[index_key] = fund
+
+    frequent_funds = list(deduped_by_index.values())
+    logger.info(f"After same-index dedup, remaining frequent funds: {len(frequent_funds)}")
 
     # 2. Get group info
     group_id, existing_funds = get_group_info(user, group_name)

@@ -8,15 +8,14 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-from src.db.database_connection import DatabaseConnection
 from src.common.constant import DEFAULT_USER
 from src.API.自选基金.FavorFund import get_favor_groups, remove_from_favorites, get_favor_group
 from src.common.logger import get_logger
-from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
+from src.service.大数据.高频加仓基金查询 import query_frequent_index_funds
 
 logger = get_logger(__name__)
 
-def get_frequent_index_funds(user, days: int = 30, min_appear: int = 10) -> Set[str]:
+def get_frequent_index_funds(user, days: int = 180, min_appear: int = 10) -> Set[str]:
     """
     Find index funds that appeared more than min_appear times in the last days trading days.
     Returns a set of fund codes.
@@ -26,48 +25,12 @@ def get_frequent_index_funds(user, days: int = 30, min_appear: int = 10) -> Set[
         days: Number of days to look back
         min_appear: Minimum number of appearances
     """
-    try:
-        db = DatabaseConnection()
-    except Exception as e:
-        logger.error(f"Failed to connect to database: {e}")
-        return set()
-
-    # 1. Get the date range for the last 'days' distinct update dates
-    recent_dates_sql = """
-        SELECT DISTINCT update_date 
-        FROM fund_investment_indicators 
-        ORDER BY update_date DESC 
-        LIMIT %s
-    """
-    recent_dates = db.execute_query(recent_dates_sql, (days,))
-    
-    if not recent_dates:
-        logger.warning("No update dates found in database.")
-        return set()
-    
-    # Extract min and max date from the result
-    dates = [row['update_date'] for row in recent_dates]
-    min_date = min(dates)
-    max_date = max(dates)
-    
-    logger.info(f"Analyzing time window: {min_date} to {max_date} ({len(dates)} trading days)")
-    
-    # 2. Query for frequent index funds
-    # fund_type = '000' is typically used for Index Funds in this system
-    sql = """
-        SELECT fund_code, MAX(fund_name) as fund_name, COUNT(DISTINCT update_date) as cnt
-        FROM fund_investment_indicators
-        WHERE update_date BETWEEN %s AND %s
-          AND fund_type = '000'
-        GROUP BY fund_code
-        HAVING cnt > %s
-        ORDER BY cnt DESC
-    """
-    
-    results = db.execute_query(sql, (min_date, max_date, min_appear))
-    logger.info(f"Found {len(results)} index funds appearing > {min_appear} times.")
-    
-    return {str(row['fund_code']) for row in results}
+    results = query_frequent_index_funds(user=user, days=days, min_appear=min_appear)
+    return {
+        str(row['fund_code'])
+        for row in (results or [])
+        if isinstance(row, dict) and row.get('fund_code')
+    }
 
 def _collect_items(obj) -> List[Dict]:
     """Helper to recursively collect fund items from API response"""
@@ -141,7 +104,7 @@ def get_group_info(user, group_name: str) -> Tuple[int, Dict[str, str]]:
                     
     return target_group_id, existing_funds
 
-def remove_infrequent_funds_from_group(user, group_name: str, days: int = 30, min_appear: int = 10) -> Dict[str, int]:
+def remove_infrequent_funds_from_group(user, group_name: str, days: int = 180, min_appear: int = 10) -> Dict[str, int]:
     """
     Main service function to remove funds from the specified group if they are not frequent enough.
     

@@ -60,7 +60,10 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
         logger.error(f"获取基金基础信息失败: {fund_code}")
         return None
     
-    logger.debug(f"{fund_info.fund_name}成功获取基金基础信息: {fund_info.fund_name}({fund_code})")
+    logger.debug(
+        f"{fund_info.fund_name}成功获取基金基础信息: {fund_info.fund_name}({fund_code})，"
+        f"类型={getattr(fund_info, 'fund_type', '')}，子类型={getattr(fund_info, 'fund_sub_type', '')}"
+    )
     
     # 第2步：获取基金估值信息
     try:
@@ -140,6 +143,6 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
 
 if __name__ == '__main__':
     # fund_info = get_all_fund_info(DEFAULT_USER, '021740')
-    fund_info = get_all_fund_info(DEFAULT_USER, '011707')
+    fund_info = get_all_fund_info(DEFAULT_USER, '023918')
     print(fund_info)
     pass

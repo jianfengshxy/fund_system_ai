@@ -42,6 +42,7 @@ class FundInfo:
     volatility: Optional[float]           # 波动率 VOLATILITY
     # 新增：近5日平均净值（由历史净值计算得到，用于与当日估值净值比较）
     nav_5day_avg: Optional[float] = None
+    fund_sub_type: str = ''
 
 
 
@@ -88,7 +89,8 @@ class FundInfo:
             rank_100day = 0,
             rank_30day = 0 ,
             volatility = 0.0,
-            nav_5day_avg = None
+            nav_5day_avg = None,
+            fund_sub_type=data.get('RSBTYPE', '')
         )
 
     def __str__(self) -> str:
@@ -105,6 +107,7 @@ class FundInfo:
         return (
             f"基金名称: {self.fund_name} ({self.fund_code})\n"
             f"基金类型: {self.fund_type}\n"
+            f"基金子类型: {self.fund_sub_type or '暂无'}\n"
             f"净值信息:\n"
             f"  当前净值: {self.nav} ({self.nav_date})\n"
             f"  累计净值: {self.acc_nav}\n"

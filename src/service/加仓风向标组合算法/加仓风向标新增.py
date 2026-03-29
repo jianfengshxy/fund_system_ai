@@ -180,7 +180,7 @@ def add_new_funds(
             (asset.asset_value or 0.0) for asset in user_assets
             if hasattr(asset, 'asset_value')
         )
-        if len(user_assets) >= MAX_FUNDS_THRESHOLD and total_asset_value > total_budget * 0.7:
+        if (len(user_assets) >= MAX_FUNDS_THRESHOLD and total_asset_value > total_budget * 0.7):
             logger.info(
                 f"用户 {user.customer_name} 的基金数量已达到{MAX_FUNDS_THRESHOLD}个，且资产总和({total_asset_value}元)"
                 f"已超过总预算({total_budget}元)的80%({total_budget * 0.7}元)，停止新增基金"
@@ -344,7 +344,7 @@ if __name__ == "__main__":
         bank = getattr(test_user, "max_hqb_bank", None)
         hqb = getattr(bank, "CurrentRealBalance", None) if bank is not None else None
         logger.info(f"测试用户: {test_user.customer_name}, 活期宝: {hqb if hqb is not None else getattr(test_user, 'hqb_value', 'N/A')}")
-        add_new_funds(test_user, "飞龙在天", 1000000.0)
+        add_new_funds(test_user, "飞龙在天", 1000000.0, fund_type="non_index")
         logging.info(f"用户 {test_user.customer_name} 新增操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

@@ -23,6 +23,9 @@ from src.db.fund_investment_indicator_repository_impl import FundInvestmentIndic
 from datetime import datetime
 from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
+from src.API.交易管理.feeMrg import getFee
+from src.service.公共服务.redeem_fee_filter_service import is_high_frequency_index_fee_ok
+from src.common.constant import DEFAULT_USER
 
 
 from src.common.logger import get_logger
@@ -250,16 +253,62 @@ def save_fund_investment_indicators(user):
 # 添加缓存字典
 _fund_indicators_cache = {}
 
-def get_fund_investment_indicators(days=10, threshold=3) -> List[FundInvestmentIndicator]:
-    cache_key = f"{days}_{threshold}"
+def get_fund_investment_indicators(days=180, threshold=20, user=None) -> List[FundInvestmentIndicator]:
+    user = user or DEFAULT_USER
+    cache_key = f"{days}_{threshold}_{getattr(user, 'account', '')}"
     if cache_key in _fund_indicators_cache:
         get_logger(__name__).info(f"从缓存中获取基金投资指标: days={days}, threshold={threshold}")
         return _fund_indicators_cache[cache_key]
     
     repo = FundInvestmentIndicatorRepositoryImpl()
     indicators = repo.get_frequent_indicators(days, threshold)
-    
-    # 根据tracking_index去重（如果有）
+
+    filtered_indicators: List[FundInvestmentIndicator] = []
+    fee_cache: Dict[str, Dict] = {}
+    allowed_types = {"000", "001", "002"}
+    for ind in (indicators or []):
+        fund_code = getattr(ind, "fund_code", "")
+        fund_name = getattr(ind, "fund_name", fund_code)
+        fund_type = getattr(ind, "fund_type", None)
+        if fund_type not in allowed_types:
+            get_logger(__name__).info(f"跳过{fund_name}({fund_code}): fund_type={fund_type} 不在[000,001,002]")
+            continue
+
+        rank_100 = getattr(ind, "rank_100day", None)
+        if rank_100 is None:
+            try:
+                fund_info = get_all_fund_info(user, fund_code)
+                rank_100 = getattr(fund_info, "rank_100day", None) if fund_info else None
+                if rank_100 is not None:
+                    ind.rank_100day = rank_100
+            except Exception:
+                rank_100 = None
+
+        try:
+            rank_100_num = float(rank_100) if rank_100 is not None else None
+        except Exception:
+            rank_100_num = None
+        if rank_100_num is None or rank_100_num < 40 or rank_100_num > 80:
+            get_logger(__name__).info(f"跳过{fund_name}({fund_code}): rank_100day={rank_100_num} 不在[40,80]")
+            continue
+
+        if fund_type == "000":
+            try:
+                key = str(fund_code)
+                if key not in fee_cache:
+                    fee_cache[key] = getFee(user, key)
+                ok, reason = is_high_frequency_index_fee_ok(fee_cache.get(key))
+                if not ok:
+                    get_logger(__name__).info(f"跳过{fund_name}({fund_code}): 指数基金费率不满足高频要求({reason})")
+                    continue
+            except Exception as e:
+                get_logger(__name__).warning(f"跳过{fund_name}({fund_code}): 指数基金费率查询失败({e})")
+                continue
+
+        filtered_indicators.append(ind)
+
+    indicators = filtered_indicators
+
     if indicators:
         seen_indexes = set()
         unique_indicators = []
@@ -268,9 +317,9 @@ def get_fund_investment_indicators(days=10, threshold=3) -> List[FundInvestmentI
                 seen_indexes.add(ind.tracking_index)
                 unique_indicators.append(ind)
             elif not ind.tracking_index:
-                unique_indicators.append(ind)  # 保留无tracking_index的
+                unique_indicators.append(ind)
         indicators = unique_indicators
-        get_logger(__name__).info(f"去重后基金数量: {len(indicators)}")
+        get_logger(__name__).info(f"按规则过滤并去重后基金数量: {len(indicators)}")
     
     _fund_indicators_cache[cache_key] = indicators
     get_logger(__name__).info(f"已缓存基金投资指标: days={days}, threshold={threshold}")

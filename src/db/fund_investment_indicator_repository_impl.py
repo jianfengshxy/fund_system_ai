@@ -64,19 +64,21 @@ class FundInvestmentIndicatorRepositoryImpl(FundInvestmentIndicatorRepository):
         max_date = max(date_list)
         print(f"Min date: {min_date}, Max date: {max_date}")  # 现有日志
     
-        # 查询在最近days个日期内出现至少threshold次且在最新日期出现的基金
+        # 查询在最近days个交易日内出现至少threshold次的基金
+        # 不再要求必须出现在“全局最新日期”，改为取每只基金在窗口内自己的最新一条记录
+        # 注意：此变更可能返回窗口期内而非绝对最新的数据，适用于追踪期内稳定出现的基金筛选
         sql = """
-            SELECT * 
-            FROM fund_investment_indicators 
-            WHERE fund_code IN (
-                SELECT fund_code 
-                FROM fund_investment_indicators 
-                WHERE update_date BETWEEN %s AND %s 
-                GROUP BY fund_code 
+            SELECT t.*
+            FROM fund_investment_indicators t
+            JOIN (
+                SELECT fund_code, MAX(update_date) AS max_ud
+                FROM fund_investment_indicators
+                WHERE update_date BETWEEN %s AND %s
+                GROUP BY fund_code
                 HAVING COUNT(DISTINCT update_date) >= %s
-            ) AND update_date = %s
+            ) m ON t.fund_code = m.fund_code AND t.update_date = m.max_ud
         """
-        results = self.db.execute_query(sql, (min_date, max_date, threshold, max_date))
+        results = self.db.execute_query(sql, (min_date, max_date, threshold))
         print(f"Query results count: {len(results)}")  # 现有日志
         if results:
             print("DEBUG: Found funds details:")

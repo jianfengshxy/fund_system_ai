@@ -74,17 +74,22 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
             amount = float(amount) - round(random.uniform(0.01, 1), 2)
 
     # 4) 余额校验（示例阈值：100）
-    balance = getattr(bank_card_info, "CurrentRealBalance", 0) if bank_card_info is not None else 0
-    if balance < 100:
+    try:
+        balance = float(getattr(bank_card_info, "CurrentRealBalance", 0) if bank_card_info is not None else 0)
+    except Exception:
+        balance = 0.0
+    amount_to_submit = float(amount)
+    required_balance = max(100.0, amount_to_submit)
+    if balance < required_balance:
         logger.error(
-            f"银行卡余额不足: {balance} < 100。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}",
+            f"银行卡余额不足: {balance} < 所需余额{required_balance}（提交金额{amount_to_submit}，最低阈值100）。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}",
             extra=extra,
         )
         return None
 
     # 5) 调用 API 层发起真实下单请求
     try:
-        return api_commit_order(user, sub_account_no, fund_code, amount)
+        return api_commit_order(user, sub_account_no, fund_code, amount_to_submit)
     except TradePasswordError:
         raise
     except RetriableError as e:

@@ -783,8 +783,8 @@ if __name__ == "__main__":
             print(f"Error invoking {name}: {e}")
 
     # 1. fixed_ratio_redeem
-    # p_fixed = '{"account": "13918199137", "password": "sWX15706", "fundcodelist": [{"fundcode": "011707", "stoprate": "5.0"}, {"fundcode": "021740", "stoprate": "3.0"}]}'
-    # invoke(fixed_ratio_redeem, p_fixed, "fixed_ratio_redeem")
+    p_fixed = '{"account": "13918199137", "password": "sWX15706", "fundcodelist": [{"fundcode":"021740","stoprate":"1.0"}]}'
+    invoke(fixed_ratio_redeem, p_fixed, "fixed_ratio_redeem")
 
     # 2. add_new_jianlong
     # p_add_jianlong = '{"account": "13918199137","password": "sWX15706","sub_account_name": "见龙在田","total_budget": 1000000.0,"amount": 100000.0,"fund_type": "all"}'
@@ -817,8 +817,8 @@ if __name__ == "__main__":
     # invoke(redeem_custom, p_custom, "redeem_custom")
 
     # 9. Daily Task
-    p_daily = '{"account": "13918199137","password": "sWX15706","sub_account_name": "飞龙在天","total_budget": 1000000.0,"fund_type": "non_index"}'
-    invoke(daily_task, p_daily, "daily_task")
+    # p_daily = '{"account": "13918199137","password": "sWX15706","sub_account_name": "飞龙在天","total_budget": 1000000.0,"fund_type": "non_index"}'
+    # invoke(daily_task, p_daily, "daily_task")
 
     # 10. Batch Operations
     # invoke(increase_all_fund_plans, p_daily, "increase_all_fund_plans")

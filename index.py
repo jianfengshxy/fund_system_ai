@@ -629,22 +629,23 @@ def redeem_custom(event, context):
 
             logger.info(f"组合 {sub_account_name} 准备止盈，使用金额: {amount_val}", extra=extra)
 
-            assets = get_sub_account_asset_by_name(user, sub_account_name)
-            if not assets:
-                logger.warning(f"资产组合未找到详细资产信息，跳过：{sub_account_name}", extra=extra)
-                continue
+            fund_list = None
             funds = get_group_funds_by_name(sub_account_name, user)
-            if not funds:
-                logger.warning(f"自选组合基金为空，跳过：{sub_account_name}", extra=extra)
-                continue
-            fund_list = []
-            for item in funds:
-                code = item.get("fcode") or item.get("FundCode") or item.get("fund_code") or item.get("FCODE") or item.get("code")
-                name_val = item.get("shortname") or item.get("fname") or item.get("FundName") or item.get("fund_name") or item.get("name")
-                if not code:
-                    continue
-                fund_list.append({"fund_code": code, "fund_name": name_val, "amount": amount_val})
-            logger.info(f"[自定义组合-止盈] 开始为用户 {user.customer_name} 执行止盈，组合：{sub_account_name}，基金数：{len(fund_list)}", extra=extra)
+            if funds:
+                built_list = []
+                for item in funds:
+                    code = item.get("fcode") or item.get("FundCode") or item.get("fund_code") or item.get("FCODE") or item.get("code")
+                    name_val = item.get("shortname") or item.get("fname") or item.get("FundName") or item.get("fund_name") or item.get("name")
+                    if not code:
+                        continue
+                    built_list.append({"fund_code": code, "fund_name": name_val, "amount": amount_val})
+                if built_list:
+                    fund_list = built_list
+
+            logger.info(
+                f"[自定义组合-止盈] 开始为用户 {user.customer_name} 执行止盈，组合：{sub_account_name}，候选基金数：{len(fund_list) if fund_list else 0}",
+                extra=extra,
+            )
             success = biz_redeem(user, sub_account_name, fund_list)
             if success:
                 logger.info(f"[自定义组合-止盈] 用户 {user.customer_name} 止盈完成：{sub_account_name}", extra=extra)

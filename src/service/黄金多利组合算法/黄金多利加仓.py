@@ -36,6 +36,23 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 10000
         return False
 
     target_fund_code = "021740" # 前海开源黄金ETF联接C
+
+    fi = get_all_fund_info(user, target_fund_code)
+    nav_date_str = getattr(fi, "nav_date", None)
+    try:
+        prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
+    except Exception:
+        prev_trade_day = None
+    today = datetime.date.today()
+
+    check_dates = {today}
+    if prev_trade_day:
+        check_dates.add(prev_trade_day)
+
+    pending_trade = has_buy_submission_on_dates(user, sub_account_no, target_fund_code, check_dates)
+    if pending_trade:
+        logger.info(f"目标基金 {target_fund_code} 存在在途交易，跳过加仓")
+        return True
     
     # 获取持仓
     user_assets = get_sub_account_asset_by_name(user, sub_account_name)
@@ -84,36 +101,15 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 10000
             logger.info(f"基金 {fund_name}({fund_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%")
 
             if estimated_profit_rate < -1.0:
-                logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% < -1.0%，触发加仓判定")
-                
-                # 检查目标基金 021740 是否有在途交易
-                # 只有没有在途交易时才买入
-                
-                # 获取昨日净值日期（为了检查 trade guard）
-                # 这里简单起见，检查目标基金 021740 的在途情况
-                fi = get_all_fund_info(user, target_fund_code)
-                nav_date_str = getattr(fi, "nav_date", None)
-                try:
-                    prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
-                except Exception:
-                    prev_trade_day = None
-                today = datetime.date.today()
-                
-                check_dates = {today}
-                if prev_trade_day:
-                    check_dates.add(prev_trade_day)
+                buy_multiplier = 2.0 if estimated_profit_rate < -5.0 else 1.0
+                buy_amount = amount * buy_multiplier
 
-                pending_trade = has_buy_submission_on_dates(user, sub_account_no, target_fund_code, check_dates)
-                
-                if pending_trade:
-                    logger.info(f"目标基金 {target_fund_code} 存在在途交易，跳过加仓")
-                    continue
-                
-                # 执行买入
-                logger.info(f"满足加仓条件，买入 {target_fund_code} {amount}元")
-                res = commit_order(user, sub_account_no, target_fund_code, amount)
+                logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% < -1.0%，触发加仓判定")
+
+                logger.info(f"满足加仓条件，买入 {target_fund_code} {buy_amount}元")
+                res = commit_order(user, sub_account_no, target_fund_code, buy_amount)
                 if res:
-                    logger.info(f"加仓成功: {target_fund_code} - 金额: {amount} - 订单号: {res.busin_serial_no}")
+                    logger.info(f"加仓成功: {target_fund_code} - 金额: {buy_amount} - 订单号: {res.busin_serial_no}")
                     buy_triggered = True
                     break # 每次只加仓一笔，避免重复
                 else:

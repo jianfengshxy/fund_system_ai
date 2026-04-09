@@ -48,6 +48,14 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
                     # logger.debug(f"{fund_info.fund_name}刷新基金估值信息: 估算净值={fund_info.estimated_value}, 估算涨跌={fund_info.estimated_change}%")
                 else:
                     logger.warning(f"{fund_info.fund_name}刷新基金估值信息失败: {fund_code}")
+
+            nav5 = getattr(fund_info, "nav_5day_avg", None)
+            if nav5 is None:
+                nav5_result = get_fund_volatility_api(user, fund_info, 5)
+                if nav5_result is not None:
+                    mean_5d, _, _ = nav5_result
+                    fund_info.nav_5day_avg = mean_5d
+                    fund_info_cache[fund_code] = fund_info
         except Exception as e:
             logger.error(f"{fund_info.fund_name}刷新基金估值信息时发生异常: {str(e)}")
         return fund_info

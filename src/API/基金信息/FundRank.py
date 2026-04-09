@@ -162,7 +162,7 @@ def get_fund_volatility(user, fund_info: FundInfo, N: int) -> Optional[Tuple[flo
     logger = get_logger("FundRank")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_volatility", "fund_code": fund_info.fund_code}
     try:
-        response = requests.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
         response.raise_for_status()
         
         json_data = response.json()
@@ -179,27 +179,45 @@ def get_fund_volatility(user, fund_info: FundInfo, N: int) -> Optional[Tuple[flo
             raise ValidationError("DATA_EMPTY")
             
         try:
-            # 获取所有净值
-            navs = [float(data.get('DWJZ', 0)) for data in datas if data.get('DWJZ') is not None]
-            
-            if len(navs) >= 2:
-                # 计算平均值
-                mean = np.mean(navs)
-                # 计算方差（使用样本方差公式，分母为 n-1）
-                variance = np.var(navs, ddof=1)
-                
-                # 检查方差是否为零
-                if variance == 0:
-                    logger.error("方差为零，无法计算波动率")
-                    return mean, variance, 0  # 返回0作为波动率，因为方差为零
+            def safe_float(value) -> Optional[float]:
+                if value is None:
+                    return None
+                if isinstance(value, str):
+                    v = value.strip()
+                    if not v or v == "--":
+                        return None
+                    try:
+                        return float(v)
+                    except (ValueError, TypeError):
+                        return None
+                try:
+                    return float(value)
+                except (ValueError, TypeError):
+                    return None
+
+            navs = []
+            for item in datas:
+                nav = safe_float(item.get("DWJZ"))
+                if nav is not None:
+                    navs.append(nav)
+
+            if len(navs) >= 1:
+                mean = float(np.mean(navs))
+                if len(navs) >= 2:
+                    variance = float(np.var(navs, ddof=1))
+                    volatility = float(np.sqrt(variance)) if variance > 0 else 0.0
                 else:
-                    # 计算波动率（标准差）
-                    volatility = np.sqrt(variance)
-                    logger.debug(f"基金{fund_info.fund_code}{fund_info.fund_name}，平均净值：{mean:.4f}，方差：{variance:.4f}，波动率：{volatility:.4f}", extra=extra)
-                    return mean, variance, volatility
-            else:
-                logger.error("数据不足，无法计算波动率", extra=extra)
-                raise ValidationError("DATA_INSUFFICIENT")
+                    variance = 0.0
+                    volatility = 0.0
+
+                logger.debug(
+                    f"基金{fund_info.fund_code}{fund_info.fund_name}，平均净值：{mean:.4f}，方差：{variance:.6f}，波动率：{volatility:.6f}",
+                    extra=extra
+                )
+                return mean, variance, volatility
+
+            logger.error("净值数据为空或不可解析，无法计算指标", extra=extra)
+            raise ValidationError("DATA_EMPTY")
                 
         except (ValueError, TypeError, IndexError) as e:
             logger.error(f"解析净值数据失败: {str(e)}", extra=extra)

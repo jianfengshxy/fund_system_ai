@@ -546,16 +546,29 @@ def increase_custom(event, context):
                 logger.warning(f"资产组合未找到详细资产信息，跳过：{sub_account_name}", extra=extra)
                 continue
             funds = get_group_funds_by_name(sub_account_name, user)
-            if not funds:
-                logger.warning(f"自选组合基金为空，跳过：{sub_account_name}", extra=extra)
-                continue
             fund_list = []
-            for item in funds:
-                code = item.get("fcode") or item.get("FundCode") or item.get("fund_code") or item.get("FCODE") or item.get("code")
-                name_val = item.get("shortname") or item.get("fname") or item.get("FundName") or item.get("fund_name") or item.get("name")
-                if not code:
+            if funds:
+                for item in funds:
+                    code = item.get("fcode") or item.get("FundCode") or item.get("fund_code") or item.get("FCODE") or item.get("code")
+                    name_val = item.get("shortname") or item.get("fname") or item.get("FundName") or item.get("fund_name") or item.get("name")
+                    if not code:
+                        continue
+                    fund_list.append({"fund_code": code, "fund_name": name_val, "amount": amount_val})
+            else:
+                logger.warning(f"自选组合基金为空，改用当前持仓作为候选：{sub_account_name}", extra=extra)
+                for a in assets or []:
+                    try:
+                        code = getattr(a, "fund_code", None)
+                        name_val = getattr(a, "fund_name", None)
+                        vol = float(getattr(a, "available_vol", 0.0) or 0.0)
+                        val = float(getattr(a, "asset_value", 0.0) or 0.0)
+                        if code and (vol > 0.01 or val > 1.0):
+                            fund_list.append({"fund_code": code, "fund_name": name_val, "amount": amount_val})
+                    except Exception:
+                        continue
+                if not fund_list:
+                    logger.warning(f"无有效持仓可用于加仓，跳过：{sub_account_name}", extra=extra)
                     continue
-                fund_list.append({"fund_code": code, "fund_name": name_val, "amount": amount_val})
             logger.info(f"[自定义组合-加仓] 开始为用户 {user.customer_name} 执行加仓，组合：{sub_account_name}，基金数：{len(fund_list)}", extra=extra)
             success = biz_increase(user, sub_account_name, fund_list)
             if success:
@@ -785,7 +798,7 @@ if __name__ == "__main__":
 
     # 1. fixed_ratio_redeem
     p_fixed = '{"account": "13918199137", "password": "sWX15706", "fundcodelist": [{"fundcode":"021740","stoprate":"1.0"}]}'
-    invoke(fixed_ratio_redeem, p_fixed, "fixed_ratio_redeem")
+    # invoke(fixed_ratio_redeem, p_fixed, "fixed_ratio_redeem")
 
     # 2. add_new_jianlong
     # p_add_jianlong = '{"account": "13918199137","password": "sWX15706","sub_account_name": "见龙在田","total_budget": 1000000.0,"amount": 100000.0,"fund_type": "all"}'
@@ -812,9 +825,9 @@ if __name__ == "__main__":
     # invoke(redeem, p_redeem, "redeem")
 
     # 8. Custom Portfolio
-    p_custom = '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 5000.0,"total_budget": 200000.0},{"sub_account_name": "快速止盈", "amount": 30000.0,"total_budget": 1000000.0}]}'
+    p_custom = '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "最有止盈", "amount": 5000.0,"total_budget": 200000.0},{"sub_account_name": "快速止盈", "amount": 30000.0,"total_budget": 1000000.0}]}'
     # invoke(add_new_custom, p_custom, "add_new_custom")
-    # invoke(increase_custom, p_custom, "increase_custom")
+    invoke(increase_custom, p_custom, "increase_custom")
     # invoke(redeem_custom, p_custom, "redeem_custom")
 
     # 9. Daily Task

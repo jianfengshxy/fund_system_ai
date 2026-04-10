@@ -519,31 +519,21 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                     logger.error(f"  -> 3倍加仓提交失败: {e}")
                 return True 
                 
-            # 基础加仓
+            total_multiplier = 1
+            triggered = ["基础"]
+            if estimated_profit_rate < -3.0:
+                total_multiplier += 1
+                triggered.append("-3%")
+            if estimated_profit_rate < -5.0:
+                total_multiplier += 1
+                triggered.append("-5%")
+            total_amount = fund_amount * total_multiplier
             try:
-                logger.info(f"[加仓执行] 基础加仓: 金额 {fund_amount}")
-                commit_order(user, sub_account_no, fund_code, fund_amount )
-                logger.info(f"  -> 基础加仓提交成功")
+                logger.info(f"[加仓执行] 合并下单: 触发项 {','.join(triggered)} × {total_multiplier} 笔, 合计金额 {total_amount}")
+                commit_order(user, sub_account_no, fund_code, total_amount)
+                logger.info(f"  -> 合并加仓提交成功")
             except Exception as e:
-                logger.error(f"  -> 基础加仓提交失败: {e}")
-                
-            # -3.0%额外加仓
-            if estimated_profit_rate < -3.0 :
-                try:
-                    logger.info(f"[加仓执行] 触发-3%额外加仓: 金额 {fund_amount}")
-                    commit_order(user, sub_account_no, fund_code, fund_amount )
-                    logger.info(f"  -> 额外加仓提交成功")
-                except Exception as e:
-                    logger.error(f"  -> 额外加仓提交失败: {e}")
-                    
-            # -5.0%额外加仓
-            if estimated_profit_rate < -5.0 :
-                try:
-                    logger.info(f"[加仓执行] 触发-5%额外加仓: 金额 {fund_amount}")
-                    commit_order(user, sub_account_no, fund_code, fund_amount )
-                    logger.info(f"  -> 额外加仓提交成功")
-                except Exception as e:
-                    logger.error(f"  -> 额外加仓提交失败: {e}")
+                logger.error(f"  -> 合并加仓提交失败: {e}")
                     
     logger.info(f"========== 加仓算法执行完成 ==========")
     return True

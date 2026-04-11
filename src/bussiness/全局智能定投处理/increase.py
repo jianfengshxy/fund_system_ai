@@ -244,10 +244,8 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                 logger.error(f"     回撤失败: {e}")
         return  True
                   
-    # 5日均线守卫：对所有可回撤的买入/定投交易生效
-    # 如果是周定投(1)或月定投(3)，即使是第一次(times<=1)也要检查；其他类型第一次不检查
-    bypass_ma5 = (period_type not in [1, 3]) and (times <= 1)
-    gate_ok = True if bypass_ma5 else bool(nav5_gate(fund_info, fund_name, fund_code, logger))
+    # 5日均线守卫：对所有可回撤的买入/定投交易生效（所有类型都检查）
+    gate_ok = bool(nav5_gate(fund_info, fund_name, fund_code, logger))
     if not gate_ok:
         logger.info(f"{fund_name}({fund_code}) [均线风控] 5日均线守卫未通过（估算净值≤5日均值）：撤回当天所有可回撤交易。资产={plan_assets:.2f} 定投金额={fund_amount:.2f}")
         for i, trade in enumerate(trades):
@@ -261,57 +259,55 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
             except Exception as e:
                 logger.error(f"     回撤失败: {e}")
         return True
-    else:
-        if bypass_ma5:
-            logger.info(f"{fund_name}({fund_code}) [均线风控] 豁免：首次定投/资产积累期 (倍数{times}<=1)，跳过均线检查")
-            return True  # 口子开启时直接通过并早停
-        else:
-            logger.info(f"{fund_name}({fund_code}) [均线风控] 通过：估算净值 > 5日均值，趋势向上")
-            if period_type in [1, 3] and times <= 1:
-                # 首次定投额外检查：避免追高 (Rank过低代表排名靠前，净值低，没有摆脱底部)
-                rank_100 = getattr(fund_info, "rank_100day", None)
-                rank_30 = getattr(fund_info, "rank_30day", None)
-                
-                should_revoke = False
-                revoke_reason = ""
-                
-                if isinstance(rank_100, (int, float)) and rank_100 < 20:
-                    should_revoke = True
-                    revoke_reason = f"100日排名过低({rank_100} < 20)"
-                elif isinstance(rank_30, (int, float)) and rank_30 < 5:
-                    should_revoke = True
-                    revoke_reason = f"30日排名过低({rank_30} < 5)"
-                    
-                if should_revoke:
-                    logger.info(f"{fund_name}({fund_code}) [排名风控] 首次定投位置不佳 - {revoke_reason}，执行防守撤单")
-                    if not trades:
-                        logger.info(f"[排名风控] 无可撤回交易，跳过撤单")
-                    for i, trade in enumerate(trades):
-                        logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
-                        try:
-                            res = revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                            if res and res.get("Success"):
-                                logger.info("     回撤成功")
-                            else:
-                                logger.error(f"     回撤失败: {res.get('Message') if res else 'Unknown error'}")
-                        except Exception as e:
-                            logger.error(f"     回撤失败: {e}")
-                    return True
+    logger.info(f"{fund_name}({fund_code}) [均线风控] 通过：估算净值 > 5日均值，趋势向上")
+    if period_type in [1,2,3,4] and times <= 1:
+        # 首次定投额外检查：避免追高 (Rank过低代表排名靠前，净值低，没有摆脱底部)
+        rank_100 = getattr(fund_info, "rank_100day", None)
+        rank_30 = getattr(fund_info, "rank_30day", None)
+        
+        should_revoke = False
+        revoke_reason = ""
+        
+        if isinstance(rank_100, (int, float)) and rank_100 < 20:
+            should_revoke = True
+            revoke_reason = f"100日排名过低({rank_100} < 20)"
+        elif isinstance(rank_100, (int, float)) and rank_100 > 90:
+            should_revoke = True
+            revoke_reason = f"100日排名过高({rank_100} > 90)"
+        elif isinstance(rank_30, (int, float)) and rank_30 < 5:
+            should_revoke = True
+            revoke_reason = f"30日排名过低({rank_30} < 5)"
+            
+        if should_revoke:
+            logger.info(f"{fund_name}({fund_code}) [排名风控] 首次定投位置不佳 - {revoke_reason}，执行防守撤单")
+            if not trades:
+                logger.info(f"[排名风控] 无可撤回交易，跳过撤单")
+            for i, trade in enumerate(trades):
+                logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
+                try:
+                    res = revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+                    if res and res.get("Success"):
+                        logger.info("     回撤成功")
+                    else:
+                        logger.error(f"     回撤失败: {res.get('Message') if res else 'Unknown error'}")
+                except Exception as e:
+                    logger.error(f"     回撤失败: {e}")
+            return True
 
-                # 首次定投需同时满足活期宝占比阈值（不足则不新开仓）
-                if not hqb_risk_passed and not has_position:
-                    logger.info(f"{fund_name}({fund_code}) [资金风控] 活期宝占比不足 20% 且 无持仓资产，直接跳过，不开新仓")
-                    for i, trade in enumerate(trades):
-                        logger.info(f"{fund_name}({fund_code})  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
-                        try:
-                            revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
-                            logger.info("     回撤成功")
-                        except Exception as e:
-                            logger.error(f"     回撤失败: {e}")
-                    return True
+        # 首次定投需同时满足活期宝占比阈值（不足则不新开仓）
+        if not hqb_risk_passed and not has_position:
+            logger.info(f"{fund_name}({fund_code}) [资金风控] 活期宝占比不足 20% 且 无持仓资产，直接跳过，不开新仓")
+            for i, trade in enumerate(trades):
+                logger.info(f"{fund_name}({fund_code})  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
+                try:
+                    revoke_order(user, trade.busin_serial_no, trade.business_code, plan_detail.rationPlan.fundCode, trade.amount, sub_account_no=sub_account_no)
+                    logger.info("     回撤成功")
+                except Exception as e:
+                    logger.error(f"     回撤失败: {e}")
+            return True
 
-                logger.info(f"[首次风控] 通过：均线及排名检查均合格，继续持有")
-                return True
+        logger.info(f"[首次风控] 通过：均线及排名检查均合格，继续持有")
+        return True
 
     #判断是否是周定投延期交易
     if period_type == 1 and  period_value != day_of_week_number + 1:

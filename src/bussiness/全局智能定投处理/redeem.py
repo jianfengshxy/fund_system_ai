@@ -179,8 +179,8 @@ def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Op
     estimated_profit_rate = current_profit_rate + estimated_change
     rank_100 = fund_info.rank_100day
     
-    logger.info(f"收益率计算：当前收益率{current_profit_rate}%，估值变化{estimated_change}%，预估收益率{estimated_profit_rate}%")
-    logger.info(f"其他指标：波动率{volatility}%，100日排名{rank_100}，投资次数{times}")
+    logger.info(f"{fund_name}收益率计算：当前收益率{current_profit_rate}%，估值变化{estimated_change}%，预估收益率{estimated_profit_rate}%")
+    logger.info(f"{fund_name}其他指标：波动率{volatility}%，100日排名{rank_100}，投资次数{times}")
    
     if asset_detail.available_vol <= 0.01:
         # logger.info("份额为空，返回False")
@@ -246,10 +246,10 @@ def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Op
         logger.info(f"银行卡余额：{CurrentRealBalance}, 强制活期宝占比: 0.0%")
     
     # 新增逻辑：指数型基金000，且不含QDII，且100日排名>90（极高位置），卖出0费率份额
-    if fund_type == '000' and "QDII" not in fund_name and rank_100 is not None and rank_100 > 90:
-        logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：指数基金(000)且非QDII，100日排名{rank_100}>90(极高位置)，赎回0费率份额")
-        sell_0_fee_shares(user, sub_account_no, fund_code, get_shares_lazy())
-        return True
+    # if fund_type == '000' and "QDII" not in fund_name and rank_100 is not None and rank_100 > 90:
+    #     logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：指数基金(000)且非QDII，100日排名{rank_100}>90(极高位置)，赎回0费率份额")
+    #     sell_0_fee_shares(user, sub_account_no, fund_code, get_shares_lazy())
+    #     return True
 
     # 添加风控状态日志
     if hqb_ratio_percent < HQB_RATIO_THRESHOLD:

@@ -493,7 +493,9 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                 logger.info(f"获取季度排名数据异常: {e}")
 
             if (month_rank_rate is not None and month_rank_rate > 0.75) or (season_rank_rate is not None and season_rank_rate > 0.75):
-                logger.info(f"[排名风控] 月/季排名比例过高 (月:{month_rank_rate:.2f}, 季:{season_rank_rate:.2f} > 0.75)，执行撤单")
+                month_rate_display = f"{month_rank_rate:.2f}" if isinstance(month_rank_rate, (int, float)) else "None"
+                season_rate_display = f"{season_rank_rate:.2f}" if isinstance(season_rank_rate, (int, float)) else "None"
+                logger.info(f"[排名风控] 月/季排名比例过高 (月:{month_rate_display}, 季:{season_rate_display} > 0.75)，执行撤单")
                 for i, trade in enumerate(trades):
                     logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
                     try:

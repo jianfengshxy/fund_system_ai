@@ -9,6 +9,7 @@ from src.API.工具.utils import is_long_holiday
 from src.API.交易管理.buyMrg import commit_order as api_commit_order
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.common.errors import RetriableError, ValidationError, TradePasswordError
+from src.service.银行卡账户.bankAccoutService import getMaxhqbBank
 
 def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float) -> Optional[TradeResult]:
     """
@@ -33,8 +34,7 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
     try:
         bank_card_info = user.max_hqb_bank
     except AttributeError:
-        logger.error(f"提交订单失败: 银行卡信息未设置。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}, amount={amount}", extra=extra)
-        return None
+        bank_card_info = None
 
     # 2.1) 基金状态与购买限额检查
     try:
@@ -74,15 +74,38 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
             amount = float(amount) - round(random.uniform(0.01, 1), 2)
 
     # 4) 余额校验（示例阈值：100）
+    # 先读一次余额；若为0，尝试强制刷新 max_hqb_bank（避免缓存数据过期）
+    # 兼容不同字段语义：有些账户 CurrentRealBalance 可能为 0，但 BankAvaVol 有可用活期宝余额
     try:
-        balance = float(getattr(bank_card_info, "CurrentRealBalance", 0) if bank_card_info is not None else 0)
+        current_real_balance = float(getattr(bank_card_info, "CurrentRealBalance", 0) if bank_card_info is not None else 0)
     except Exception:
-        balance = 0.0
+        current_real_balance = 0.0
+    try:
+        bank_ava_vol = float(getattr(bank_card_info, "BankAvaVol", 0) if bank_card_info is not None else 0)
+    except Exception:
+        bank_ava_vol = 0.0
+    if bank_card_info is None or (current_real_balance <= 0 and bank_ava_vol <= 0):
+        try:
+            refreshed_user = getMaxhqbBank(user)
+            if refreshed_user is not None:
+                user = refreshed_user
+            bank_card_info = getattr(user, "max_hqb_bank", None)
+            current_real_balance = float(getattr(bank_card_info, "CurrentRealBalance", 0) if bank_card_info is not None else 0)
+            bank_ava_vol = float(getattr(bank_card_info, "BankAvaVol", 0) if bank_card_info is not None else 0)
+            logger.info(
+                f"下单前余额刷新完成: CurrentRealBalance={current_real_balance}, BankAvaVol={bank_ava_vol}",
+                extra=extra,
+            )
+        except Exception as refresh_err:
+            logger.warning(f"下单前刷新活期宝余额失败: {refresh_err}", extra=extra)
+    balance = max(current_real_balance, bank_ava_vol)
     amount_to_submit = float(amount)
     required_balance = max(100.0, amount_to_submit)
     if balance < required_balance:
         logger.error(
-            f"银行卡余额不足: {balance} < 所需余额{required_balance}（提交金额{amount_to_submit}，最低阈值100）。上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}",
+            f"银行卡余额不足: {balance} < 所需余额{required_balance}（提交金额{amount_to_submit}，最低阈值100）。"
+            f"余额明细(CurrentRealBalance={current_real_balance}, BankAvaVol={bank_ava_vol})。"
+            f"上下文: user_id={user.customer_no}, sub_account_no={sub_account_no}, fund_code={fund_code}",
             extra=extra,
         )
         return None

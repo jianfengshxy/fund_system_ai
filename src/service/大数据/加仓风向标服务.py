@@ -288,8 +288,8 @@ def get_fund_investment_indicators(days=180, threshold=20, user=None) -> List[Fu
             rank_100_num = float(rank_100) if rank_100 is not None else None
         except Exception:
             rank_100_num = None
-        if rank_100_num is None or rank_100_num < 40 or rank_100_num > 80:
-            get_logger(__name__).info(f"跳过{fund_name}({fund_code}): rank_100day={rank_100_num} 不在[40,80]")
+        if rank_100_num is None or rank_100_num < 20 or rank_100_num > 80:
+            get_logger(__name__).info(f"跳过{fund_name}({fund_code}): rank_100day={rank_100_num} 不在[20,80]")
             continue
 
         if fund_type == "000":
@@ -319,7 +319,13 @@ def get_fund_investment_indicators(days=180, threshold=20, user=None) -> List[Fu
             elif not ind.tracking_index:
                 unique_indicators.append(ind)
         indicators = unique_indicators
-        get_logger(__name__).info(f"按规则过滤并去重后基金数量: {len(indicators)}")
+        n = len(indicators)
+        get_logger(__name__).info(f"按规则过滤并去重后基金数量: {n}")
+        get_logger(__name__).info(f"按规则过滤并去重后基金列表(共{n}只):")
+        for i, ind in enumerate(indicators, start=1):
+            fund_code = getattr(ind, "fund_code", "")
+            fund_name = getattr(ind, "fund_name", fund_code)
+            get_logger(__name__).info(f"{i:02d}. {fund_name}({fund_code})")
     
     _fund_indicators_cache[cache_key] = indicators
     get_logger(__name__).info(f"已缓存基金投资指标: days={days}, threshold={threshold}")

@@ -189,6 +189,17 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
                  logger.info(f"{customer_name}的止盈操作开始：QDII基金{fund_name}{fund_code}预估收益{estimated_profit_rate},赎回0费率份额,实际止盈点:3.0")
                  sell_0_fee_shares(user, sub_account_no, fund_code, shares)
 
+            if fund_type == '000' and "QDII" not in fund_name and hqb_ratio_percent < HQB_RATIO_THRESHOLD and estimated_change > 0.5 :
+                logger.info(
+                    f"{customer_name}的止盈操作开始：指数基金{fund_name}{fund_code}且非QDII，"
+                    f"活期宝占比{hqb_ratio_percent:.2f}%<{HQB_RATIO_THRESHOLD}%，"
+                    f"今日估值上涨{estimated_change:.2f}%，赎回0费率份额"
+                )
+                res = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
+                if res is not None and getattr(res, 'busin_serial_no', None):
+                    success_count += 1
+                continue
+
         except Exception as e:
             logger.error(f"处理 {fund_code} 失败: {e}")
 

@@ -115,3 +115,14 @@ Icon
 
 # Vercel
 .vercel/
+package-lock.json
+package.json
+node_modules/.package-lock.json
+node_modules/.bin/s
+node_modules/@serverless-devs/s/_config.yml
+node_modules/@serverless-devs/s/LICENSE
+node_modules/@serverless-devs/s/OWNERS
+node_modules/@serverless-devs/s/package.json
+node_modules/@serverless-devs/s/readme.md
+node_modules/@serverless-devs/s/bin/s
+node_modules/@serverless-devs/s/bin/s.cmd

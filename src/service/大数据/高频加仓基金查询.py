@@ -9,7 +9,7 @@ if root_dir not in sys.path:
 from src.db.database_connection import DatabaseConnection
 from src.common.logger import get_logger
 from src.service.基金信息.基金信息 import get_all_fund_info
-
+from src.common.constant import DEFAULT_USER
 logger = get_logger(__name__)
 
 
@@ -80,13 +80,31 @@ def query_frequent_index_funds(
                 continue
             rank_100 = getattr(fund_info, "rank_100day", None) if fund_info else None
             rank_100 = float(rank_100) if isinstance(rank_100, (int, float)) else None
-            if rank_100 is None or rank_100 < 40 or rank_100 > 80:
-                logger.info(f"Skip {fund_name}({fund_code}): rank_100day={rank_100} not in [40, 80]")
+            if rank_100 is None or rank_100 < 20 or rank_100 > 80:
+                logger.info(f"Skip {fund_name}({fund_code}): rank_100day={rank_100} not in [20, 80]")
                 continue
-            filtered_results.append(row)
+            enriched = dict(row)
+            enriched["rank_100day"] = rank_100
+            enriched["fund_sub_type"] = actual_sub_type
+            filtered_results.append(enriched)
         except Exception as e:
             logger.warning(f"Skip {fund_name}({fund_code}): failed to get rank_100day ({e})")
             continue
 
-    logger.info(f"After rank_100day filter [40,80], remaining funds: {len(filtered_results)}")
+    logger.info(f"After rank_100day filter [20,80], remaining funds: {len(filtered_results)}")
     return filtered_results
+
+if __name__ == "__main__":
+    selected = query_frequent_index_funds(user=DEFAULT_USER)
+    if not selected:
+        logger.info("No funds selected.")
+        raise SystemExit(0)
+    lines: List[str] = []
+    for i, row in enumerate(selected, start=1):
+        fund_code = row.get("fund_code")
+        fund_name = row.get("fund_name")
+        cnt = row.get("cnt")
+        rank_100day = row.get("rank_100day")
+        sub_type = row.get("fund_sub_type")
+        lines.append(f"{i:02d}. {fund_name}({fund_code}) cnt={cnt} rank_100day={rank_100day} fund_sub_type={sub_type}")
+    logger.info("Selected funds:\n" + "\n".join(lines))

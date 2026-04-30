@@ -144,7 +144,7 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
         
         # 调用加仓风向标函数，获取推荐基金
         print("获取加仓风向标数据...")
-        indicators_response = get_fund_investment_indicators()
+        indicators_response = get_fund_investment_indicators(user=user)
         if not indicators_response:
             print("❌ 获取加仓风向标数据失败")
             return
@@ -414,7 +414,7 @@ def dissolve_plan_by_group_for_index_funds(user: User, sub_account_name: str, bu
         
         recommended_index_codes = set()
         try:
-            indicators_response = get_fund_investment_indicators()
+            indicators_response = get_fund_investment_indicators(user=user)
             if indicators_response:
                 # 检查返回的数据类型
                 if hasattr(indicators_response, 'Data'):
@@ -619,4 +619,3 @@ if __name__ == '__main__':
     
     # 测试解散指数基金定投计划
     # dissolve_plan_by_group_for_index_funds(DEFAULT_USER, "指数基金组合", 1000000.0)
-

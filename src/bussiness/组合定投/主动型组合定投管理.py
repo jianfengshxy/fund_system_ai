@@ -172,7 +172,7 @@ def setup_logger_plan_by_group(user: User, sub_account_name: str, budget: float 
         # 调用加仓风向标函数，获取推荐基金
         print("获取加仓风向标数据...")
         logger.info("获取加仓风向标数据...", extra=extra)
-        indicators_response = get_fund_investment_indicators()
+        indicators_response = get_fund_investment_indicators(user=user)
         if not indicators_response:
             print("❌ 获取加仓风向标数据失败")
             return
@@ -519,7 +519,7 @@ def dissolve_plan_by_group(user: User, sub_account_name: str, budget: float):
         
         recommended_fund_codes = set()
         try:
-            indicators_response = get_fund_investment_indicators()
+            indicators_response = get_fund_investment_indicators(user=user)
             if indicators_response:
                 # 检查返回的数据类型
                 if hasattr(indicators_response, 'Data'):

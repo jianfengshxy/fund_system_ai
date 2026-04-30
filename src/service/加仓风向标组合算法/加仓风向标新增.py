@@ -203,7 +203,7 @@ def add_new_funds(
             logger.info(f"用户 {user.customer_name} 未满足停止新增条件：{reason_text}，继续执行新增流程")
 
         # 2) 获取加仓风向标数据并按 fund_type 过滤
-        wind_vane_funds = get_fund_investment_indicators()
+        wind_vane_funds = get_fund_investment_indicators(user=user)
         if not wind_vane_funds:
             logger.error("获取加仓风向标数据失败")
             return False

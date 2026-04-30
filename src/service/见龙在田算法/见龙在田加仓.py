@@ -66,7 +66,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
         return False
 
     # 准备风向标集合
-    wind_vane_funds = get_fund_investment_indicators()
+    wind_vane_funds = get_fund_investment_indicators(user=user)
     if not wind_vane_funds:
         logger.error("获取加仓风向标数据失败")
         return False

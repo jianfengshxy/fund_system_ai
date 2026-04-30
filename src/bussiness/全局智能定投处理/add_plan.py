@@ -55,7 +55,7 @@ def add_plan(user: User, amount: int = 2000):
         # 步骤1: 获取加仓风向标基金信息
         logger.info("步骤1: 获取加仓风向标数据...")
         try:
-            indicators_list = get_fund_investment_indicators()
+            indicators_list = get_fund_investment_indicators(user=user)
             if not indicators_list:
                 logger.warning("获取加仓风向标数据失败或为空")
                 return
@@ -193,4 +193,3 @@ def add_plan(user: User, amount: int = 2000):
         logger.error(f"异常详情: {type(e).__name__}: {str(e)}")
         import traceback
         logger.error(f"异常堆栈: {traceback.format_exc()}")
-

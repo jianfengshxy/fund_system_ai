@@ -98,7 +98,7 @@ def dissolve_daily_plan(user: User):
         # 获取加仓风向标中的基金代码列表
         logger.info("步骤3: 获取加仓风向标数据...")
         try:
-            indicators_list = get_fund_investment_indicators()
+            indicators_list = get_fund_investment_indicators(user=user)
             if not indicators_list:
                 logger.warning("获取加仓风向标数据失败或为空")
                 return

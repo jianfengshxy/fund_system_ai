@@ -50,7 +50,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     logger.info(f"组合中共有 {fund_count} 个基金资产")
     
     # 获取加仓风向标数据
-    wind_vane_funds = get_fund_investment_indicators()
+    wind_vane_funds = get_fund_investment_indicators(user=user)
     if not wind_vane_funds:
         logger.error("获取加仓风向标数据失败")
         return False

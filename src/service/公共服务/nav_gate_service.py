@@ -1,4 +1,12 @@
 import logging
+import sys
+import os
+
+# 获取项目根目录路径并添加到 sys.path
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+
 from src.common.logger import get_logger
 from typing import Any
 

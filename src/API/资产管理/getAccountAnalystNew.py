@@ -17,20 +17,26 @@ from src.API.登录接口.login import ensure_user_fresh
 
 
 # DateRange 的取值用于控制收益分析图表的时间跨度。
-# 这里按照接口实测结果整理成常量，便于调用方直接查阅和 IDE 自动提示。
-DATE_RANGE_1M = 0
-DATE_RANGE_3M = 1
-DATE_RANGE_6M = 2
-DATE_RANGE_1Y = 3
-DATE_RANGE_3Y = 4
-DATE_RANGE_ALL = 5
+# 下面这组映射已按真实接口返回结果校验过：
+# - 0: 当月
+# - 1: 今年以来
+# - 2: 最近3个月
+# - 3: 最近6个月
+# - 4: 最近1年
+# - 7: 成立以来
+DATE_RANGE_CURRENT_MONTH = 0
+DATE_RANGE_YEAR_TO_DATE = 1
+DATE_RANGE_3M = 2
+DATE_RANGE_6M = 3
+DATE_RANGE_1Y = 4
+DATE_RANGE_ALL = 7
 
 DATE_RANGE_DESCRIPTIONS = {
-    DATE_RANGE_1M: "近1个月",
-    DATE_RANGE_3M: "近3个月",
-    DATE_RANGE_6M: "近6个月",
-    DATE_RANGE_1Y: "近1年",
-    DATE_RANGE_3Y: "近3年",
+    DATE_RANGE_CURRENT_MONTH: "当月",
+    DATE_RANGE_YEAR_TO_DATE: "今年以来",
+    DATE_RANGE_3M: "最近3个月",
+    DATE_RANGE_6M: "最近6个月",
+    DATE_RANGE_1Y: "最近1年",
     DATE_RANGE_ALL: "成立以来",
 }
 
@@ -148,16 +154,26 @@ def _extract_date_span(json_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     从响应里抽取曲线时间区间，便于日志和测试快速确认 DateRange 是否生效。
     """
-    points = (((json_data.get("Data") or {}).get("AssetTrend") or {}).get("AssetPoints") or [])
+    data = json_data.get("Data") or {}
+
+    # 常规区间（0/1/2/3/4）主要看 AssetTrend.AssetPoints。
+    points = ((data.get("AssetTrend") or {}).get("AssetPoints") or [])
     dates = [item.get("Date") for item in points if item.get("Date")]
-    if not dates:
-        return {"points": 0, "start_date": None, "end_date": None}
-    return {"points": len(dates), "start_date": dates[0], "end_date": dates[-1]}
+    if dates:
+        return {"points": len(dates), "start_date": dates[0], "end_date": dates[-1]}
+
+    # 成立以来（7）没有 AssetTrend，而是按年度聚合到 DailyProfits。
+    yearly_points = data.get("DailyProfits") or []
+    yearly_dates = [item.get("Date") for item in yearly_points if item.get("Date")]
+    if yearly_dates:
+        return {"points": len(yearly_dates), "start_date": yearly_dates[0], "end_date": yearly_dates[-1]}
+
+    return {"points": 0, "start_date": None, "end_date": None}
 
 
 def get_account_analyst_new(
     user,
-    date_range: int = DATE_RANGE_6M,
+    date_range: int = DATE_RANGE_3M,
     *,
     extra_headers: Optional[Dict[str, str]] = None,
     mobile_key: Optional[str] = None,
@@ -171,12 +187,12 @@ def get_account_analyst_new(
     Args:
         user: 已登录用户对象，至少需要 customer_no / u_token / c_token / index
         date_range: 图表时间跨度
-            - 0: 近1个月
-            - 1: 近3个月
-            - 2: 近6个月
-            - 3: 近1年
-            - 4: 近3年
-            - 5: 成立以来
+            - 0: 当月
+            - 1: 今年以来
+            - 2: 最近3个月
+            - 3: 最近6个月
+            - 4: 最近一年
+            - 7: 成立以来
         extra_headers: 额外请求头，用于覆盖默认抓包头
         mobile_key: 可选，覆盖项目默认 MobileKey
         phone_type: 可选，覆盖项目默认 PhoneType

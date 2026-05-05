@@ -16,6 +16,7 @@ from src.domain.user.User import User
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.service.交易管理.购买基金 import commit_order
 from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
+from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
 
@@ -35,6 +36,7 @@ def increase_gold_dimension_funds(user: User, sub_account_name: str, amount: flo
        - 有持仓：
          - 如果当前盈利 (Rate >= -1.0)，不加仓。
          - 如果当前亏损 (Rate < -1.0)，进行严格检查：
+           0. 5日均线检查：估算净值需大于5日均值。
            a. 排名检查：
               - 30日排名 >= 5 (拒绝极低位)
               - 20 <= 100日排名 <= 90 (拒绝极低和极高位，处于震荡区间)
@@ -109,6 +111,11 @@ def increase_gold_dimension_funds(user: User, sub_account_name: str, amount: flo
             return True
             
         # 亏损状态，进行严格检查
+        
+        # 0. 5日均值门槛判定 (估算净值 > 5日均值)
+        fund_name = getattr(fi, 'fund_name', TARGET_FUND_CODE)
+        if not nav5_gate(fi, fund_name, TARGET_FUND_CODE, logger):
+            return True
         
         # a. 排名检查
         # 30日排名 >= 5

@@ -279,13 +279,13 @@ def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Op
             f"est_ok={est_ok}(估值变化{estimated_change} vs 阈值0.5)"
         )
         
-    #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于3.0，且投资次数小于5.0次，立即卖出费率为0的份额
-    if estimated_profit_rate > 3.0 and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type in ['001','002'] and rank_100 is not None and rank_100 > 80 and times <= 5.0 and estimated_change > 0.5:
+    #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于5.0，且投资次数小于5.0次，立即卖出费率为0的份额
+    if estimated_profit_rate > 5.0 and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type in ['001','002'] and rank_100 is not None and rank_100 > 80 and times <= 5.0 and estimated_change > 0.5:
         logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0, 100日排名:{rank_100},投资次数:{times}.")
         sell_0_fee_shares(user,sub_account_no,fund_code,get_shares_lazy())
         return True
     else:
-        profit2_ok = estimated_profit_rate > 3.0
+        profit2_ok = estimated_profit_rate > 5.0
         hqb2_ok = hqb_ratio_percent < HQB_RATIO_THRESHOLD
         fund_type2_ok = (fund_type in ['001', '002'])
         rank2_ok = (rank_100 is not None and rank_100 > 80)

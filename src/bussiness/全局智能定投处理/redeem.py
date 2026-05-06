@@ -281,7 +281,7 @@ def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Op
         
     #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于5.0，且投资次数小于5.0次，立即卖出费率为0的份额
     if estimated_profit_rate > 5.0 and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type in ['001','002'] and rank_100 is not None and rank_100 > 80 and times <= 5.0 and estimated_change > 0.5:
-        logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:3.0, 100日排名:{rank_100},投资次数:{times}.")
+        logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:5.0, 100日排名:{rank_100},投资次数:{times}.")
         sell_0_fee_shares(user,sub_account_no,fund_code,get_shares_lazy())
         return True
     else:
@@ -293,7 +293,7 @@ def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Op
         est2_ok = (estimated_change > 0.5)
         logger.info(
             f"{fund_name}{fund_code}余额条件检查未通过："
-            f"profit_ok={profit2_ok}(预估收益{estimated_profit_rate} vs 阈值3.0), "
+            f"profit_ok={profit2_ok}(预估收益{estimated_profit_rate} vs 阈值5.0), "
             f"hqb_ok={hqb2_ok}(活期宝占比{hqb_ratio_percent:.2f}% vs 阈值{HQB_RATIO_THRESHOLD}%), "
             f"fund_type_ok={fund_type2_ok}(基金类型{fund_type}), "
             f"rank_ok={rank2_ok}(排名{rank_100} vs 阈值80), "

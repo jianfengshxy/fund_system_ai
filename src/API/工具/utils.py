@@ -57,7 +57,7 @@ def get_fund_system_time_trade(user) -> ApiResponse[Dict[str, Any]]:
     logger = get_logger("FundSystemTimeTrade")
     extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "fund_system_time_trade"}
     try:
-        json_data = default_client.post_form(url, headers=headers, data=data, timeout=10)
+        json_data = default_client.post_form(url, headers=headers, data=data, timeout=30)
         datas = json_data.get("Datas")
         ec = error_code(json_data)
         return ApiResponse(

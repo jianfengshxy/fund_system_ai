@@ -108,7 +108,7 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
     )
 
     try:
-        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=30)
         response.raise_for_status()
         result = response.json()
 
@@ -184,7 +184,7 @@ def get_trace_id(user: User) -> Optional[str]:
     )
     
     try:
-        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=30)
         response.raise_for_status()
         result = response.json()
         

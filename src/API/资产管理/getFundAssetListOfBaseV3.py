@@ -59,7 +59,7 @@ def get_fund_asset_list_of_base_v3(user, with_meta: bool = False) -> Tuple[Optio
     first_error_text = ""
 
     try:
-        r = session.post(url, json=data_json, headers=headers, verify=False, timeout=10)
+        r = session.post(url, json=data_json, headers=headers, verify=False, timeout=30)
         r.raise_for_status()
         rd = r.json()
         

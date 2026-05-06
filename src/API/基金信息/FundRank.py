@@ -67,7 +67,7 @@ def get_nav_rank(user, fund_info: FundInfo, N: int, nav: Optional[float] = None)
     logger = get_logger("FundRank")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_nav_rank", "fund_code": fund_info.fund_code}
     try:
-        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=30)
         response.raise_for_status()
         
         json_data = response.json()
@@ -162,7 +162,7 @@ def get_fund_volatility(user, fund_info: FundInfo, N: int) -> Optional[Tuple[flo
     logger = get_logger("FundRank")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_volatility", "fund_code": fund_info.fund_code}
     try:
-        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=30)
         response.raise_for_status()
         
         json_data = response.json()
@@ -297,7 +297,7 @@ def get_fund_growth_rate(fund_info: FundInfo, period_type: str) -> tuple[float, 
     }
     
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=10, verify=False)
+        response = requests.get(url, headers=headers, params=params, timeout=30, verify=False)
         response.raise_for_status()
         data = response.json()
         logger.debug(f"基金{fund_code}增长率响应数据: {data}")

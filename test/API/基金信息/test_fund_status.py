@@ -55,7 +55,7 @@ def check_fund_fields(fund_code):
             data=data,
             headers=headers,
             verify=False,
-            timeout=10
+            timeout=30
         )
         print(f"Status Code: {response.status_code}")
         print(f"Response: {response.text}")

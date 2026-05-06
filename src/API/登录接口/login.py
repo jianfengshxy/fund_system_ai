@@ -60,7 +60,7 @@ def login(account: str, password: str) -> User:
     logger = get_logger("Login")
     extra = {"account": account, "action": "login"}
     try:
-        json_data = default_client.post_json(url, headers=headers, json=data, timeout=10)
+        json_data = default_client.post_json(url, headers=headers, json=data, timeout=30)
         # logger.info(f"登录响应数据: {json_data}")
         
         if not json_data.get('Success', False):
@@ -138,7 +138,7 @@ def login_passport(user: User) -> User:
     logger = get_logger("Login")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "login_passport"}
     try:
-        json_data = default_client.post_form(url, data=data, headers=headers, timeout=10)
+        json_data = default_client.post_form(url, data=data, headers=headers, timeout=30)
         logger.info(f"Passport登录响应数据: {json_data}", extra=extra)
         
         if not json_data.get('Success', False):
@@ -208,7 +208,7 @@ def inference_passport_for_bind(user: User) -> User:
     logger = get_logger("Login")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "inference_passport"}
     try:
-        json_data = default_client.post_json(url, headers=headers, json=data, timeout=10)
+        json_data = default_client.post_json(url, headers=headers, json=data, timeout=30)
         # logger.info(f"Passport绑定信息响应数据: {json_data}")
         
         if not json_data.get('Success', False):

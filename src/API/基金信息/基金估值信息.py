@@ -69,7 +69,7 @@ def update_fund_estimated_value(user, fund_info: FundInfo) -> FundInfo:
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "update_fund_estimated_value", "fund_code": fund_info.fund_code}
     
     try:
-        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=30)
         response.raise_for_status()
         
         json_data = response.json()

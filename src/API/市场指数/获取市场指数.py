@@ -71,7 +71,7 @@ def get_market_index(user: User, type_code: str = "001003", page_index: int = 1,
     }
     
     try:
-        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=30)
         response.raise_for_status()
         result = response.json()
         

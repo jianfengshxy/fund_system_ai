@@ -60,7 +60,7 @@ def get_index_detail(user: User, index_code: str) -> Dict[str, Any]:
     }
     
     try:
-        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=30)
         response.raise_for_status()
         result = response.json()
         

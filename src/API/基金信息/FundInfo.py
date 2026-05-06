@@ -84,7 +84,7 @@ def getFundInfo(user,fund_code) -> Optional[FundInfo]:
             data=data,
             headers=headers,
             verify=False,
-            timeout=10
+            timeout=30
         )
         
         # 检查响应状态码
@@ -167,7 +167,7 @@ def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
                 retry_delay *= 2
                 
             # 使用全局session发送请求
-            response = session.get(url, params=params, headers=headers, verify=False, timeout=10)
+            response = session.get(url, params=params, headers=headers, verify=False, timeout=30)
             response.raise_for_status()
             
             # 响应格式为: jsonpgz({...});，需要提取JSON部分

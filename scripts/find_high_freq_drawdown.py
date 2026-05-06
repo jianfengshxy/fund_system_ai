@@ -60,7 +60,7 @@ def compute_drawdown_percent(user, fund_code: str, nav_window: int = 100) -> flo
         'version': SERVER_VERSION
     }
     try:
-        r = requests.post(url, headers=headers, data=data, verify=False, timeout=10)
+        r = requests.post(url, headers=headers, data=data, verify=False, timeout=30)
         r.raise_for_status()
         jd = r.json()
         datas = jd.get('Datas') or []

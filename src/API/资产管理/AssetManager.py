@@ -58,7 +58,7 @@ def GetMyAssetMainPartAsync(user) -> ApiResponse:
     logger = get_logger("AssetManager")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "GetMyAssetMainPartAsync"}
     try:
-        response = session.post(url, json=request_payload, headers=headers, verify=False, timeout=10)
+        response = session.post(url, json=request_payload, headers=headers, verify=False, timeout=30)
         response.raise_for_status()
         json_data = response.json()
         try:

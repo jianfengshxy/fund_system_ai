@@ -76,7 +76,7 @@ def get_tracking_funds(user: User, index_code: str, page_index: int = 1, page_si
     }
     
     try:
-        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=30)
         response.raise_for_status()
         result = response.json()
         

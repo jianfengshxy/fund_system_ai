@@ -118,7 +118,7 @@ def get_one_fund_tran_infos(user, fund_code, start_date=None, end_date=None, pag
 
         try:
             # 注意：verify=False 配合 HostResolveAdapter 使用，因为我们手动指定了IP但Host头是域名
-            response = session.post(url, headers=headers, json=final_data, verify=False, timeout=10)
+            response = session.post(url, headers=headers, json=final_data, verify=False, timeout=30)
             response.raise_for_status()
             resp_json = response.json()
             
@@ -450,7 +450,7 @@ def get_trade_order_result(user: User, app_serial_no: str, business_type: str):
         logger.info(f"get_trade_order_result 请求 Headers: {json.dumps(headers, ensure_ascii=False)}")
         logger.info(f"get_trade_order_result 请求 Payload: {json.dumps(payload, ensure_ascii=False)}")
         
-        response = requests.post(url, headers=headers, json=payload, verify=False, timeout=10)
+        response = requests.post(url, headers=headers, json=payload, verify=False, timeout=30)
         response.raise_for_status()
         resp_json = response.json()
         
@@ -472,7 +472,7 @@ def get_trade_order_result(user: User, app_serial_no: str, business_type: str):
                     host_header2 = "tradeapilvs5.1234567.com.cn"
                 url2 = f"https://{host_header2}/Trade/FundTrade/OrderResult"
                 headers["Host"] = host_header2
-                response = requests.post(url2, headers=headers, json=payload, verify=False, timeout=10)
+                response = requests.post(url2, headers=headers, json=payload, verify=False, timeout=30)
                 response.raise_for_status()
                 resp_json = response.json()
                 

@@ -78,7 +78,7 @@ def get_asset_list_of_sub(user, sub_account_no, with_meta: bool = False):
     first_error_text = ""
     for url in url_list:
         try:
-            r = session.post(url, json=data_json, headers=headers, verify=False, timeout=10)
+            r = session.post(url, json=data_json, headers=headers, verify=False, timeout=30)
             r.raise_for_status()
             rd = r.json()
             if rd.get("Success") is False:
@@ -97,7 +97,7 @@ def get_asset_list_of_sub(user, sub_account_no, with_meta: bool = False):
         except requests.exceptions.RequestException as e:
             pass
         try:
-            r = session.post(url, data=data_form, headers={**headers, "Content-Type": "application/x-www-form-urlencoded"}, verify=False, timeout=10)
+            r = session.post(url, data=data_form, headers={**headers, "Content-Type": "application/x-www-form-urlencoded"}, verify=False, timeout=30)
             r.raise_for_status()
             rd = r.json()
             if rd.get("Success") is False:

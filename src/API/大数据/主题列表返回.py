@@ -127,7 +127,7 @@ def getAllThemes(user, page_size=200) -> ApiResponse[List[str]]:
     
     try:
         # 使用域名而不是IP，并设置verify=False
-        response = session.get(url, params=params, headers=headers, verify=False, timeout=10)
+        response = session.get(url, params=params, headers=headers, verify=False, timeout=30)
         response.raise_for_status()
         json_data = response.json()
         

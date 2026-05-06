@@ -66,7 +66,7 @@ def get_fund_index_stage_performance(user: User, index_code: str) -> Dict[str, A
     }
     
     try:
-        response = session.get(url, headers=headers, params=params, verify=False, timeout=10)
+        response = session.get(url, headers=headers, params=params, verify=False, timeout=30)
         response.raise_for_status()
         result = response.json()
         

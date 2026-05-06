@@ -63,7 +63,7 @@ def get_index_money_flow(user: User, index_code: str, range_type: str = "n") -> 
     }
     
     try:
-        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=30)
         response.raise_for_status()
         result = response.json()
         

@@ -62,7 +62,7 @@ def getCashBagAvailableShareV2(user) -> List[HqbBank]:
     logger = get_logger("CashBag")
     extra = {"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "action": "getCashBagAvailableShareV2"}
     try:
-        response = session.post(url, data=data, headers=headers, verify=False, timeout=10)
+        response = session.post(url, data=data, headers=headers, verify=False, timeout=30)
         response.raise_for_status()
         json_data = response.json()
         # logger.info(f"响应数据: {json_data}")

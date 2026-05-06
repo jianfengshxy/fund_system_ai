@@ -65,7 +65,7 @@ def createSubAccount(user, name: str, style: str = 'S1') -> ApiResponse[SubAccou
     logger = get_logger("SubAccountMrg")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "create_sub_account", "name": name}
     try:
-        response = session.post(url, data=data, headers=headers, verify=False, timeout=10)
+        response = session.post(url, data=data, headers=headers, verify=False, timeout=30)
         response.raise_for_status()
         json_data = response.json()
         # logger.info(f"响应数据: {json_data}")
@@ -165,7 +165,7 @@ def disbandSubAccount(user, sub_account_no: str) -> ApiResponse[SubAccountRespon
     logger = get_logger("SubAccountMrg")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "disband_sub_account", "sub_account_no": sub_account_no}
     try:
-        response = session.post(url, json=data, headers=headers, verify=False, timeout=10)
+        response = session.post(url, json=data, headers=headers, verify=False, timeout=30)
         response.raise_for_status()
         json_data = response.json()
         # logger.info(f"响应数据: {json_data}")
@@ -271,7 +271,7 @@ def updateSubAccount(user, sub_account_no: str, open_state: int) -> ApiResponse[
     logger = get_logger("SubAccountMrg")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "update_sub_account", "sub_account_no": sub_account_no}
     try:
-        response = session.post(url, json=data, headers=headers, verify=False, timeout=10)
+        response = session.post(url, json=data, headers=headers, verify=False, timeout=30)
         response.raise_for_status()
         json_data = response.json()
         # logger.info(f"响应数据: {json_data}")
@@ -430,7 +430,7 @@ def getSubAccountList(user) -> ApiResponse[List[SubAccount]]:
     logger = get_logger("SubAccountMrg")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "sub_account_list"}
     try:
-        response = session.post(url, json=request_payload, headers=headers, verify=False, timeout=10)
+        response = session.post(url, json=request_payload, headers=headers, verify=False, timeout=30)
         response.raise_for_status()
         json_data = response.json()
         # logger.info(f"响应数据: {json_data}")
@@ -462,7 +462,7 @@ def getSubAccountList(user) -> ApiResponse[List[SubAccount]]:
                         data2['CustomerNo'] = u2.customer_no
                         data2['CToken'] = u2.c_token
                         data2['uid'] = u2.customer_no
-                        r2 = session.post(url2, json=data2, headers=headers, verify=False, timeout=10)
+                        r2 = session.post(url2, json=data2, headers=headers, verify=False, timeout=30)
                         r2.raise_for_status()
                         jd2 = r2.json()
                         if jd2.get('Success', False) and jd2.get('Data'):
@@ -644,7 +644,7 @@ def getSubAssetMultList(user) -> ApiResponse[SubAssetMultListResponse]:
     logger = get_logger("SubAccountMrg")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "sub_asset_mult_list"}
     try:
-        response = session.post(url, json=data, headers=headers, verify=False, timeout=10)
+        response = session.post(url, json=data, headers=headers, verify=False, timeout=30)
         response.raise_for_status()
         json_data = response.json()
         # logger.info(f"响应数据: {json_data}")
@@ -659,7 +659,7 @@ def getSubAssetMultList(user) -> ApiResponse[SubAssetMultListResponse]:
                     data2['UToken'] = u2.u_token
                     data2['CustomerNo'] = u2.customer_no
                     data2['CToken'] = u2.c_token
-                    r2 = session.post(url2, json=data2, headers=headers, verify=False, timeout=10)
+                    r2 = session.post(url2, json=data2, headers=headers, verify=False, timeout=30)
                     r2.raise_for_status()
                     jd2 = r2.json()
                     if jd2.get('Success', False) and jd2.get('Data'):

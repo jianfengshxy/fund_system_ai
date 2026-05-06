@@ -66,7 +66,7 @@ def get_index_stage_performance(user: User, index_code: str, range_type: str = "
     }
     
     try:
-        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=30)
         response.raise_for_status()
         result = response.json()
         

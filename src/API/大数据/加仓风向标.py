@@ -64,7 +64,7 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[Dict[str, Any
     logger = logging.getLogger("FundInvestmentIndicatorAPI")
     
     try:
-        response = session.post(url, data=data, headers=headers, verify=False, timeout=10)
+        response = session.post(url, data=data, headers=headers, verify=False, timeout=30)
         response.raise_for_status()
         json_data = response.json()
         

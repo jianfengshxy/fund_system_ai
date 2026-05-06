@@ -60,7 +60,7 @@ def get_fund_asset_details_of_base_sub_hdt(user, fund_code: str, with_meta: bool
     first_error_text = ""
 
     try:
-        r = session.post(url, json=data_json, headers=headers, verify=False, timeout=10)
+        r = session.post(url, json=data_json, headers=headers, verify=False, timeout=30)
         r.raise_for_status()
         rd = r.json()
         

@@ -135,9 +135,9 @@ def add_to_favorites(
 
         try:
             form_data = dict(params)
-            resp = session.post(url, headers=headers, data=form_data, verify=False, timeout=10)
+            resp = session.post(url, headers=headers, data=form_data, verify=False, timeout=30)
             if resp.status_code == 405:
-                resp = session.get(full_url, headers=headers, verify=False, timeout=10)
+                resp = session.get(full_url, headers=headers, verify=False, timeout=30)
             resp.raise_for_status()
             json_data = resp.json()
 
@@ -173,10 +173,10 @@ def add_to_favorites(
                             params_retry[i] = (k, new_version)
                             break
                     form_retry = dict(params_retry)
-                    resp2 = session.post(url, headers=headers, data=form_retry, verify=False, timeout=10)
+                    resp2 = session.post(url, headers=headers, data=form_retry, verify=False, timeout=30)
                     if resp2.status_code == 405:
                         query_retry = urllib.parse.urlencode(params_retry)
-                        resp2 = session.get(f"{url}?{query_retry}", headers=headers, verify=False, timeout=10)
+                        resp2 = session.get(f"{url}?{query_retry}", headers=headers, verify=False, timeout=30)
                     resp2.raise_for_status()
                     json_data2 = resp2.json()
                     success = json_data2.get("Success", json_data2.get("success", False))
@@ -313,7 +313,7 @@ def get_favor_group(
         logger = get_logger("FavorFund.getgroup")
         extra = {"account": getattr(u, 'mobile_phone', None) or getattr(u, 'account', None), "action": "favor_getgroup"}
         try:
-            resp = session.post(url, headers=headers, data=form, verify=False, timeout=10)
+            resp = session.post(url, headers=headers, data=form, verify=False, timeout=30)
             resp.raise_for_status()
             json_data = resp.json()
 
@@ -392,10 +392,10 @@ def remove_from_favorites(
             
             try:
                 form_data = dict(params)
-                resp = session.post(url, headers=headers, data=form_data, verify=False, timeout=10)
+                resp = session.post(url, headers=headers, data=form_data, verify=False, timeout=30)
                 if resp.status_code == 405:
                     query = urllib.parse.urlencode(params)
-                    resp = session.get(f"{url}?{query}", headers=headers, verify=False, timeout=10)
+                    resp = session.get(f"{url}?{query}", headers=headers, verify=False, timeout=30)
                 resp.raise_for_status()
                 json_data = resp.json()
                 success = json_data.get("Success", json_data.get("success", False))
@@ -428,10 +428,10 @@ def remove_from_favorites(
                                 params_retry[i] = (k, new_version)
                                 break
                         form_retry = dict(params_retry)
-                        resp2 = session.post(url, headers=headers, data=form_retry, verify=False, timeout=10)
+                        resp2 = session.post(url, headers=headers, data=form_retry, verify=False, timeout=30)
                         if resp2.status_code == 405:
                             query_retry = urllib.parse.urlencode(params_retry)
-                            resp2 = session.get(f"{url}?{query_retry}", headers=headers, verify=False, timeout=10)
+                            resp2 = session.get(f"{url}?{query_retry}", headers=headers, verify=False, timeout=30)
                         resp2.raise_for_status()
                         json_data2 = resp2.json()
                         success2 = json_data2.get("Success", json_data2.get("success", False))
@@ -539,7 +539,7 @@ def get_favor_groups(
         extra = {"account": getattr(u, 'mobile_phone', None) or getattr(u, 'account', None), "action": "favor_group_get"}
         
         try:
-            resp = session.post(url, headers=headers, data=form, verify=False, timeout=10)
+            resp = session.post(url, headers=headers, data=form, verify=False, timeout=30)
             resp.raise_for_status()
             json_data = resp.json()
             

@@ -86,7 +86,7 @@ def revoke_order(user: User, busin_serial_no: str, business_type: str, fund_code
              "sub_account_no": sub_account_no,
              "busin_serial_no": busin_serial_no}
     try:
-        response = session.post(url, headers=headers, data=data, verify=False, timeout=10)
+        response = session.post(url, headers=headers, data=data, verify=False, timeout=30)
         response.raise_for_status()
         response_data = response.json()
         # logger.info(f"响应数据: {response_data}")

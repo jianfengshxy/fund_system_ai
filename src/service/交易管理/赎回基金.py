@@ -58,10 +58,15 @@ def sell_0_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:List[
         return None
 
    #遍历shares
+    results = []
+    zero_fee_shares = get_0_fee_shares(user,fund_code)
     for share in shares:
         fund_info = get_all_fund_info(user,fund_code)
         fund_name = fund_info.fund_name
-        zero_fee_shares = get_0_fee_shares(user,fund_code)
+        
+        if zero_fee_shares <= 0:
+            break
+
         if share.availableVol > zero_fee_shares:
             amount = zero_fee_shares
         else:
@@ -78,7 +83,7 @@ def sell_0_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:List[
 
         if amount == 0.0:
             logger.info(f"{user.customer_name}基金{fund_code}({fund_name})的份额为0，跳过赎回操作", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_0_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
-            return None
+            continue
 
         try:
             result1 = super_transfer(user, sub_account_no, fund_code, amount, share.shareId)
@@ -90,7 +95,9 @@ def sell_0_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:List[
             result1 = None
         if result1 is not None and getattr(result1, "status", 0) == 1:
             logger.info(f"{user.customer_name}超级转换基金{fund_code}({fund_name})的银行卡份额{amount}成功", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_0_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
-            return result1
+            results.append(result1)
+            zero_fee_shares -= amount
+            continue
         else:
             logger.error(f"{user.customer_name}超级转换基金{fund_code}({fund_name})的银行卡份额{amount}失败切换成普通赎回", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_0_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
             try:
@@ -103,10 +110,14 @@ def sell_0_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:List[
                 result2 = None
             if result2 is not None and getattr(result2, "status", 0) == 1:
                 logger.info(f"{user.customer_name}普通赎回基金{fund_code}({fund_name})的银行卡份额成功", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_0_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
-                return result2
+                results.append(result2)
+                zero_fee_shares -= amount
+                continue
             else:
                 logger.error(f"{user.customer_name}普通赎回基金{fund_code}({fund_name})的银行卡份额失败", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_0_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
-                return None
+                continue
+
+    return results if results else None
 
 def sell_low_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:List[Share]):
     """
@@ -129,12 +140,17 @@ def sell_low_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:Lis
         return None
 
    #遍历shares
+    results = []
+    low_fee_shares = round(float(get_low_fee_shares(user,fund_code)), 2)
     for share in shares:        
-        low_fee_shares = round(float(get_low_fee_shares(user,fund_code)), 2)
         fund_info = get_all_fund_info(user,fund_code)
         fund_name = fund_info.fund_name
         amount = share.availableVol 
         logger.info(f"{user.customer_name}的基金{fund_code}({fund_name})低费率份额的{low_fee_shares}，当前账户有效份额{share.availableVol}", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_low_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
+        
+        if low_fee_shares <= 0:
+            break
+
         if share.availableVol > low_fee_shares:
             amount = low_fee_shares
         else:
@@ -152,7 +168,7 @@ def sell_low_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:Lis
         # 检查份额是否为0
         if amount == 0.0:
             logger.info(f"{user.customer_name}基金{fund_code}({fund_name})的份额为0，跳过赎回操作", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_low_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
-            return None
+            continue
 
         try:
             result1 = super_transfer(user, sub_account_no, fund_code, amount, share.shareId)
@@ -164,7 +180,9 @@ def sell_low_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:Lis
             result1 = None
         if result1 is not None and getattr(result1, "status", 0) == 1:
             logger.info(f"{user.customer_name}超级转换基金{fund_code}({fund_name})的银行卡份额{amount}成功", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_low_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
-            return result1
+            results.append(result1)
+            low_fee_shares -= amount
+            continue
         else:
             logger.error(f"{user.customer_name}超级转换基金{fund_code}({fund_name})的银行卡份额{amount}失败切换成普通赎回", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_low_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
             try:
@@ -177,7 +195,9 @@ def sell_low_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:Lis
                 result2 = None
             if result2 is not None and getattr(result2, "status", 0) == 1:
                 logger.info(f"{user.customer_name}普通赎回基金{fund_code}({fund_name})的银行卡份额成功", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_low_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
-                return result2
+                results.append(result2)
+                low_fee_shares -= amount
+                continue
             else:
                 logger.error(f"{user.customer_name}普通赎回基金{fund_code}({fund_name})的银行卡份额失败", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_low_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
                 try:
@@ -190,10 +210,14 @@ def sell_low_fee_shares(user:User, sub_account_no:str, fund_code:str, shares:Lis
                     result3 = None
                 if result3 is not None and getattr(result3, "status", 0) == 1:
                     logger.info(f"{user.customer_name}普通赎回银行{fund_code}({fund_name})的银行卡份额成功", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_low_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
-                    return result3
+                    results.append(result3)
+                    low_fee_shares -= amount
+                    continue
                 else:
                     logger.error(f"{user.customer_name}普通赎回银行{fund_code}({fund_name})的银行卡份额失败", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_low_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
-                    return None
+                    continue
+
+    return results if results else None
 
 def sell_usable_non_zero_fee_shares(user: User, sub_account_no: str, fund_code: str, shares: List[Share]):
     """
@@ -214,16 +238,21 @@ def sell_usable_non_zero_fee_shares(user: User, sub_account_no: str, fund_code: 
         logger.info(f"{user.customer_name}基金{fund_code}({fund_info.fund_name})不可赎回，跳过赎回操作", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_non_zero_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
         return None
 
+    results = []
+    usable_shares = get_usable_non_zero_fee_shares(user, fund_code)
     for share in shares:
         fund_info = get_all_fund_info(user,fund_code)
         fund_name = fund_info.fund_name
-        usable_shares = get_usable_non_zero_fee_shares(user, fund_code)
+        
+        if usable_shares <= 0:
+            break
+
         amount = min(share.availableVol, usable_shares)
 
         # 检查份额是否为0
         if amount == 0.0:
             logger.info(f"{user.customer_name}基金{fund_code}({fund_name})的份额为0，跳过赎回操作", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_non_zero_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
-            return None
+            continue
 
         try:
             result1 = super_transfer(user, sub_account_no, fund_code, amount, share.shareId)
@@ -235,7 +264,9 @@ def sell_usable_non_zero_fee_shares(user: User, sub_account_no: str, fund_code: 
             result1 = None
         if result1 is not None and result1.status == 1:
             logger.info(f"{user.customer_name}超级转换基金{fund_code}({fund_name})的银行卡份额{amount}成功", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_non_zero_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
-            return result1
+            results.append(result1)
+            usable_shares -= amount
+            continue
         else:
             logger.error(f"{user.customer_name}超级转换基金{fund_code}({fund_name})的银行卡份额{amount}失败切换成普通赎回", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_non_zero_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
             try:
@@ -248,7 +279,9 @@ def sell_usable_non_zero_fee_shares(user: User, sub_account_no: str, fund_code: 
                 result2 = None
             if result2 is not None and result2.status == 1:
                 logger.info(f"{user.customer_name}普通赎回基金{fund_code}({fund_name})的银行卡份额成功", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_non_zero_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
-                return result2
+                results.append(result2)
+                usable_shares -= amount
+                continue
             else:
                 logger.error(f"{user.customer_name}普通赎回基金{fund_code}({fund_name})的银行卡份额失败", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_non_zero_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
                 try:
@@ -260,7 +293,11 @@ def sell_usable_non_zero_fee_shares(user: User, sub_account_no: str, fund_code: 
                     result3 = None
                 if result3 is not None and result3.status == 1:
                     logger.info(f"{user.customer_name}普通赎回银行{fund_code}({fund_name})的银行卡份额成功", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_non_zero_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
-                    return result3
+                    results.append(result3)
+                    usable_shares -= amount
+                    continue
                 else:
                     logger.error(f"{user.customer_name}普通赎回银行{fund_code}({fund_name})的银行卡份额失败", extra={"account": (getattr(user, 'mobile_phone', None) or getattr(user, 'account', None)), "action": "sell_non_zero_fee", "fund_code": fund_code, "sub_account_no": sub_account_no})
-                    return result3
+                    continue
+
+    return results if results else None

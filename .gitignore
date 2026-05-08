@@ -126,3 +126,5 @@ node_modules/@serverless-devs/s/package.json
 node_modules/@serverless-devs/s/readme.md
 node_modules/@serverless-devs/s/bin/s
 node_modules/@serverless-devs/s/bin/s.cmd
+.vercelignore
+vercel.json

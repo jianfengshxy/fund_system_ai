@@ -147,9 +147,9 @@ def add_new_funds(
     logger.info("========== 开始执行新增基金算法（最小落地版） ===========", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "wind_add_new"})
     logger.info(f"用户: {user.customer_name}，组合名称: {sub_account_name}", extra={"account": getattr(user,'mobile_phone',None) or getattr(user,'account',None), "sub_account_name": sub_account_name, "action": "wind_add_new"})
 
-    # 0) 策略特定风控：活期宝余额 vs 总预算（要求 >= 预算的20%）
-    if not _check_wind_vane_hqb_risk(user, total_budget, threshold=20.0):
-        logger.info("[加仓风向标] 活期宝储备不足，退出新增流程")
+    # 0) 策略特定风控：活期宝余额 vs 总预算（要求 >= 预算的10%）
+    if not _check_wind_vane_hqb_risk(user, total_budget, threshold=10.0):
+        logger.info(f"[加仓风向标] 活期宝储备不足{threshold}，退出新增流程")
         return True
 
     try:

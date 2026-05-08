@@ -180,10 +180,10 @@ def add_new_funds(
             (asset.asset_value or 0.0) for asset in user_assets
             if hasattr(asset, 'asset_value')
         )
-        if (len(user_assets) >= MAX_FUNDS_THRESHOLD and total_asset_value > total_budget * 0.7):
+        if (len(user_assets) >= MAX_FUNDS_THRESHOLD and total_asset_value > total_budget * 0.8):
             logger.info(
                 f"用户 {user.customer_name} 的基金数量已达到{MAX_FUNDS_THRESHOLD}个，且资产总和({total_asset_value}元)"
-                f"已超过总预算({total_budget}元)的80%({total_budget * 0.7}元)，停止新增基金"
+                f"已超过总预算({total_budget}元)的80%({total_budget * 0.8}元)，停止新增基金"
             )
             return True
         else:

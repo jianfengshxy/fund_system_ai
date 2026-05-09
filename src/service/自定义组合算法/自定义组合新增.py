@@ -37,8 +37,8 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
     logger.info(f"开始为用户 {customer_name} 执行新增操作，组合: {sub_account_name}，预算: {total_budget}")
 
     # 0) 全局风控检查：活期宝占比
-    if not check_hqb_risk_allowed(user,threshold=10):
-        logger.info(f"[自定义组合] 全局风控拦截：活期宝占比不足10%，退出新增流程")
+    if not check_hqb_risk_allowed(user,threshold=20):
+        logger.info(f"[自定义组合] 全局风控拦截：活期宝占比不足20%，退出新增流程")
         return False
 
     # 0.1) 组合预算风控检查
@@ -118,8 +118,12 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 rank_100 = getattr(fund_info, 'rank_100day', None)
                 if rank_100 is not None:
                     try:
-                        if float(rank_100) < 20:
+                        rank_100_val = float(rank_100)
+                        if rank_100_val < 20:
                             logger.info(f"基金100日排名 {rank_100} < 20，跳过候选：{fund_name}({fund_code})")
+                            continue
+                        if rank_100_val > 90:
+                            logger.info(f"基金100日排名 {rank_100} > 90，跳过候选：{fund_name}({fund_code})")
                             continue
                     except (ValueError, TypeError):
                         pass

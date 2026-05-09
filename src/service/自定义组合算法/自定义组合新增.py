@@ -37,8 +37,8 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
     logger.info(f"开始为用户 {customer_name} 执行新增操作，组合: {sub_account_name}，预算: {total_budget}")
 
     # 0) 全局风控检查：活期宝占比
-    if not check_hqb_risk_allowed(user):
-        logger.info("[自定义组合] 全局风控拦截：活期宝占比不足，退出新增流程")
+    if not check_hqb_risk_allowed(user,threshold=20):
+        logger.info(f"[自定义组合] 全局风控拦截：活期宝占比不足{threshold}%，退出新增流程")
         return False
 
     # 0.1) 组合预算风控检查
@@ -133,7 +133,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                     except (ValueError, TypeError):
                         pass
 
-                logger.info(f"候选通过，准备购买：{fund_name}({fund_code})，金额: {fund_amount}")
+                logger.info(f"候选通过，准备购买：{fund_name}({fund_code}) [year_return={year_val}, half_year_return={half_year_val}, rank_100day={rank_100}, rank_30day={rank_30}]，金额: {fund_amount}")
                 try:
                     res = commit_order(user, sub_account_no, fund_code, float(fund_amount))
                     if res and getattr(res, 'busin_serial_no', None):
@@ -166,7 +166,8 @@ if __name__ == "__main__":
                 {"fund_code": "161226", "fund_name": "国投瑞银白银期货(LOF)A", "amount": 5000.0},
                 {"fund_code": "017873", "fund_name": "汇添富香港优势精选混合(QDII)C", "amount": 5000.0},
                 {"fund_code": "019449", "fund_name": "摩根日本精选股票(QDII)C", "amount": 5000.0}
-            ]
+            ],
+            total_budget=1000000.0,
         )
         logging.info(f"用户 {DEFAULT_USER.customer_name} 新增操作完成")
     except Exception as e:

@@ -97,26 +97,42 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         # 100个交易日排名
         rank_100 = getattr(fund_info, "rank_100day", None)
 
-        if estimated_profit_rate > stop_rate and rank_100 is not None and rank_100 > 90:
+        if estimated_profit_rate > stop_rate:
             try:
                 shares = get_bank_shares(user, sub_account_no, fund_code)
-                low_fee_shares = _safe_float(get_low_fee_shares(user, fund_code), 0.0)
-                if low_fee_shares > 10.0:
+                
+                # 分层止盈逻辑
+                if rank_100 is not None and rank_100 > 90:
+                    # 满足更高要求，卖出所有低费率份额（卖出更多）
+                    low_fee_shares = _safe_float(get_low_fee_shares(user, fund_code), 0.0)
+                    if low_fee_shares > 10.0:
+                        logger.info(
+                            f"{user.customer_name} 分层止盈(rank_100>90)：{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% "
+                            f"止盈点={stop_rate:.2f}% 波动率={volatility:.2f} 100日排名={rank_100} 低费率份额={low_fee_shares:.2f}，执行卖出低费率份额"
+                        )
+                        redeem_ok = bool(sell_low_fee_shares(user, sub_account_no, fund_code, shares))
+                        if redeem_ok:
+                            success_count += 1
+                        else:
+                            logger.info(f"{user.customer_name} 低费率止盈未成功：{fund_name}({fund_code})")
+                    else:
+                        logger.info(f"跳过低费率止盈：{fund_name}({fund_code}) 低费率份额≤10 预估={estimated_profit_rate:.2f}% 止盈点={stop_rate:.2f}%")
+                else:
+                    # 仅满足基本收益率要求，卖出0费率份额（卖出较少，更保守）
                     logger.info(
-                        f"{user.customer_name} 止盈：{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% "
-                        f"止盈点={stop_rate:.2f}% 波动率={volatility:.2f} 100日排名={rank_100} 低费率份额={low_fee_shares:.2f}"
+                        f"{user.customer_name} 分层止盈(仅收益达标)：{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% "
+                        f"止盈点={stop_rate:.2f}% 波动率={volatility:.2f} 100日排名={rank_100}，执行卖出0费率份额"
                     )
-                    redeem_ok = bool(sell_low_fee_shares(user, sub_account_no, fund_code, shares))
+                    redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
                     if redeem_ok:
                         success_count += 1
                     else:
-                        logger.info(f"{user.customer_name} 止盈未成功：{fund_name}({fund_code})")
-                else:
-                    logger.info(f"跳过：{fund_name}({fund_code}) 低费率份额≤10 预估={estimated_profit_rate:.2f}% 止盈点={stop_rate:.2f}%")
+                        logger.info(f"{user.customer_name} 0费率止盈未成功：{fund_name}({fund_code})")
+                        
             except Exception as e:
                 logger.error(f"止盈失败：{fund_name}({fund_code}) 异常={e}")
         else:
-            logger.info(f"跳过：{fund_name}({fund_code}) 条件未满足（预估={estimated_profit_rate:.2f}%, 止盈点={stop_rate:.2f}%, 100日排名={rank_100}）")
+            logger.info(f"跳过：{fund_name}({fund_code}) 预估收益未达标（预估={estimated_profit_rate:.2f}%, 止盈点={stop_rate:.2f}%, 100日排名={rank_100}）")
 
     logger.info(f"止盈完成：{user.customer_name} 成功执行 {success_count} 次赎回操作（最多3个）")
     return True

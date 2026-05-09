@@ -275,14 +275,20 @@ def get_fund_investment_indicators(days=180, threshold=20, user=None) -> List[Fu
             continue
 
         rank_100 = getattr(ind, "rank_100day", None)
-        if rank_100 is None:
-            try:
-                fund_info = get_all_fund_info(user, fund_code)
-                rank_100 = getattr(fund_info, "rank_100day", None) if fund_info else None
+        try:
+            # 无论数据库是否有 rank_100，都要从接口获取最新值来做判断
+            fund_info = get_all_fund_info(user, fund_code)
+            if fund_info:
+                rank_100 = getattr(fund_info, "rank_100day", None)
                 if rank_100 is not None:
                     ind.rank_100day = rank_100
-            except Exception:
-                rank_100 = None
+                
+                # 同时也更新 product_rank
+                latest_product_rank = getattr(fund_info, "product_rank", None)
+                if latest_product_rank is not None:
+                    ind.product_rank = latest_product_rank
+        except Exception as e:
+            get_logger(__name__).warning(f"获取基金{fund_name}({fund_code})最新信息失败: {e}")
 
         try:
             rank_100_num = float(rank_100) if rank_100 is not None else None
@@ -305,6 +311,8 @@ def get_fund_investment_indicators(days=180, threshold=20, user=None) -> List[Fu
                 get_logger(__name__).warning(f"跳过{fund_name}({fund_code}): 指数基金费率查询失败({e})")
                 continue
 
+        product_rank = getattr(ind, "product_rank", "未知")
+        get_logger(__name__).info(f"成功满足条件加入候选: {fund_name}({fund_code}), rank_100day={rank_100_num}, product_rank={product_rank}, fund_type={fund_type}")
         filtered_indicators.append(ind)
 
     indicators = filtered_indicators
@@ -325,7 +333,9 @@ def get_fund_investment_indicators(days=180, threshold=20, user=None) -> List[Fu
         for i, ind in enumerate(indicators, start=1):
             fund_code = getattr(ind, "fund_code", "")
             fund_name = getattr(ind, "fund_name", fund_code)
-            get_logger(__name__).info(f"{i:02d}. {fund_name}({fund_code})")
+            rank_100 = getattr(ind, "rank_100day", "未知")
+            fund_type = getattr(ind, "fund_type", "未知")
+            get_logger(__name__).info(f"{i:02d}. {fund_name}({fund_code}) [rank_100day={rank_100}, fund_type={fund_type}]")
     
     _fund_indicators_cache[cache_key] = indicators
     get_logger(__name__).info(f"已缓存基金投资指标: days={days}, threshold={threshold}")

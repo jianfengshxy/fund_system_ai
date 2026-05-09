@@ -229,6 +229,10 @@ def add_new_funds(
                 except Exception as e:
                     logger.warning(f"[见龙在田] 获取指数基金 {code} 信息失败，仍纳入候选：{e}")
 
+            rank_100 = getattr(f, 'rank_100day', '未知')
+            product_rank = getattr(f, 'product_rank', '未知')
+            logger.info(f"[见龙在田] 成功加入最终候选: {getattr(f, 'fund_name', code)}({code}) [fund_type={ftype}, rank_100day={rank_100}, product_rank={product_rank}]")
+
             candidates.append(f)
 
         if not candidates:

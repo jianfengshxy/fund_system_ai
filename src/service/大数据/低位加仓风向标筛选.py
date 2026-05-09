@@ -201,8 +201,8 @@ def select_low_position_indicators(
     fields_to_update = [
         "season_item_rank", "season_item_sc",
         "month_item_rank", "month_item_sc",
-        "rank_100day", "rank_30day", "volatility", "nav_5day_avg",
-        "product_rank", "tracking_index", "update_time", "fund_type"
+        "volatility", "nav_5day_avg",
+        "tracking_index", "update_time", "fund_type"
     ]
     for ind in indicators:
         latest_row = latest_map.get(ind.fund_code)
@@ -220,6 +220,28 @@ def select_low_position_indicators(
                     pass
         else:
             logger.warning(f"[低位筛选] 未找到全表最新记录: {ind.fund_name}({ind.fund_code})，沿用窗口内最新数据行")
+
+        # 【重点修复】：排名类数据 (rank_100day, rank_30day, product_rank 等) 必须通过接口获取最新计算值，而不是用数据库历史值
+        try:
+            from src.service.基金信息.基金信息 import get_all_fund_info
+            fund_info = get_all_fund_info(user, ind.fund_code)
+            if fund_info:
+                if getattr(fund_info, "rank_100day", None) is not None:
+                    ind.rank_100day = fund_info.rank_100day
+                if getattr(fund_info, "rank_30day", None) is not None:
+                    ind.rank_30day = fund_info.rank_30day
+                if getattr(fund_info, "product_rank", None) is not None:
+                    ind.product_rank = fund_info.product_rank
+                if getattr(fund_info, "season_item_rank", None) is not None:
+                    ind.season_item_rank = fund_info.season_item_rank
+                if getattr(fund_info, "season_item_sc", None) is not None:
+                    ind.season_item_sc = fund_info.season_item_sc
+                if getattr(fund_info, "month_item_rank", None) is not None:
+                    ind.month_item_rank = fund_info.month_item_rank
+                if getattr(fund_info, "month_item_sc", None) is not None:
+                    ind.month_item_sc = fund_info.month_item_sc
+        except Exception as e:
+            logger.warning(f"[低位筛选] 获取基金{ind.fund_name}({ind.fund_code})最新排名信息失败: {e}")
 
     # 判定与原因（实现四项条件，并校验 fund_type 集合）
     def check_and_reason(ind: FundInvestmentIndicator) -> (bool, str):

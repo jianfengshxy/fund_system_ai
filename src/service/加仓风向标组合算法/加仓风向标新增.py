@@ -252,6 +252,11 @@ def add_new_funds(
             if not nav5_gate(info, name, code, logger):
                 # 日志由公共方法输出
                 continue
+            
+            # 记录成功通过风向标+净值门槛的候选基金条件
+            rank_100 = getattr(f, 'rank_100day', '未知')
+            product_rank = getattr(f, 'product_rank', '未知')
+            logger.info(f"成功通过净值门槛加入最终候选: {name}({code}) [fund_type={ftype}, rank_100day={rank_100}, product_rank={product_rank}]")
 
             candidates.append(f)
 

@@ -97,7 +97,8 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         # 100个交易日排名
         rank_100 = getattr(fund_info, "rank_100day", None)
 
-        if estimated_profit_rate > stop_rate:
+        # 止盈前提条件：如果估值增长率不是默认的0，则必须大于0.5（确保是在上涨反弹时卖出）
+        if estimated_profit_rate > stop_rate and (estimated_change == 0.0 or estimated_change > 0.5):
             try:
                 shares = get_bank_shares(user, sub_account_no, fund_code)
                 
@@ -132,7 +133,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             except Exception as e:
                 logger.error(f"止盈失败：{fund_name}({fund_code}) 异常={e}")
         else:
-            logger.info(f"跳过：{fund_name}({fund_code}) 预估收益未达标（预估={estimated_profit_rate:.2f}%, 止盈点={stop_rate:.2f}%, 100日排名={rank_100}）")
+            logger.info(f"跳过：{fund_name}({fund_code}) 预估收益未达标或今日涨幅不足（预估={estimated_profit_rate:.2f}%, 止盈点={stop_rate:.2f}%, 今日估值涨幅={estimated_change:.2f}%, 100日排名={rank_100}）")
 
     logger.info(f"止盈完成：{user.customer_name} 成功执行 {success_count} 次赎回操作（最多3个）")
     return True

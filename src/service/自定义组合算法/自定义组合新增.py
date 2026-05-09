@@ -137,6 +137,11 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                     except (ValueError, TypeError):
                         pass
 
+                # 进行五日均值过滤（购买前最后确认）
+                if not nav5_gate(fund_info, fund_name, fund_code, logger):
+                    logger.info(f"未处于上升趋势（估算净值≤5日均值），跳过购买：{fund_name}({fund_code})")
+                    continue
+
                 logger.info(f"候选通过，准备购买：{fund_name}({fund_code}) [year_return={year_val}, half_year_return={half_year_val}, rank_100day={rank_100}, rank_30day={rank_30}]，金额: {fund_amount}")
                 try:
                     res = commit_order(user, sub_account_no, fund_code, float(fund_amount))

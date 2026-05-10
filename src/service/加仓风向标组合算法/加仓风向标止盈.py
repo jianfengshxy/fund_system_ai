@@ -98,40 +98,44 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         rank_100 = getattr(fund_info, "rank_100day", None)
 
         # 止盈前提条件：如果估值增长率不是默认的0，则必须大于0.5（确保是在上涨反弹时卖出）
-        if estimated_profit_rate > stop_rate and (estimated_change == 0.0 or estimated_change > 0.5):
+        if estimated_profit_rate > stop_rate and (estimated_change == 0.0 or estimated_change > 0.5) and rank_100 is not None and rank_100 > 90:
             try:
                 shares = get_bank_shares(user, sub_account_no, fund_code)
                 
-                # 分层止盈逻辑
-                if rank_100 is not None and rank_100 > 90:
-                    # 满足更高要求，卖出所有低费率份额（卖出更多）
-                    low_fee_shares = _safe_float(get_low_fee_shares(user, fund_code), 0.0)
-                    if low_fee_shares > 10.0:
-                        logger.info(
-                            f"{user.customer_name} 分层止盈(rank_100>90)：{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% "
-                            f"止盈点={stop_rate:.2f}% 波动率={volatility:.2f} 100日排名={rank_100} 低费率份额={low_fee_shares:.2f}，执行卖出低费率份额"
-                        )
-                        redeem_ok = bool(sell_low_fee_shares(user, sub_account_no, fund_code, shares))
-                        if redeem_ok:
-                            success_count += 1
-                        else:
-                            logger.info(f"{user.customer_name} 低费率止盈未成功：{fund_name}({fund_code})")
-                    else:
-                        logger.info(f"跳过低费率止盈：{fund_name}({fund_code}) 低费率份额≤10 预估={estimated_profit_rate:.2f}% 止盈点={stop_rate:.2f}%")
-                else:
-                    # 仅满足基本收益率要求，卖出0费率份额（卖出较少，更保守）
+                low_fee_shares = _safe_float(get_low_fee_shares(user, fund_code), 0.0)
+                if low_fee_shares > 10.0:
                     logger.info(
-                        f"{user.customer_name} 分层止盈(仅收益达标)：{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% "
-                        f"止盈点={stop_rate:.2f}% 波动率={volatility:.2f} 100日排名={rank_100}，执行卖出0费率份额"
+                        f"{user.customer_name} 分层止盈(rank_100>90)：{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% "
+                        f"止盈点={stop_rate:.2f}% 波动率={volatility:.2f} 100日排名={rank_100} 低费率份额={low_fee_shares:.2f}，执行卖出低费率份额"
                     )
                     redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
                     if redeem_ok:
                         success_count += 1
                     else:
-                        logger.info(f"{user.customer_name} 0费率止盈未成功：{fund_name}({fund_code})")
-                        
+                        logger.info(f"{user.customer_name} 低费率止盈未成功：{fund_name}({fund_code})")
+          
             except Exception as e:
                 logger.error(f"止盈失败：{fund_name}({fund_code}) 异常={e}")
+
+        #如果不是C类基金且预估收益率 > 10.0，卖出低费率份额
+        if estimated_profit_rate > 10.0 and "C" not in fund_name:
+            try:
+                shares = get_bank_shares(user, sub_account_no, fund_code)
+                low_fee_shares = _safe_float(get_low_fee_shares(user, fund_code), 0.0)
+                if low_fee_shares > 10.0:
+                    logger.info(
+                        f"{user.customer_name} 兜底止盈(非C类且收益>10%)：{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% "
+                        f"低费率份额={low_fee_shares:.2f}，执行卖出低费率份额"
+                    )
+                    redeem_ok = bool(sell_low_fee_shares(user, sub_account_no, fund_code, shares))
+                    if redeem_ok:
+                        success_count += 1
+                    else:
+                        logger.info(f"{user.customer_name} 兜底止盈未成功：{fund_name}({fund_code})")
+                else:
+                    logger.info(f"跳过兜底止盈：{fund_name}({fund_code}) 低费率份额≤10 预估={estimated_profit_rate:.2f}%")
+            except Exception as e:
+                logger.error(f"兜底止盈失败：{fund_name}({fund_code}) 异常={e}")
         else:
             logger.info(f"跳过：{fund_name}({fund_code}) 预估收益未达标或今日涨幅不足（预估={estimated_profit_rate:.2f}%, 止盈点={stop_rate:.2f}%, 今日估值涨幅={estimated_change:.2f}%, 100日排名={rank_100}）")
 

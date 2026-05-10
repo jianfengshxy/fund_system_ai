@@ -43,11 +43,16 @@ def get_0_fee_shares(user: User, fund_code: str) -> Optional[float]:
         return 0.0
 
     redeem_share_and_rate_list = result["RedeemShareAndRateList"]
+    total_shares = 0.0
     for item in redeem_share_and_rate_list:
-        if item["Rate"] == 0.0:
-            v = item["AvailableVol"]
-            logger.info("查询到0费率份额", extra={"account": getattr(user, 'mobile_phone', None), "action": "get_0_fee", "fund_code": fund_code, "shares": v})
-            return v
+        # 兼容费率为 0.0 以及 0.1% 的情况
+        if item["Rate"] == 0.0 or item["Rate"] == 0.1:
+            total_shares += float(item["AvailableVol"])
+            
+    if total_shares > 0:
+        logger.info(f"查询到可忽略费率(0.0或0.1)份额总计: {total_shares}", extra={"account": getattr(user, 'mobile_phone', None), "action": "get_0_fee", "fund_code": fund_code, "shares": total_shares})
+        return total_shares
+        
     return 0.0
 
 def get_low_fee_shares(user: User, fund_code: str) -> Optional[float]:

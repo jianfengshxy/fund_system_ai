@@ -128,3 +128,5 @@ node_modules/@serverless-devs/s/bin/s
 node_modules/@serverless-devs/s/bin/s.cmd
 .vercelignore
 vercel.json
+src/service/基金信息/基金信息.py
+

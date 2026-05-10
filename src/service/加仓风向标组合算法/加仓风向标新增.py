@@ -103,7 +103,7 @@ def add_new_funds(
     total_budget: float,
     amount: Optional[float] = None,
     fund_type: str = 'all',
-    fund_num: int = 1,
+    fund_num: int = 3,
     spread_days: int = 5
 ) -> bool:
     """
@@ -312,7 +312,12 @@ def add_new_funds(
                 logger.info(f"净值未达条件（未处于上升趋势），跳过新增：{name}({code})")
                 continue
 
-            logger.info(f"趋势判定通过：估算净值高于5日均值，准备下单 {name}({code}) 金额={buy_amount}元")
+            # 补充日志：打印所有最终过滤条件，便于人工辅助定位为何没买
+            rank_100_final = getattr(info, 'rank_100day', '未知')
+            rank_30_final = getattr(info, 'rank_30day', '未知')
+            year_val = getattr(info, 'year_return', '未知')
+            half_year_val = getattr(info, 'six_month_return', '未知')
+            logger.info(f"所有条件验证通过，准备购买：{name}({code}) [year_return={year_val}, half_year_return={half_year_val}, rank_100day={rank_100_final}, rank_30day={rank_30_final}]，金额={buy_amount}元")
         
             try:
                 result = commit_order(user, sub_account_no, code, buy_amount)

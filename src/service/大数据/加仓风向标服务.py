@@ -311,8 +311,6 @@ def get_fund_investment_indicators(days=180, threshold=20, user=None) -> List[Fu
                 get_logger(__name__).warning(f"跳过{fund_name}({fund_code}): 指数基金费率查询失败({e})")
                 continue
 
-        product_rank = getattr(ind, "product_rank", "未知")
-        get_logger(__name__).info(f"成功满足条件加入候选: {fund_name}({fund_code}), rank_100day={rank_100_num}, product_rank={product_rank}, fund_type={fund_type}")
         filtered_indicators.append(ind)
 
     indicators = filtered_indicators
@@ -334,8 +332,9 @@ def get_fund_investment_indicators(days=180, threshold=20, user=None) -> List[Fu
             fund_code = getattr(ind, "fund_code", "")
             fund_name = getattr(ind, "fund_name", fund_code)
             rank_100 = getattr(ind, "rank_100day", "未知")
+            product_rank = getattr(ind, "product_rank", "未知")
             fund_type = getattr(ind, "fund_type", "未知")
-            get_logger(__name__).info(f"{i:02d}. {fund_name}({fund_code}) [rank_100day={rank_100}, fund_type={fund_type}]")
+            get_logger(__name__).info(f"{i:02d}. {fund_name}({fund_code}) [rank_100day={rank_100}, product_rank={product_rank}, fund_type={fund_type}]")
     
     _fund_indicators_cache[cache_key] = indicators
     get_logger(__name__).info(f"已缓存基金投资指标: days={days}, threshold={threshold}")

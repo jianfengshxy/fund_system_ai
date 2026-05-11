@@ -1,10 +1,3 @@
-import logging
-from src.common.logger import get_logger
-from random import vonmisesvariate
-import re
-from typing import Optional
-import threading
-from concurrent.futures import ThreadPoolExecutor
 import os
 import sys  # 添加此行，如果未导入
 
@@ -14,6 +7,10 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 # 如果项目根目录不在Python路径中，则添加
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
+
+import logging
+from typing import Optional
+from src.common.logger import get_logger
 
 from src.domain.fund import fund_info
 from src.service.定投管理.定投查询.定投查询 import get_all_fund_plan_details

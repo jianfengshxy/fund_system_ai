@@ -28,6 +28,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 活期宝风控阈值常量
+HQB_THRESHOLD = 20
+
+# 组合仓位占比阈值常量
+ASSET_RATIO_THRESHOLD = 80
 
 def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] = None, total_budget: float = 100000.0) -> bool:
     """自定义组合算法新增：从 payload 传入的 fund_list 获取要交易的基金及其金额。
@@ -47,11 +52,11 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
         current_holdings = sum(float(getattr(a, 'asset_value', 0) or 0) for a in asset_details)
         
         ratio = (current_holdings / total_budget) * 100
-        if ratio > 70:
-            logger.info(f"[自定义组合] 预算风控拦截：当前组合资产({current_holdings:.2f})已超过预算({total_budget})的70% (当前{ratio:.2f}%)，退出新增流程")
+        if ratio > ASSET_RATIO_THRESHOLD:
+            logger.info(f"[自定义组合] 预算风控拦截：当前组合资产({current_holdings:.2f})已超过预算({total_budget})的{ASSET_RATIO_THRESHOLD}% (当前{ratio:.2f}%)，退出新增流程")
             return False
         else:
-            logger.info(f"[自定义组合] 预算检查通过：当前资产占比 {ratio:.2f}% (阈值 70%)")
+            logger.info(f"[自定义组合] 预算检查通过：当前资产占比 {ratio:.2f}% (阈值 {ASSET_RATIO_THRESHOLD}%)")
     else:
         # 如果没有传预算，则跳过此检查，但为了后续逻辑，我们需要获取 asset_details
         # 注意：下面的逻辑中第 56 行又获取了一次 asset_details，可以优化

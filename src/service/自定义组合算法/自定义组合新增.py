@@ -100,6 +100,33 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             # 若基金不在资产列表中，则直接购买（新增前加净值门槛）
             if fund_code not in held_codes:
 
+                # 检查限购金额：如果限购金额 < 2000，则无条件直接买入
+                max_purchase = getattr(fund_info, 'max_purchase', None)
+                if max_purchase is not None:
+                    try:
+                        max_amount = float(max_purchase)
+                        if max_amount < 2000:
+                            logger.info(f"基金 {fund_name}({fund_code}) 限购金额 {max_amount} < 2000，触发无条件买入逻辑！")
+                            # 如果请求金额大于限购金额，调整为限购金额
+                            actual_amount = float(fund_amount)
+                            if actual_amount > max_amount:
+                                logger.info(f"请求金额 {actual_amount} 超过限额 {max_amount}，调整为 {max_amount}")
+                                actual_amount = max_amount
+                                
+                            try:
+                                res = commit_order(user, sub_account_no, fund_code, actual_amount)
+                                if res and getattr(res, 'busin_serial_no', None):
+                                    success_count += 1
+                                    logger.info(f"无条件购买成功：{fund_name}({fund_code})，金额: {actual_amount}")
+                                else:
+                                    logger.info(f"无条件购买未成功或被系统保护跳过：{fund_name}({fund_code})")
+                            except Exception as e:
+                                logger.error(f"无条件购买失败：{fund_name}({fund_code})，异常: {e}")
+                            
+                            continue # 处理完毕，进入下一个基金
+                    except (ValueError, TypeError):
+                        pass
+
                 # 候选阶段先应用五日均值过滤
                 if not nav5_gate(fund_info, fund_name, fund_code, logger):
                     logger.info(f"净值未达条件，跳过候选：{fund_name}({fund_code})")

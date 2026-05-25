@@ -1,6 +1,7 @@
 import logging
 import sys
 import os
+from typing import Optional, List, Dict
 
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -19,7 +20,7 @@ from src.API.交易管理.trade import get_bank_shares
 
 logger = get_logger(__name__)
 
-def redeem_gold_funds(user: User, sub_account_name: str) -> bool:
+def redeem_gold_funds(user: User, sub_account_name: str, fund_list: Optional[List[Dict]] = None) -> bool:
     """
     黄金多利止盈逻辑：
     收益率大于1.0% 就买出0费率份额
@@ -38,6 +39,23 @@ def redeem_gold_funds(user: User, sub_account_name: str) -> bool:
         logger.info(f"组合 {sub_account_name} 中没有基金资产")
         return True
 
+    fund_stop_rate = None
+    if isinstance(fund_list, list) and fund_list:
+        m = {}
+        for item in fund_list:
+            if not isinstance(item, dict):
+                continue
+            code = item.get("fund_code") or item.get("fundcode") or item.get("FundCode") or item.get("code")
+            if not code:
+                continue
+            try:
+                stop_rate = float(item.get("stop_rate", 1.0))
+            except Exception:
+                stop_rate = 1.0
+            m[str(code)] = stop_rate
+        if m:
+            fund_stop_rate = m
+
     redeem_count = 0
 
     for asset in user_assets:
@@ -45,6 +63,10 @@ def redeem_gold_funds(user: User, sub_account_name: str) -> bool:
             current_profit_rate = float(getattr(asset, "constant_profit_rate", 0.0) or 0.0)
             fund_code = asset.fund_code
             fund_name = asset.fund_name
+            fund_code_str = str(fund_code)
+            if fund_stop_rate is not None and fund_code_str not in fund_stop_rate:
+                continue
+            stop_rate = fund_stop_rate.get(fund_code_str, 1.0) if fund_stop_rate is not None else 1.0
 
             # 获取基金估值信息
             fund_info = get_all_fund_info(user, fund_code)
@@ -55,8 +77,8 @@ def redeem_gold_funds(user: User, sub_account_name: str) -> bool:
             
             logger.info(f"基金 {fund_name}({fund_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%")
 
-            if estimated_profit_rate > 1.0:
-                logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% > 1.0%，尝试赎回0费率份额")
+            if estimated_profit_rate > stop_rate:
+                logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% > {stop_rate}%，尝试赎回0费率份额")
                 
                 # 获取可用份额
                 shares = get_bank_shares(user, sub_account_no, fund_code)
@@ -72,7 +94,7 @@ def redeem_gold_funds(user: User, sub_account_name: str) -> bool:
                     # 由于 sell_0_fee_shares 可能会打印日志，这里简单记录
                     redeem_count += 1
             else:
-                 logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% <= 1.0%，不满足止盈条件")
+                 logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% <= {stop_rate}%，不满足止盈条件")
 
         except Exception as e:
             logger.error(f"处理基金 {asset.fund_code} 止盈时发生错误: {e}")

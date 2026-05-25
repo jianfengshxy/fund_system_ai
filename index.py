@@ -680,6 +680,7 @@ def increase_gold_portfolio(event, context):
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
         amount = payload.get('amount', 10000.0) # Default 10000.0 if not specified
+        fund_list = payload.get('fund_list') or payload.get('funds')
         
         extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_increase"}
         
@@ -692,12 +693,12 @@ def increase_gold_portfolio(event, context):
             logger.error(f"获取用户 {account} 信息失败")
             return
 
-        logger.info(f"[黄金多利组合] 开始执行加仓检查...", extra=extra)
-        success = gold_increase_biz(user, sub_account_name, amount)
+        logger.info(f"[多利组合] 开始执行加仓检查...", extra=extra)
+        success = gold_increase_biz(user, sub_account_name, amount, fund_list)
         if success:
-            logger.info(f"[黄金多利组合] 加仓检查/执行成功", extra=extra)
+            logger.info(f"[多利组合] 加仓检查/执行成功", extra=extra)
         else:
-            logger.info(f"[黄金多利组合] 未触发加仓或执行失败", extra=extra)
+            logger.info(f"[多利组合] 未触发加仓或执行失败", extra=extra)
 
     except Exception as e:
         logger.error(f"increase_gold_portfolio 异常: {e}", extra={"action": "gold_increase"})
@@ -708,6 +709,7 @@ def redeem_gold_portfolio(event, context):
         account = payload.get('account')
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
+        fund_list = payload.get('fund_list') or payload.get('funds')
         
         extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_redeem"}
         
@@ -721,7 +723,7 @@ def redeem_gold_portfolio(event, context):
             return
 
         logger.info(f"[黄金多利组合] 开始执行止盈检查...", extra=extra)
-        success = gold_redeem_biz(user, sub_account_name)
+        success = gold_redeem_biz(user, sub_account_name, fund_list)
         if success:
             logger.info(f"[黄金多利组合] 止盈检查/执行成功", extra=extra)
         else:

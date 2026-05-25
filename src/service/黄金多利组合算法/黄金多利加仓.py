@@ -11,7 +11,7 @@ if root_dir not in sys.path:
 
 from src.common.logger import get_logger
 import datetime
-from typing import Optional
+from typing import Optional, List, Dict
 
 from src.domain.user.User import User
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
@@ -22,12 +22,12 @@ from src.service.基金信息.基金信息 import get_all_fund_info
 
 logger = get_logger(__name__)
 
-def increase_gold_funds(user: User, sub_account_name: str, amount: float = 10000.0) -> bool:
+def increase_gold_funds(user: User, sub_account_name: str, amount: float = 10000.0, fund_list: Optional[List[Dict]] = None) -> bool:
     """
     黄金多利组合加仓逻辑：
-    只有收益率小于-1.0% 且 没有在途交易 就买入 前海开源黄金ETF联接C 021740 10000.0
+    只有收益率小于-1.0% 且 没有在途交易 就买入指定基金
     """
-    logger.info(f"开始执行黄金多利组合加仓检查，组合: {sub_account_name}", extra={"account": user.account, "sub_account_name": sub_account_name, "action": "gold_increase"})
+    logger.info(f"开始执行组合加仓检查，组合: {sub_account_name}", extra={"account": user.account, "sub_account_name": sub_account_name, "action": "gold_increase"})
 
     # 获取子账户编号
     sub_account_no = getSubAccountNoByName(user, sub_account_name)
@@ -35,9 +35,29 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 10000
         logger.error(f"未找到组合 {sub_account_name} 的账号")
         return False
 
-    target_fund_code = "021740" # 前海开源黄金ETF联接C
+    normalized_funds: List[Dict] = []
+    if isinstance(fund_list, list) and fund_list:
+        for item in fund_list:
+            if not isinstance(item, dict):
+                continue
+            fund_code = item.get("fund_code") or item.get("fundcode") or item.get("FundCode") or item.get("code")
+            if not fund_code:
+                continue
+            try:
+                fund_amount = float(item.get("amount", amount))
+            except Exception:
+                fund_amount = amount
+            normalized_funds.append({"fund_code": str(fund_code), "amount": fund_amount})
+
+    if not normalized_funds:
+        normalized_funds = [{"fund_code": "021740", "amount": amount}]
+
+    primary_fund = normalized_funds[0]
+    target_fund_code = primary_fund["fund_code"]
+    base_amount = primary_fund["amount"]
 
     fi = get_all_fund_info(user, target_fund_code)
+    fund_name_for_target = getattr(fi, "fund_name", None) if fi else None
     nav_date_str = getattr(fi, "nav_date", None)
     try:
         prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
@@ -73,13 +93,13 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 10000
     if not has_position:
         logger.info(f"组合 {sub_account_name} 中没有有效基金资产，视为初始化建仓")
         # 直接买入目标基金
-        res = commit_order(user, sub_account_no, target_fund_code, amount)
+        logger.info(f"初始化建仓准备下单: {fund_name_for_target or ''}({target_fund_code}) 金额: {base_amount}")
+        res = commit_order(user, sub_account_no, target_fund_code, base_amount)
         if res:
-            logger.info(f"初始化建仓成功: {target_fund_code} - 金额: {amount} - 订单号: {res.busin_serial_no}")
+            logger.info(f"初始化建仓成功: {target_fund_code} - 金额: {base_amount} - 订单号: {res.busin_serial_no}")
             return True
-        else:
-            logger.error(f"初始化建仓失败: {target_fund_code}")
-            return True
+        logger.info(f"初始化建仓未提交或失败: {fund_name_for_target or ''}({target_fund_code}) 金额: {base_amount}")
+        return True
 
     buy_triggered = False
 
@@ -102,18 +122,17 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 10000
 
             if estimated_profit_rate < -1.0:
                 buy_multiplier = 2.0 if estimated_profit_rate < -5.0 else 1.0
-                buy_amount = amount * buy_multiplier
+                buy_amount = base_amount * buy_multiplier
 
                 logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% < -1.0%，触发加仓判定")
 
-                logger.info(f"满足加仓条件，买入 {target_fund_code} {buy_amount}元")
+                logger.info(f"满足加仓条件，买入 {fund_name_for_target or ''}({target_fund_code}) 金额: {buy_amount}")
                 res = commit_order(user, sub_account_no, target_fund_code, buy_amount)
                 if res:
                     logger.info(f"加仓成功: {target_fund_code} - 金额: {buy_amount} - 订单号: {res.busin_serial_no}")
                     buy_triggered = True
                     break # 每次只加仓一笔，避免重复
-                else:
-                    logger.error(f"加仓提交失败: {target_fund_code}")
+                logger.info(f"加仓未提交或失败: {fund_name_for_target or ''}({target_fund_code}) 金额: {buy_amount}")
             else:
                 logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% >= -1.0%，不满足加仓条件")
 

@@ -229,7 +229,7 @@ resources:
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "increase_gold_portfolio_13918199137"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "黄金多利","amount": 10000.0}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "黄金多利","amount": 10000.0,"fund_list":[{"fund_code":"021740","amount":10000.0}]}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 55 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
@@ -441,7 +441,15 @@ resources:
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "increase_gold_portfolio_13918199137"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "黄金多利","amount": 10000.0}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "黄金多利","amount": 10000.0,"fund_list":[{"fund_code":"021740","amount":10000.0}]}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 53 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+          
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "increase_smart_platform_13918199137"
+        triggerConfig:
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "智投平台","amount": 10000.0,"fund_list":[{"fund_code":"011707","amount":2000.0}]}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 53 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
@@ -466,8 +474,16 @@ resources:
         triggerType: ${vars.common.props.triggerConfig.triggerType}
         triggerName: "redeem_gold_portfolio_13918199137"
         triggerConfig:
-          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "黄金多利"}'
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "黄金多利","fund_list":[{"fund_code":"021740","stop_rate":1.0}]}'
           cronExpression: "CRON_TZ=Asia/Shanghai 0 55 14 * * 1-5"
+          enable: ${vars.common.props.triggerConfig.enable}
+
+      - qualifier: ${vars.common.props.triggerConfig.qualifier}
+        triggerType: ${vars.common.props.triggerConfig.triggerType}
+        triggerName: "redeem_smart_platform_13918199137"
+        triggerConfig:
+          payload: '{"account": "13918199137","password": "sWX15706","sub_account_name": "智投平台","fund_list":[{"fund_code":"011707","stop_rate":3.0}]}'
+          cronExpression: "CRON_TZ=Asia/Shanghai 0 53 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
 
   increase_gold_dimension_portfolio:

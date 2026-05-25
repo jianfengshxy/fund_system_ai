@@ -22,12 +22,30 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
 
     # 1) 交易时间判断
     if not is_trading_time(user):
-        logger.info(f"{user.customer_name} 当前非交易时间，跳过提交订单", extra=extra)
+        fund_name = None
+        try:
+            fi = get_all_fund_info(user, fund_code)
+            fund_name = getattr(fi, "fund_name", None) if fi else None
+        except Exception:
+            fund_name = None
+        extra2 = dict(extra)
+        extra2["amount"] = float(amount) if amount is not None else amount
+        extra2["fund_name"] = fund_name
+        logger.info(f"{user.customer_name} 当前非交易时间，跳过提交订单: {fund_name or ''}({fund_code}) 金额: {amount}", extra=extra2)
         return None
 
     # 1.1) 长假期判断：如果是长假期前（距离下一个交易日超过3天），暂停买入，避免持仓时间过长不可控
     if is_long_holiday(user):
-        logger.info(f"{user.customer_name} 当前处于长假期前夕（距下一交易日>3天），暂停买入以规避长假风险", extra=extra)
+        fund_name = None
+        try:
+            fi = get_all_fund_info(user, fund_code)
+            fund_name = getattr(fi, "fund_name", None) if fi else None
+        except Exception:
+            fund_name = None
+        extra2 = dict(extra)
+        extra2["amount"] = float(amount) if amount is not None else amount
+        extra2["fund_name"] = fund_name
+        logger.info(f"{user.customer_name} 当前处于长假期前夕（距下一交易日>3天），暂停买入: {fund_name or ''}({fund_code}) 金额: {amount}", extra=extra2)
         return None
 
     # 2) 获取银行卡信息（下单所需 + 余额保护）

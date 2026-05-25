@@ -52,94 +52,99 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 10000
     if not normalized_funds:
         normalized_funds = [{"fund_code": "021740", "amount": amount}]
 
-    primary_fund = normalized_funds[0]
-    target_fund_code = primary_fund["fund_code"]
-    base_amount = primary_fund["amount"]
+    def _get_check_dates_for_fund(fund_code: str) -> set:
+        fi = get_all_fund_info(user, fund_code)
+        nav_date_str = getattr(fi, "nav_date", None) if fi else None
+        try:
+            prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
+        except Exception:
+            prev_trade_day = None
+        today = datetime.date.today()
+        check_dates = {today}
+        if prev_trade_day:
+            check_dates.add(prev_trade_day)
+        return check_dates
 
-    fi = get_all_fund_info(user, target_fund_code)
-    fund_name_for_target = getattr(fi, "fund_name", None) if fi else None
-    nav_date_str = getattr(fi, "nav_date", None)
-    try:
-        prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
-    except Exception:
-        prev_trade_day = None
-    today = datetime.date.today()
+    def _has_pending_trade(fund_code: str) -> bool:
+        check_dates = _get_check_dates_for_fund(fund_code)
+        pending_trade = has_buy_submission_on_dates(user, sub_account_no, fund_code, check_dates)
+        return pending_trade is not None
+        
+    def _get_fund_name(fund_code: str) -> str:
+        fi = get_all_fund_info(user, fund_code)
+        return getattr(fi, "fund_name", "") if fi else ""
 
-    check_dates = {today}
-    if prev_trade_day:
-        check_dates.add(prev_trade_day)
-
-    pending_trade = has_buy_submission_on_dates(user, sub_account_no, target_fund_code, check_dates)
-    if pending_trade:
-        logger.info(f"目标基金 {target_fund_code} 存在在途交易，跳过加仓")
-        return True
-    
-    # 获取持仓
+    # 获取持仓并建立有效持仓索引
     user_assets = get_sub_account_asset_by_name(user, sub_account_name)
-    
-    # 检查是否有有效持仓 (份额 > 0)
-    has_position = False
+    asset_dict = {}
     if user_assets:
         for asset in user_assets:
             try:
                 vol = float(getattr(asset, 'available_vol', 0) or 0)
                 val = float(getattr(asset, 'asset_value', 0) or 0)
                 if vol > 0.01 or val > 1.0: 
-                    has_position = True
-                    break
+                    asset_dict[asset.fund_code] = asset
             except:
                 pass
 
-    if not has_position:
-        logger.info(f"组合 {sub_account_name} 中没有有效基金资产，视为初始化建仓")
-        # 直接买入目标基金
-        logger.info(f"初始化建仓准备下单: {fund_name_for_target or ''}({target_fund_code}) 金额: {base_amount}")
-        res = commit_order(user, sub_account_no, target_fund_code, base_amount)
-        if res:
-            logger.info(f"初始化建仓成功: {target_fund_code} - 金额: {base_amount} - 订单号: {res.busin_serial_no}")
-            return True
-        logger.info(f"初始化建仓未提交或失败: {fund_name_for_target or ''}({target_fund_code}) 金额: {base_amount}")
-        return True
-
     buy_triggered = False
+    
+    # 建立 payload 中基金的 amount 映射，用于加仓时取金额
+    payload_amt_dict = {f["fund_code"]: f["amount"] for f in normalized_funds}
 
-    # 检查持仓收益率
-    for asset in user_assets:
-        try:
-            # 获取收益率
-            current_profit_rate = float(getattr(asset, "constant_profit_rate", 0.0) or 0.0)
-            fund_code = asset.fund_code
-            fund_name = asset.fund_name
-
-            # 获取基金估值信息
-            fund_info = get_all_fund_info(user, fund_code)
-            estimated_change = fund_info.estimated_change if fund_info and fund_info.estimated_change is not None else 0.0
-            
-            # 计算预估收益率 = 当前收益率 + 估值涨跌幅
-            estimated_profit_rate = current_profit_rate + estimated_change
-            
-            logger.info(f"基金 {fund_name}({fund_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%")
-
-            if estimated_profit_rate < -1.0:
-                buy_multiplier = 2.0 if estimated_profit_rate < -5.0 else 1.0
-                buy_amount = base_amount * buy_multiplier
-
-                logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% < -1.0%，触发加仓判定")
-
-                logger.info(f"满足加仓条件，买入 {fund_name_for_target or ''}({target_fund_code}) 金额: {buy_amount}")
-                res = commit_order(user, sub_account_no, target_fund_code, buy_amount)
-                if res:
-                    logger.info(f"加仓成功: {target_fund_code} - 金额: {buy_amount} - 订单号: {res.busin_serial_no}")
-                    buy_triggered = True
-                    break # 每次只加仓一笔，避免重复
-                logger.info(f"加仓未提交或失败: {fund_name_for_target or ''}({target_fund_code}) 金额: {buy_amount}")
+    # 1. 遍历传过来的基金列表，如果未持有该基金，则执行该基金的初始化建仓
+    for f in normalized_funds:
+        f_code = f["fund_code"]
+        f_amt = f["amount"]
+        f_name = _get_fund_name(f_code)
+        
+        if f_code not in asset_dict:
+            if _has_pending_trade(f_code):
+                logger.info(f"目标基金 {f_code} 存在在途交易，跳过初始化建仓")
+                continue
+                
+            logger.info(f"基金 {f_name}({f_code}) 未持有，执行初始化建仓，准备下单金额: {f_amt}")
+            res = commit_order(user, sub_account_no, f_code, f_amt)
+            if res:
+                logger.info(f"初始化建仓成功: {f_code} - 金额: {f_amt} - 订单号: {res.busin_serial_no}")
+                buy_triggered = True
             else:
-                logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% >= -1.0%，不满足加仓条件")
+                logger.info(f"初始化建仓未提交或失败: {f_name}({f_code}) 金额: {f_amt}")
 
-            
-        except Exception as e:
-            logger.error(f"处理基金 {asset.fund_code} 时发生错误: {e}")
+    # 2. 遍历组合内所有持有的基金，满足条件则加仓降低成本
+    for f_code, asset in asset_dict.items():
+        f_name = getattr(asset, "fund_name", "") or _get_fund_name(f_code)
+        
+        if _has_pending_trade(f_code):
+            logger.info(f"持仓基金 {f_name}({f_code}) 存在在途交易，跳过加仓")
             continue
+            
+        # 计算预估收益率
+        current_profit_rate = float(getattr(asset, "constant_profit_rate", 0.0) or 0.0)
+        fund_info = get_all_fund_info(user, f_code)
+        estimated_change = fund_info.estimated_change if fund_info and fund_info.estimated_change is not None else 0.0
+        estimated_profit_rate = current_profit_rate + estimated_change
+        
+        logger.info(f"持仓基金 {f_name}({f_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%")
+
+        if estimated_profit_rate < -1.0:
+            # 取对应的下单金额，优先取 payload 中配置的金额，否则用默认传参的 amount
+            base_amt = payload_amt_dict.get(f_code, amount)
+            buy_multiplier = 2.0 if estimated_profit_rate < -5.0 else 1.0
+            buy_amount = base_amt * buy_multiplier
+
+            logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -1.0%，触发加仓判定")
+            logger.info(f"满足加仓条件，准备买入 {f_name}({f_code}) 金额: {buy_amount}")
+            
+            res = commit_order(user, sub_account_no, f_code, buy_amount)
+            if res:
+                logger.info(f"加仓成功: {f_code} - 金额: {buy_amount} - 订单号: {res.busin_serial_no}")
+                buy_triggered = True
+            else:
+                logger.info(f"加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")
+        else:
+            logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% >= -1.0%，不满足加仓条件")
+
 
     if not buy_triggered:
         logger.info("本次检查未触发加仓操作")

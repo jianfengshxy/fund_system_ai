@@ -3,6 +3,11 @@ import threading
 import time
 import json
 from pathlib import Path
+
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+
 from src.API.登录接口.login import login, login_passport, inference_passport_for_bind
 from src.service.银行卡账户.bankAccoutService import getMaxhqbBank
 from src.common.logger import get_logger
@@ -255,3 +260,7 @@ def get_user_from_store_or_cache(account: str, password: str):
         pass
     logger.info("令牌来源: 默认用户(无登录)", extra={"account": account, "token_source": "default_user_nologin"})
     return DEFAULT_USER
+
+if __name__ == "__main__":
+    user = get_user_from_store_or_cache("13571973393", "wj121109")
+    print(user)

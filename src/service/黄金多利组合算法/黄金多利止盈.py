@@ -1,4 +1,3 @@
-import logging
 import sys
 import os
 from typing import Optional, List, Dict
@@ -39,6 +38,21 @@ def redeem_gold_funds(user: User, sub_account_name: str, fund_list: Optional[Lis
         logger.info(f"组合 {sub_account_name} 中没有基金资产")
         return True
 
+    def _safe_float(v, default=0.0):
+        try:
+            if v is None:
+                return default
+            return float(v)
+        except Exception:
+            return default
+
+    def _get_default_stop_rate(fund_info) -> float:
+        fund_type = getattr(fund_info, "fund_type", None)
+        volatility = _safe_float(getattr(fund_info, "volatility", None), 0.0)
+        if fund_type == "000":
+            return min(max(volatility, 3.0), 10.0)
+        return min(max(volatility, 5.0), 15.0)
+
     fund_stop_rate = None
     if isinstance(fund_list, list) and fund_list:
         m = {}
@@ -48,10 +62,11 @@ def redeem_gold_funds(user: User, sub_account_name: str, fund_list: Optional[Lis
             code = item.get("fund_code") or item.get("fundcode") or item.get("FundCode") or item.get("code")
             if not code:
                 continue
+            raw_stop_rate = item.get("stop_rate")
             try:
-                stop_rate = float(item.get("stop_rate", 1.0))
+                stop_rate = float(raw_stop_rate) if raw_stop_rate is not None else None
             except Exception:
-                stop_rate = 1.0
+                stop_rate = None
             m[str(code)] = stop_rate
         if m:
             fund_stop_rate = m
@@ -66,16 +81,21 @@ def redeem_gold_funds(user: User, sub_account_name: str, fund_list: Optional[Lis
             fund_code_str = str(fund_code)
             if fund_stop_rate is not None and fund_code_str not in fund_stop_rate:
                 continue
-            stop_rate = fund_stop_rate.get(fund_code_str, 1.0) if fund_stop_rate is not None else 1.0
 
             # 获取基金估值信息
             fund_info = get_all_fund_info(user, fund_code)
             estimated_change = fund_info.estimated_change if fund_info and fund_info.estimated_change is not None else 0.0
+            default_stop_rate = _get_default_stop_rate(fund_info) if fund_info else 5.0
+            configured_stop_rate = fund_stop_rate.get(fund_code_str) if fund_stop_rate is not None else None
+            stop_rate = configured_stop_rate if configured_stop_rate is not None else default_stop_rate
             
             # 计算预估收益率 = 当前收益率 + 估值涨跌幅
             estimated_profit_rate = current_profit_rate + estimated_change
             
-            logger.info(f"基金 {fund_name}({fund_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%")
+            logger.info(
+                f"基金 {fund_name}({fund_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, "
+                f"预估收益率: {estimated_profit_rate:.2f}%, 止盈点: {stop_rate:.2f}%"
+            )
 
             if estimated_profit_rate > stop_rate:
                 logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% > {stop_rate}%，尝试赎回0费率份额")

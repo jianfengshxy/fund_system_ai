@@ -130,7 +130,7 @@ if __name__ == "__main__":
         test_user = DEFAULT_USER
         
         # 2. 设置测试参数
-        test_sub_account = "黄金多利"
+        test_sub_account = "智投平台"
 
         print(f"--- 开始测试黄金多利止盈 ---")
         print(f"用户: {test_user.customer_name}")

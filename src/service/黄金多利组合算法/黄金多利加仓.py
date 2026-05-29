@@ -22,7 +22,7 @@ from src.service.基金信息.基金信息 import get_all_fund_info
 
 logger = get_logger(__name__)
 
-def increase_gold_funds(user: User, sub_account_name: str, amount: float = 10000.0, fund_list: Optional[List[Dict]] = None) -> bool:
+def increase_gold_funds(user: User, sub_account_name: str, amount: float = 2000.0, fund_list: Optional[List[Dict]] = None) -> bool:
     """
     黄金多利组合加仓逻辑：
     只有收益率小于-1.0% 且 没有在途交易 就买入指定基金
@@ -159,7 +159,7 @@ if __name__ == "__main__":
         test_user = DEFAULT_USER
         
         # 2. 设置测试参数
-        test_sub_account = "黄金多利"
+        test_sub_account = "智投平台"
         test_amount = 10000.0
 
         print(f"--- 开始测试黄金多利加仓 ---")

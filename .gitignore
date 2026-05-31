@@ -90,6 +90,9 @@ venv.bak/
 
 AccessKey.csv
 
+网络流量包/
+*.chlz
+
 # Spyder project settings
 .spyderproject
 .spyproject

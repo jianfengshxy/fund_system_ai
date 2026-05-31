@@ -1,9 +1,17 @@
 import pytest
 import requests
+import os
+import sys
 from unittest.mock import patch, MagicMock
+
+# 获取项目根目录路径并加入到 sys.path
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+
 from src.API.登录接口.login import inference_passport_for_bind, login
-from domain.user.User import User  # 修改这行，直接从User.py导入User类
-from common.constant import DEFAULT_USER
+from src.domain.user.User import User
+from src.common.constant import DEFAULT_USER
 
 @pytest.fixture
 def mock_response():

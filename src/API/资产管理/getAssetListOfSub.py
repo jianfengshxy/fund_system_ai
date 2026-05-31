@@ -16,7 +16,17 @@ from src.common.requests_session import session
 
 # 使用绝对导入
 from src.domain.fund_plan import ApiResponse
-from src.common.constant import SERVER_VERSION, PHONE_TYPE, MOBILE_KEY
+from src.common.constant import (
+    CLIENT_INFO_ANDROID_ZTE_7534N_11,
+    GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707,
+    MOBILE_KEY,
+    MP_INSTANCE_ID_ASSET_LIST_OF_SUB,
+    PHONE_TYPE,
+    SERVER_VERSION,
+    TRACEPARENT_ASSET_LIST_OF_SUB,
+    TRACESTATE_ASSET_LIST_OF_SUB,
+    USER_AGENT_OKHTTP_3_12_13,
+)
 from src.domain.asset.asset_details import AssetDetails
 
 def get_asset_list_of_sub(user, sub_account_no, with_meta: bool = False):
@@ -32,12 +42,12 @@ def get_asset_list_of_sub(user, sub_account_no, with_meta: bool = False):
         "Content-Type": "application/json; charset=utf-8",
         "Host": f"tradeapilvs{user.index}.1234567.com.cn",
         "Referer": "https://mpservice.com/33cb2e2622954432b6073633f27149ba/release/pages/SubAccountDetail",
-        "User-Agent": "okhttp/3.12.13",
-        "clientInfo": "ttjj-ZTE 7534N-Android-11",
-        "gtoken": "ceaf-5ec1aeaf313a267434fbe314a1575707",
-        "mp_instance_id": "162",
-        "traceparent": "00-0000000046aa4cae000001968ae7a434-0000000000000000-01",
-        "tracestate": "pid=0xc3c6c4a,taskid=0x7f81dfc"
+        "User-Agent": USER_AGENT_OKHTTP_3_12_13,
+        "clientInfo": CLIENT_INFO_ANDROID_ZTE_7534N_11,
+        "gtoken": GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707,
+        "mp_instance_id": MP_INSTANCE_ID_ASSET_LIST_OF_SUB,
+        "traceparent": TRACEPARENT_ASSET_LIST_OF_SUB,
+        "tracestate": TRACESTATE_ASSET_LIST_OF_SUB,
     }
     data_json = {
         "ServerVersion": SERVER_VERSION,

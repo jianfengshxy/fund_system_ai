@@ -13,7 +13,20 @@ if __name__ == "__main__":
 
 from src.common.logger import get_logger
 from src.common.errors import RetriableError, ValidationError
-from src.common.constant import SERVER_VERSION, PHONE_TYPE
+from src.common.constant import (
+    CLIENT_INFO_ANDROID_ZTE_7534N_11,
+    DEFAULT_PAGE_INDEX_INT,
+    GTOKEN_CEAF_4A997831B1B3B90849F585F98CA6F30E,
+    MOBILE_KEY,
+    MP_INSTANCE_ID_FUNDINFO,
+    PHONE_TYPE,
+    PRODUCT_EFUND,
+    SERVER_VERSION,
+    TRACEPARENT_FUNDINFO,
+    TRACESTATE_FUNDINFO,
+    USER_AGENT_OKHTTP_3_12_13,
+    VALIDMARK_FUNDINFO,
+)
 
 import requests
 from typing import Optional
@@ -39,15 +52,15 @@ def getFundInfo(user,fund_code) -> Optional[FundInfo]:
         'Connection': 'keep-alive',
         'Host': 'fundcomapi.tiantianfunds.com',
         # 移除包含中文的 Referer 头，这是导致编码错误的主要原因
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
+        'User-Agent': USER_AGENT_OKHTTP_3_12_13,
+        'clientInfo': CLIENT_INFO_ANDROID_ZTE_7534N_11,
         'forceLog': '1',
-        'gtoken': 'ceaf-4a997831b1b3b90849f585f98ca6f30e',
-        'mp_instance_id': '32',
-        'traceparent': '00-0000000046aa4cae00000196718a8166-0000000000000000-01',
-        'tracestate': 'pid=0x6f96620,taskid=0xabc5123',
+        'gtoken': GTOKEN_CEAF_4A997831B1B3B90849F585F98CA6F30E,
+        'mp_instance_id': MP_INSTANCE_ID_FUNDINFO,
+        'traceparent': TRACEPARENT_FUNDINFO,
+        'tracestate': TRACESTATE_FUNDINFO,
         'Content-Type': 'application/x-www-form-urlencoded',
-        'validmark': 'Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZdVcHJ8J2NdZhXTNMQR9BMpxG3EMlqXyJoFeiMLZWZZtJ1DXqiIOSu/kLYsAt37vKDFhzWESfp9O5+28eHlMZFdAOKtOr630iFFehhF8ZZ2O0='
+        'validmark': VALIDMARK_FUNDINFO,
     }
     
     # 使用不包含中文字符的 Referer
@@ -56,19 +69,19 @@ def getFundInfo(user,fund_code) -> Optional[FundInfo]:
     
     data = {
         'FIELDS': 'MAXSG,FCODE,SHORTNAME,PDATE,NAV,ACCNAV,NAVCHGRT,NAVCHGRT100,GSZ,GSZZL,GZTIME,NEWPRICE,CHANGERATIO,ZJL,HQDATE,ISREDBAGS,SYL_Z,SYL_Y,SYL_3Y,SYL_6Y,SYL_JN,SYL_1N,SYL_2N,SYL_3N,SYL_5N,SYL_LN,RSBTYPE,RSFUNDTYPE,INDEXCODE,NEWINDEXTEXCH,TRKERROR1,ISBUY',
-        'product': 'EFund',
+        'product': PRODUCT_EFUND,
         'APPID': 'FAVOR,FAVOR_ED,FAVOR_GS',
         'pageSize': 200,
         'passportctoken': user.passport_ctoken,
         'SortColumn': '',
         'passportutoken': user.passport_utoken,
-        'deviceid': '15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me',
+        'deviceid': MOBILE_KEY,
         'userid': user.customer_no,
         'version': SERVER_VERSION,
         'ctoken': user.c_token,
         'uid': user.customer_no,
         'CODES': fund_code,
-        'pageIndex': 1,
+        'pageIndex': DEFAULT_PAGE_INDEX_INT,
         'utoken': user.u_token,
         'Sort': '',
         'plat': PHONE_TYPE,

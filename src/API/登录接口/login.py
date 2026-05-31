@@ -10,7 +10,25 @@ if __name__ == "__main__":
         sys.path.insert(0, root_dir)
 
 from src.API._core.client import default_client
-from src.common.constant import PHONE_TYPE, SERVER_VERSION, MOBILE_KEY
+from src.common.constant import (
+    APP_TYPE_TTJJ,
+    APP_VERSION_7_6_0,
+    CLIENT_INFO_ANDROID_ZTE_7534N_11,
+    DEVICE_NAME_ZTE,
+    DEVICE_OS_ANDROID_11,
+    DEVICE_TYPE_ANDROID11,
+    GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707,
+    MOBILE_KEY,
+    MP_INSTANCE_ID_LOGIN,
+    MP_VERSION_2_2_5,
+    PHONE_TYPE,
+    SERVER_VERSION,
+    TRACEPARENT_INFERENCE_PASSPORT_FOR_BIND,
+    TRACEPARENT_LOGIN,
+    TRACESTATE_INFERENCE_PASSPORT_FOR_BIND,
+    TRACESTATE_LOGIN,
+    USER_AGENT_OKHTTP_3_12_13,
+ )
 from src.common.logger import get_logger
 from src.domain.user.User import User
 
@@ -35,26 +53,26 @@ def login(account: str, password: str) -> User:
         'Content-Type': 'application/json; charset=utf-8',
         'Host': 'tradeapilvs5.1234567.com.cn',
         'Referer': 'https://mpservice.com/fundffc6fe53910b4e/release/pages/index?needFillAccount=true&defaultAccount=',
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
-        'gtoken': 'ceaf-5ec1aeaf313a267434fbe314a1575707',
-        'mp_instance_id': '20',
-        'traceparent': '00-0000000046aa4cae000001968a71d18e-0000000000000000-01',
-        'tracestate': 'pid=0xacad202,taskid=0x8000ff6'
+        'User-Agent': USER_AGENT_OKHTTP_3_12_13,
+        'clientInfo': CLIENT_INFO_ANDROID_ZTE_7534N_11,
+        'gtoken': GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707,
+        'mp_instance_id': MP_INSTANCE_ID_LOGIN,
+        'traceparent': TRACEPARENT_LOGIN,
+        'tracestate': TRACESTATE_LOGIN,
     }
     
     data = {
         'Account': account,
         'ServerVersion': SERVER_VERSION,
-        'DeviceOS': 'Android 11',
+        'DeviceOS': DEVICE_OS_ANDROID_11,
         'CertificateType': 0,
-        'DeviceType': 'Android11',
+        'DeviceType': DEVICE_TYPE_ANDROID11,
         'PhoneType': PHONE_TYPE,
         'Version': SERVER_VERSION,
-        'MobileKey': '15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me',
-        'AppType': 'ttjj',
+        'MobileKey': MOBILE_KEY,
+        'AppType': APP_TYPE_TTJJ,
         'Password': md5_password,
-        'DeviceName': 'ZTE'
+        'DeviceName': DEVICE_NAME_ZTE,
     }
     
     logger = get_logger("Login")
@@ -112,16 +130,16 @@ def login_passport(user: User) -> User:
         'Content-Type': 'application/x-www-form-urlencoded',
         'Host': f'tradeapilvs{user.index}.1234567.com.cn',
         'Accept': '*/*',
-        'GTOKEN': 'ceaf-5ec1aeaf313a267434fbe314a1575707',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
-        'MP-VERSION': '2.2.5',
+        'GTOKEN': GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707,
+        'clientInfo': CLIENT_INFO_ANDROID_ZTE_7534N_11,
+        'MP-VERSION': MP_VERSION_2_2_5,
         'Accept-Language': 'zh-Hans-CN;q=1',
-        'User-Agent': 'okhttp/3.12.13',
+        'User-Agent': USER_AGENT_OKHTTP_3_12_13,
         'Referer': 'https://mpservice.com/8543c2ac1ae2a93335b443a3f9f1028f/release/pages/index/index'
     }
     
     data = {
-        'AppType': 'ttjj',
+        'AppType': APP_TYPE_TTJJ,
         'CToken': user.c_token,
         'CustomerNo': user.customer_no,
         'MobileKey': MOBILE_KEY,
@@ -183,26 +201,26 @@ def inference_passport_for_bind(user: User) -> User:
         'Content-Type': 'application/json; charset=utf-8',
         'Host': 'tradeapilvs5.1234567.com.cn',
         'Referer': 'https://mpservice.com/fundffc6fe53910b4e/release/pages/index?needFillAccount=true&defaultAccount=',
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
-        'gtoken': 'ceaf-5ec1aeaf313a267434fbe314a1575707',
-        'mp_instance_id': '20',
-        'traceparent': '00-0000000046aa4cae000001968a71d211-0000000000000000-01',
-        'tracestate': 'pid=0xacad202,taskid=0xced6330'
+        'User-Agent': USER_AGENT_OKHTTP_3_12_13,
+        'clientInfo': CLIENT_INFO_ANDROID_ZTE_7534N_11,
+        'gtoken': GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707,
+        'mp_instance_id': MP_INSTANCE_ID_LOGIN,
+        'traceparent': TRACEPARENT_INFERENCE_PASSPORT_FOR_BIND,
+        'tracestate': TRACESTATE_INFERENCE_PASSPORT_FOR_BIND,
     }
     
     data = {
         'SceneType': 2,
         'LocalPassportId': '',
-        'ServerVersion': '6.7.1',
-        'PhoneType': 'Android',
-        'Version': '7.6.0',
-        'MobileKey': '15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me',
+        'ServerVersion': SERVER_VERSION,
+        'PhoneType': PHONE_TYPE,
+        'Version': APP_VERSION_7_6_0,
+        'MobileKey': MOBILE_KEY,
         'UserId': user.customer_no,
         'UToken': user.u_token,
-        'AppType': 'ttjj',
+        'AppType': APP_TYPE_TTJJ,
         'CToken': user.c_token,
-        'GTOKEN': 'ceaf-5ec1aeaf313a267434fbe314a1575707'
+        'GTOKEN': GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707,
     }
 
     logger = get_logger("Login")

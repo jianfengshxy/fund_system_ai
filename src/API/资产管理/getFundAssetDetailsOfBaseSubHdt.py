@@ -10,7 +10,14 @@ if root_dir not in sys.path:
 
 from src.common.logger import get_logger
 from src.common.requests_session import session
-from src.common.constant import SERVER_VERSION, PHONE_TYPE, MOBILE_KEY
+from src.common.constant import (
+    CLIENT_INFO_IOS_IPHONE18_1_2601,
+    GTOKEN_03FC9273690F4DC4B71CB2247A0E4338,
+    MOBILE_KEY,
+    PHONE_TYPE,
+    SERVER_VERSION,
+    USER_AGENT_IOS_EMPROJ_6_8_4,
+)
 from src.domain.asset.asset_details import AssetDetails
 
 def get_fund_asset_details_of_base_sub_hdt(user, fund_code: str, with_meta: bool = False):
@@ -27,9 +34,9 @@ def get_fund_asset_details_of_base_sub_hdt(user, fund_code: str, with_meta: bool
         "Content-Type": "application/json",
         "Host": f"tradeapilvs{user.index}.1234567.com.cn",
         "Referer": "https://mpservice.com/0b74fd40a63b40fb99467fedd9156d8f/release/pages/holdDetailPage",
-        "User-Agent": "EMProjJijin/6.8.4 (iPhone; iOS 26.0.1; Scale/3.00)",
-        "clientInfo": "ttjj-iPhone18,1-iOS-iOS26.0.1",
-        "gtoken": "03FC9273690F4DC4B71CB2247A0E4338", # This might need to be dynamic or from user object if available, but for now using hardcoded or common
+        "User-Agent": USER_AGENT_IOS_EMPROJ_6_8_4,
+        "clientInfo": CLIENT_INFO_IOS_IPHONE18_1_2601,
+        "gtoken": GTOKEN_03FC9273690F4DC4B71CB2247A0E4338,
         # traceparent/tracestate usually generated or ignored
     }
     

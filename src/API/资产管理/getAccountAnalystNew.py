@@ -11,7 +11,17 @@ if __name__ == "__main__":
 
 from src.common.logger import get_logger
 from src.common.requests_session import session
-from src.common.constant import MOBILE_KEY, PHONE_TYPE, SERVER_VERSION
+from src.common.constant import (
+    CLIENT_INFO_IOS_IPHONE18_1_2601,
+    GTOKEN_ACCOUNT_ANALYST_NEW,
+    MOBILE_KEY,
+    MP_VERSION_ACCOUNT_ANALYST_NEW,
+    PHONE_TYPE,
+    SERVER_VERSION,
+    TRACEPARENT_ACCOUNT_ANALYST_NEW,
+    TRACESTATE_ACCOUNT_ANALYST_NEW,
+    USER_AGENT_IOS_EMPROJ_6_8_6,
+)
 from src.domain.user.api_response import ApiResponse
 from src.API.登录接口.login import ensure_user_fresh
 
@@ -100,14 +110,14 @@ def _build_headers(index: Any, extra_headers: Optional[Dict[str, str]] = None) -
         "Accept-Language": "zh-Hans-CN;q=1",
         "Connection": "keep-alive",
         "Content-Type": "application/x-www-form-urlencoded",
-        "GTOKEN": "03FC9273690F4DC4B71CB2247A0E4338",
+        "GTOKEN": GTOKEN_ACCOUNT_ANALYST_NEW,
         "Host": f"tradeapilvs{index}.1234567.com.cn",
-        "MP-VERSION": "2.9.0",
+        "MP-VERSION": MP_VERSION_ACCOUNT_ANALYST_NEW,
         "Referer": "https://mpservice.com/fund89ea636d829242/release/pages/home/index",
-        "User-Agent": "EMProjJijin/6.8.6 (iPhone; iOS 26.0.1; Scale/3.00)",
-        "clientInfo": "ttjj-iPhone18,1-iOS-iOS26.0.1",
-        "traceparent": "00-715f86be36b64be4956edbf671fb05f5-0000000000000000-01",
-        "tracestate": "pid=0x104974860,taskid=0x13dd9eb80",
+        "User-Agent": USER_AGENT_IOS_EMPROJ_6_8_6,
+        "clientInfo": CLIENT_INFO_IOS_IPHONE18_1_2601,
+        "traceparent": TRACEPARENT_ACCOUNT_ANALYST_NEW,
+        "tracestate": TRACESTATE_ACCOUNT_ANALYST_NEW,
     }
     if extra_headers:
         headers.update(extra_headers)

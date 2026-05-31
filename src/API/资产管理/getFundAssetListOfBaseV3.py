@@ -10,7 +10,15 @@ if root_dir not in sys.path:
 
 from src.common.logger import get_logger
 from src.common.requests_session import session
-from src.common.constant import SERVER_VERSION, PHONE_TYPE, MOBILE_KEY
+from src.common.constant import (
+    CLIENT_INFO_ANDROID_ZTE_7534N_11,
+    GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707,
+    MOBILE_KEY,
+    MP_INSTANCE_ID_ASSET_LIST_OF_BASE_V3,
+    PHONE_TYPE,
+    SERVER_VERSION,
+    USER_AGENT_OKHTTP_3_12_13,
+)
 from src.domain.asset.asset_details import AssetDetails
 from typing import List, Tuple, Optional
 
@@ -31,10 +39,10 @@ def get_fund_asset_list_of_base_v3(user, with_meta: bool = False) -> Tuple[Optio
         "Content-Type": "application/json; charset=utf-8",
         "Host": f"tradeapilvs{index}.1234567.com.cn",
         "Referer": "https://mpservice.com/33cb2e2622954432b6073633f27149ba/release/pages/accountBaseAsset/index",
-        "User-Agent": "okhttp/3.12.13",
-        "clientInfo": "ttjj-ZTE 7534N-Android-11",
-        "gtoken": "ceaf-5ec1aeaf313a267434fbe314a1575707", # Hardcoded from curl, or could be dynamic
-        "mp_instance_id": "166",
+        "User-Agent": USER_AGENT_OKHTTP_3_12_13,
+        "clientInfo": CLIENT_INFO_ANDROID_ZTE_7534N_11,
+        "gtoken": GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707,
+        "mp_instance_id": MP_INSTANCE_ID_ASSET_LIST_OF_BASE_V3,
         # traceparent/tracestate omitted or dynamic
     }
     

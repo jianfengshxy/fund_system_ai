@@ -11,7 +11,7 @@ if __name__ == "__main__":
 
 from src.common.logger import get_logger
 from src.common.errors import RetriableError, ValidationError
-from src.common.constant import MOBILE_KEY, C_TOKEN, U_TOKEN, USER_ID, SERVER_VERSION
+from src.common.constant import C_TOKEN, DEFAULT_GTOKEN, IOS_CLIENT_INFO, IOS_USER_AGENT, MOBILE_KEY, PHONE_TYPE, SERVER_VERSION, U_TOKEN, USER_ID
 
 def getFee(user, fund_code: str):
     """
@@ -32,17 +32,17 @@ def getFee(user, fund_code: str):
         "Connection": "keep-alive",
         "Host": f"tradeapilvs{user.index}.1234567.com.cn",
         "Accept": "*/*",
-        "GTOKEN": "4474AFD3E15F441E937647556C01C174",
-        "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.6",
-        "MP-VERSION": "3.11.0",
+        "GTOKEN": DEFAULT_GTOKEN,
+        "clientInfo": IOS_CLIENT_INFO,
+        "MP-VERSION": "3.6.0",
         "Accept-Language": "zh-Hans-CN;q=1",
-        "User-Agent": "EMProjJijin/6.5.7 (iPhone; iOS 15.6; Scale/3.00)",
+        "User-Agent": IOS_USER_AGENT,
         "Referer": "https://mpservice.com/6ddf65da15dd416ca1c964efb606471f/release/pages/fundSalePage/index",
         "Content-Type": "application/x-www-form-urlencoded"
     }
     data = (
         f"AppType=ttjj&CToken={user.c_token or C_TOKEN}&CustomerNo={user.customer_no}"
-        f"&IsBaseAsset=false&MobileKey={MOBILE_KEY}&PhoneType=Iphone&ServerVersion={SERVER_VERSION}"
+        f"&IsBaseAsset=false&MobileKey={MOBILE_KEY}&PhoneType={PHONE_TYPE}&ServerVersion={SERVER_VERSION}"
         f"&UToken={user.u_token or U_TOKEN}&UserId={user.customer_no or USER_ID}&Version={SERVER_VERSION}"
         f"&FundCode={fund_code}"
     )

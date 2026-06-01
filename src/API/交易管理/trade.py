@@ -17,7 +17,17 @@ from src.API.登录接口.login import ensure_user_fresh
 from src.domain.trade.TradeResult import TradeResult
 from src.domain.trade.share import Share
 from src.domain.user.User import User
-from src.common.constant import MOBILE_KEY, DEFAULT_USER
+from src.common.constant import (
+    DEFAULT_GTOKEN,
+    DEFAULT_USER,
+    IOS_CLIENT_INFO,
+    IOS_USER_AGENT,
+    MOBILE_KEY,
+    MP_VERSION_ASSET,
+    MP_VERSION_DEFAULT,
+    PHONE_TYPE,
+    SERVER_VERSION,
+)
 from src.common.logger import get_logger
 from src.common.errors import RetriableError, ValidationError
 
@@ -72,12 +82,12 @@ def get_one_fund_tran_infos(user, fund_code, start_date=None, end_date=None, pag
             "Accept-Language": "zh-Hans-CN;q=1",
             "Connection": "keep-alive",
             "Content-Type": "application/json",
-            "GTOKEN": "4474AFD3E15F441E937647556C01C174",
+            "GTOKEN": DEFAULT_GTOKEN,
             "Host": host_header,
-            "MP-VERSION": "5.5.0-1104",
+            "MP-VERSION": MP_VERSION_DEFAULT,
             "Referer": "https://mpservice.com/329e138b3cb74f17a2e4ba5c23f374c0/release/pages/fundRecord/index",
-            "User-Agent": "EMProjJijin/6.5.8 (iPhone; iOS 15.6.1; Scale/3.00)",
-            "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.6.1",
+            "User-Agent": IOS_USER_AGENT,
+            "clientInfo": IOS_CLIENT_INFO,
             "traceparent": "00-63d20001cab74ce99de3c388f65d6277-0000000000000000-01",
             "tracestate": "pid=0x108ee7460,taskid=0x1507ec120"
         }
@@ -111,7 +121,7 @@ def get_one_fund_tran_infos(user, fund_code, start_date=None, end_date=None, pag
             "customerNo": curr_u.customer_no,
             "deviceid": MOBILE_KEY,
             "ctoken": curr_u.c_token,
-            "serverversion": "6.6.11",
+            "serverversion": SERVER_VERSION,
             "rtype": "app",
             "data": json.dumps(payload_dict)
         }
@@ -223,13 +233,13 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
             "Connection": "keep-alive",
             "Host": f"tquerycoreapi{user.index}.1234567.com.cn",
             "Accept": "*/*",
-            "GTOKEN": "4474AFD3E15F441E937647556C01C174",
-            "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.6.1",
-            "MP-VERSION": "5.5.0-1104",
+            "GTOKEN": DEFAULT_GTOKEN,
+            "clientInfo": IOS_CLIENT_INFO,
+            "MP-VERSION": MP_VERSION_DEFAULT,
             "Accept-Encoding": "gzip, deflate, br",
             "Accept-Language": "zh-Hans-CN;q=1",
             "Content-Type": "application/json",
-            "User-Agent": "EMProjJijin/6.5.8 (iPhone; iOS 15.6.1; Scale/3.00)",
+            "User-Agent": IOS_USER_AGENT,
             "Referer": "https://mpservice.com/329e138b3cb74f17a2e4ba5c23f374c0/release/pages/home/index"
         }
         
@@ -255,9 +265,9 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
             "uid": u.customer_no,
             "mobileKey": MOBILE_KEY,
             "customerNo": u.customer_no,
-            "deviceid": "6A464B04-3930-4D99-AFAD-E40BE6727075",
+            "deviceid": MOBILE_KEY,
             "ctoken": u.c_token,
-            "serverversion": "6.6.11",
+            "serverversion": SERVER_VERSION,
             "rtype": "app",
             "data": json.dumps(payload_dict)
         }
@@ -419,9 +429,9 @@ def get_trade_order_result(user: User, app_serial_no: str, business_type: str):
         "Host": host_header,
         # Referer 中包含中文 "品种A"，需要进行 URL 编码
         "Referer": f"https://mpservice.com/fund4046e6539c4c47/release/pages/buy-fund/result?key=trad-result-params-tradeno&enterTag={quote('品种A')}",
-        "User-Agent": "okhttp/3.12.13",
-        "clientInfo": "ttjj-ZTE 7534N-Android-11",
-        "gtoken": "ceaf-4a997831b1b3b90849f585f98ca6f30e",
+        "User-Agent": IOS_USER_AGENT,
+        "clientInfo": IOS_CLIENT_INFO,
+        "gtoken": DEFAULT_GTOKEN,
         "mp_instance_id": "92",
         "traceparent": "00-0000000046aa4cae0000019671a9326e-0000000000000000-01",
         "tracestate": "pid=0xc14bf30,taskid=0x10c0d09"
@@ -429,13 +439,13 @@ def get_trade_order_result(user: User, app_serial_no: str, business_type: str):
 
     # 构造 payload
     payload = {
-        "ServerVersion": "6.7.1",
+        "ServerVersion": SERVER_VERSION,
         "parentAppSerialNo": "",
         "CustomerNo": u.customer_no,
-        "PhoneType": "Android",
+        "PhoneType": PHONE_TYPE,
         "businType": business_type,
         "MobileKey": MOBILE_KEY,
-        "Version": "6.7.1",
+        "Version": SERVER_VERSION,
         "UserId": u.customer_no,
         "appSerialNo": app_serial_no, 
         "UToken": u.u_token,
@@ -502,11 +512,11 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
         "Connection": "keep-alive",
         "Host": host_header,
         "Accept": "*/*",
-        "GTOKEN": "4474AFD3E15F441E937647556C01C174",
-        "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.6",
-        "MP-VERSION": "3.11.0",
+        "GTOKEN": DEFAULT_GTOKEN,
+        "clientInfo": IOS_CLIENT_INFO,
+        "MP-VERSION": MP_VERSION_ASSET,
         "Accept-Language": "zh-Hans-CN;q=1",
-        "User-Agent": "EMProjJijin/6.5.7 (iPhone; iOS 15.6; Scale/3.00)",
+        "User-Agent": IOS_USER_AGENT,
         "Referer": "https://mpservice.com/0b74fd40a63b40fb99467fedd9156d8f/release/pages/holdDetailPage",
         "Content-Type": "application/x-www-form-urlencoded",
         "Cookie": "st_inirUrl=fund%3A%2F%2Fpage; st_pvi=13093762203779; st_sp=2022-03-03%2012%3A16%3A47"
@@ -519,11 +529,11 @@ def get_bank_shares(user: User, sub_account_no: str, fund_code: str) -> List[Sha
         "IsBaseAsset": "false",
         "MobileKey": MOBILE_KEY,
         "Passportid": u.passport_id,
-        "PhoneType": "IOS15.6.0",
-        "ServerVersion": "6.6.11",
+        "PhoneType": PHONE_TYPE,
+        "ServerVersion": SERVER_VERSION,
         "UToken": u.u_token,
         "UserId": u.customer_no,
-        "Version": "6.6.11",
+        "Version": SERVER_VERSION,
         "fundCode": fund_code,
         "subAccountNo": sub_account_no
     }

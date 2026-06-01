@@ -17,9 +17,14 @@ from src.common.logger import get_logger
 from src.common.requests_session import session
 
 from src.common.constant import (
+    DEFAULT_GTOKEN,
     SERVER_VERSION,
+    IOS_CLIENT_INFO,
+    IOS_USER_AGENT,
+    MP_VERSION_DEFAULT,
     PHONE_TYPE,
     MOBILE_KEY,
+    PLATFORM,
     DEFAULT_USER,
 )
 from src.domain.fund_plan import ApiResponse
@@ -47,10 +52,10 @@ def _build_headers() -> Dict[str, str]:
         "Content-Type": "application/x-www-form-urlencoded",
         "Host": FUND_FAVOR_HOST,
         "Referer": "https://mpservice.com/fund4b3f5b59595d45/release/pages/mainpage/mainindex",
-        "User-Agent": "EMProjJijin/6.6.9 (iPhone; iOS 16.2; Scale/3.00)",
-        "clientInfo": "ttjj-iPhone 11 Pro-iOS-iOS16.2",
-        "GTOKEN": "4474AFD3E15F441E937647556C01C174",
-        "MP-VERSION": "1.5.6",
+        "User-Agent": IOS_USER_AGENT,
+        "clientInfo": IOS_CLIENT_INFO,
+        "GTOKEN": DEFAULT_GTOKEN,
+        "MP-VERSION": MP_VERSION_DEFAULT,
         "validmark": "Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZd9JYBOfWXLz4ujEjOUCkzX5OOMubE0Xuw+PGl6/XhtW58ZqXh/Xc3OOE5LZ58h/eoII25voWA/jdiRh3oRljk0Q==",
     }
 
@@ -97,7 +102,7 @@ def add_to_favorites(
         ("passportctoken", u.passport_ctoken),
         ("passportid", u.passport_id),
         ("passportutoken", u.passport_utoken),
-        ("plat", "Iphone"),
+        ("plat", PLATFORM),
         ("product", "EFund"),
         ("uid", u.customer_no),
         ("utoken", u.u_token),
@@ -124,7 +129,7 @@ def add_to_favorites(
             ("passportctoken", getattr(u, "passport_ctoken", None)),
             ("passportid", getattr(u, "passport_id", None)),
             ("passportutoken", getattr(u, "passport_utoken", None)),
-            ("plat", "Iphone"),
+            ("plat", PLATFORM),
             ("product", "EFund"),
             ("uid", u.customer_no),
             ("utoken", u.u_token),
@@ -213,14 +218,14 @@ def _build_headers_for_add() -> Dict[str, str]:
     return {
         "Host": "fundfavorapi.eastmoney.com",
         "Accept": "*/*",
-        "GTOKEN": "4474AFD3E15F441E937647556C01C174",
-        "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.6.1",
-        "MP-VERSION": "1.0.46",
+        "GTOKEN": DEFAULT_GTOKEN,
+        "clientInfo": IOS_CLIENT_INFO,
+        "MP-VERSION": MP_VERSION_DEFAULT,
         "Accept-Encoding": "gzip, deflate, br",
         "Accept-Language": "zh-Hans-CN;q=1",
         "validmark": "Li4RtWc+9LvmhgcBNN3qgwo4uTinnFWrHABZNIBbbP+TjjLmxNF7sPjxpev14bVuGjrNMBb239zO/yTBM+QQsAAWwxJ0M/IqAe8/I5bNBFM=",
         "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-        "User-Agent": "EMProjJijin/6.5.9 (iPhone; iOS 15.6.1; Scale/3.00)",
+        "User-Agent": IOS_USER_AGENT,
         "Connection": "keep-alive",
         "Referer": "https://mpservice.com/fund4b3f5b59595d45/release/pages/mainpage/mainindex",
     }
@@ -229,12 +234,12 @@ def _build_headers_for_getgroup() -> Dict[str, str]:
     return {
         "Host": "fundfavorapi.eastmoney.com",
         "Accept": "*/*",
-        "GTOKEN": "4474AFD3E15F441E937647556C01C174",
-        "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.6",
-        "MP-VERSION": "1.4.6-0906",
+        "GTOKEN": DEFAULT_GTOKEN,
+        "clientInfo": IOS_CLIENT_INFO,
+        "MP-VERSION": MP_VERSION_DEFAULT,
         "Accept-Language": "zh-Hans-CN;q=1",
         "validmark": "Li4RtWc+9LvmhgcBNN3q3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZd9JYBOfWXLz4ujEjOUCkzX5OOMubE0Xuw+PGl6/XhtW5tgVesvdjlwb5iJcnlwg3l9mreBxReX0zBMSyV8XVjqg==",
-        "User-Agent": "EMProjJijin/6.5.8 (iPhone; iOS 15.6; Scale/3.00)",
+        "User-Agent": IOS_USER_AGENT,
         "Referer": "https://mpservice.com/770ddc37537896dae8ecd8160cb25336/release/pages/fundList/customListPage",
         "Content-Type": "application/x-www-form-urlencoded",
     }
@@ -285,7 +290,7 @@ def get_favor_group(
     fund_type: int = 0,
     user: Optional[User] = None,
     favor_version: str = "-2000",
-    plat: str = "Iphone",
+    plat: str = PLATFORM,
 ) -> ApiResponse[Dict[str, Any]]:
     u = _ensure_auth_ready(user)
     url = f"https://{FUND_FAVOR_HOST}/favor/fcode/getgroup"
@@ -383,7 +388,7 @@ def remove_from_favorites(
                 ("passportctoken", getattr(u, "passport_ctoken", None)),
                 ("passportid", getattr(u, "passport_id", None)),
                 ("passportutoken", getattr(u, "passport_utoken", None)),
-                ("plat", "Iphone"),
+                ("plat", PLATFORM),
                 ("product", "EFund"),
                 ("uid", u.customer_no),
                 ("utoken", u.u_token),
@@ -512,7 +517,7 @@ def _print_group_funds(data: Any):
 def get_favor_groups(
     user: Optional[User] = None,
     favor_version: str = "-2000",
-    plat: str = "Iphone",
+    plat: str = PLATFORM,
 ) -> ApiResponse[Dict[str, Any]]:
     u = _ensure_auth_ready(user)
     url = f"https://{FUND_FAVOR_HOST}/favor/group/get"

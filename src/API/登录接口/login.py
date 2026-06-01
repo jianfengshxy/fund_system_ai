@@ -12,22 +12,22 @@ if __name__ == "__main__":
 from src.API._core.client import default_client
 from src.common.constant import (
     APP_TYPE_TTJJ,
-    APP_VERSION_7_6_0,
-    CLIENT_INFO_ANDROID_ZTE_7534N_11,
-    DEVICE_NAME_ZTE,
-    DEVICE_OS_ANDROID_11,
-    DEVICE_TYPE_ANDROID11,
-    GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707,
+    LOGIN_APP_VERSION,
+    IOS_CLIENT_INFO,
+    IOS_DEVICE_NAME,
+    IOS_DEVICE_OS,
+    IOS_DEVICE_MODEL,
+    DEFAULT_GTOKEN,
     MOBILE_KEY,
     MP_INSTANCE_ID_LOGIN,
-    MP_VERSION_2_2_5,
+    MP_VERSION_DEFAULT,
     PHONE_TYPE,
     SERVER_VERSION,
     TRACEPARENT_INFERENCE_PASSPORT_FOR_BIND,
     TRACEPARENT_LOGIN,
     TRACESTATE_INFERENCE_PASSPORT_FOR_BIND,
     TRACESTATE_LOGIN,
-    USER_AGENT_OKHTTP_3_12_13,
+    IOS_USER_AGENT,
  )
 from src.common.logger import get_logger
 from src.domain.user.User import User
@@ -53,9 +53,9 @@ def login(account: str, password: str) -> User:
         'Content-Type': 'application/json; charset=utf-8',
         'Host': 'tradeapilvs5.1234567.com.cn',
         'Referer': 'https://mpservice.com/fundffc6fe53910b4e/release/pages/index?needFillAccount=true&defaultAccount=',
-        'User-Agent': USER_AGENT_OKHTTP_3_12_13,
-        'clientInfo': CLIENT_INFO_ANDROID_ZTE_7534N_11,
-        'gtoken': GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707,
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
+        'gtoken': DEFAULT_GTOKEN,
         'mp_instance_id': MP_INSTANCE_ID_LOGIN,
         'traceparent': TRACEPARENT_LOGIN,
         'tracestate': TRACESTATE_LOGIN,
@@ -64,15 +64,15 @@ def login(account: str, password: str) -> User:
     data = {
         'Account': account,
         'ServerVersion': SERVER_VERSION,
-        'DeviceOS': DEVICE_OS_ANDROID_11,
+        'DeviceOS': IOS_DEVICE_OS,
         'CertificateType': 0,
-        'DeviceType': DEVICE_TYPE_ANDROID11,
+        'DeviceType': IOS_DEVICE_MODEL,
         'PhoneType': PHONE_TYPE,
-        'Version': SERVER_VERSION,
+        'Version': LOGIN_APP_VERSION,
         'MobileKey': MOBILE_KEY,
         'AppType': APP_TYPE_TTJJ,
         'Password': md5_password,
-        'DeviceName': DEVICE_NAME_ZTE,
+        'DeviceName': IOS_DEVICE_NAME,
     }
     
     logger = get_logger("Login")
@@ -130,11 +130,11 @@ def login_passport(user: User) -> User:
         'Content-Type': 'application/x-www-form-urlencoded',
         'Host': f'tradeapilvs{user.index}.1234567.com.cn',
         'Accept': '*/*',
-        'GTOKEN': GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707,
-        'clientInfo': CLIENT_INFO_ANDROID_ZTE_7534N_11,
-        'MP-VERSION': MP_VERSION_2_2_5,
+        'GTOKEN': DEFAULT_GTOKEN,
+        'clientInfo': IOS_CLIENT_INFO,
+        'MP-VERSION': MP_VERSION_DEFAULT,
         'Accept-Language': 'zh-Hans-CN;q=1',
-        'User-Agent': USER_AGENT_OKHTTP_3_12_13,
+        'User-Agent': IOS_USER_AGENT,
         'Referer': 'https://mpservice.com/8543c2ac1ae2a93335b443a3f9f1028f/release/pages/index/index'
     }
     
@@ -147,7 +147,7 @@ def login_passport(user: User) -> User:
         'ServerVersion': SERVER_VERSION,
         'UToken': user.u_token,
         'UserId': user.customer_no,
-        'Version': SERVER_VERSION,
+        'Version': LOGIN_APP_VERSION,
         'ctoken': user.c_token,
         'userId': user.customer_no,
         'utoken': user.u_token
@@ -201,9 +201,9 @@ def inference_passport_for_bind(user: User) -> User:
         'Content-Type': 'application/json; charset=utf-8',
         'Host': 'tradeapilvs5.1234567.com.cn',
         'Referer': 'https://mpservice.com/fundffc6fe53910b4e/release/pages/index?needFillAccount=true&defaultAccount=',
-        'User-Agent': USER_AGENT_OKHTTP_3_12_13,
-        'clientInfo': CLIENT_INFO_ANDROID_ZTE_7534N_11,
-        'gtoken': GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707,
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
+        'gtoken': DEFAULT_GTOKEN,
         'mp_instance_id': MP_INSTANCE_ID_LOGIN,
         'traceparent': TRACEPARENT_INFERENCE_PASSPORT_FOR_BIND,
         'tracestate': TRACESTATE_INFERENCE_PASSPORT_FOR_BIND,
@@ -214,13 +214,13 @@ def inference_passport_for_bind(user: User) -> User:
         'LocalPassportId': '',
         'ServerVersion': SERVER_VERSION,
         'PhoneType': PHONE_TYPE,
-        'Version': APP_VERSION_7_6_0,
+        'Version': LOGIN_APP_VERSION,
         'MobileKey': MOBILE_KEY,
         'UserId': user.customer_no,
         'UToken': user.u_token,
         'AppType': APP_TYPE_TTJJ,
         'CToken': user.c_token,
-        'GTOKEN': GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707,
+        'GTOKEN': DEFAULT_GTOKEN,
     }
 
     logger = get_logger("Login")
@@ -294,17 +294,17 @@ def ensure_user_fresh(user: User, max_age_sec: int = 600, force_refresh: bool = 
         get_user_all_info = None
     pwd = getattr(user, 'password', '')
     if not force_refresh and get_user_from_store_or_cache:
-        u2 = get_user_from_store_or_cache(account, pwd)
+        u2 = get_user_from_store_or_cache(account, pwd, ensure_bank=False)
         if u2:
             cache_user(u2)
             _copy_tokens(user, u2)
             return u2
     u3 = None
     if not force_refresh and get_user_all_info:
-        u3 = get_user_all_info(account, pwd)
+        u3 = get_user_all_info(account, pwd, ensure_bank=False)
     if not u3 and refresh_user_tokens:
         try:
-            u3 = refresh_user_tokens(account, pwd)
+            u3 = refresh_user_tokens(account, pwd, ensure_bank=False)
         except Exception:
             u3 = None
     if not u3:

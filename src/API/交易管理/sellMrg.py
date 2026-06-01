@@ -19,7 +19,7 @@ from src.common.requests_session import session
 from src.domain.trade.TradeResult import TradeResult
 from src.domain.user.User import User
 from typing import List, Optional, Dict, Any
-from src.common.constant import MOBILE_KEY,SERVER_VERSION,PHONE_TYPE
+from src.common.constant import DEFAULT_GTOKEN, IOS_CLIENT_INFO, IOS_USER_AGENT, MOBILE_KEY, PHONE_TYPE, SERVER_VERSION
 
 def super_transfer(user: User, sub_account_no: str, fund_code: str, fund_amount: float, share_id: str) -> Optional[TradeResult]:
     """
@@ -46,10 +46,10 @@ def super_transfer(user: User, sub_account_no: str, fund_code: str, fund_amount:
         "Connection": "keep-alive",
         "Host": f"tradeapilvs{user.index}.1234567.com.cn",
         "Accept": "*/*",
-        "GTOKEN": "4474AFD3E15F441E937647556C01C174",
-        "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.5",
+        "GTOKEN": DEFAULT_GTOKEN,
+        "clientInfo": IOS_CLIENT_INFO,
         "Accept-Language": "zh-Hans-CN;q=1",
-        "User-Agent": "EMProjJijin/6.5.5 (iPhone; iOS 15.5; Scale/3.00)",
+        "User-Agent": IOS_USER_AGENT,
         "Referer": "https://mpservice.com/6ddf65da15dd416ca1c964efb606471f/release/pages/fundSalePage",
         "Content-Type": "application/x-www-form-urlencoded"
     }
@@ -74,7 +74,7 @@ def super_transfer(user: User, sub_account_no: str, fund_code: str, fund_amount:
         "SubAccountNo": sub_account_no,
         "appType": "ttjj",
         "cToken": user.c_token,
-        "phoneType": "Iphone",
+        "phoneType": PHONE_TYPE,
         "pwd": password_hash,
         "serverVersion": SERVER_VERSION,
         "uToken": user.u_token,
@@ -152,11 +152,11 @@ def hqbMakeRedemption(user: User, sub_account_no: str, fund_code: str, fund_amou
         "Host": f"tradeapilvs{user.index}.1234567.com.cn",
         "tracestate": "pid=0x10630d5a0,taskid=0x282890a00",
         "Accept": "*/*",
-        "GTOKEN": "4474AFD3E15F441E937647556C01C174",
-        "clientInfo": "ttjj-iPhone 11 Pro-iOS-iOS16.2",
-        "MP-VERSION": "1.0.5",
+        "GTOKEN": DEFAULT_GTOKEN,
+        "clientInfo": IOS_CLIENT_INFO,
+        "MP-VERSION": "7.8.2",
         "Accept-Language": "zh-Hans-CN;q=1",
-        "User-Agent": "EMProjJijin/6.6.12 (iPhone; iOS 16.2; Scale/3.00)",
+        "User-Agent": IOS_USER_AGENT,
         "traceparent": "00-c77bf29263684cbcb20397522ee7fa48-0000000000000000-01",
         "Content-Length": "1233",
         "Cookie": "acw_tc=0bca392617092637189786468e3ebc1cbaae75aedd2ca760b7029b704565f0"
@@ -170,15 +170,15 @@ def hqbMakeRedemption(user: User, sub_account_no: str, fund_code: str, fund_amou
     req_no = str(int(time.time() * 1000))  # 当前时间的毫秒级Unix时间戳
     
     payload = {
-        "ServerVersion": "6.6.12",
+        "ServerVersion": SERVER_VERSION,
         "isAllTransfer": True,
         "reqNo": req_no,
         "shareID": share_id,
         "PayType": "1",
         "CustomerNo": user.customer_no,
         "Vol": str(fund_amount),
-        "PhoneType": "Iphone",
-        "Version": "6.6.12",
+        "PhoneType": PHONE_TYPE,
+        "Version": SERVER_VERSION,
         "MobileKey": MOBILE_KEY,
         "UserId": user.customer_no,
         "fundOut": str(fund_code),
@@ -265,11 +265,11 @@ def SFT1Transfer(user: User, sub_account_no: str, fund_code: str, fund_amount: f
         "Host": f"tradeapilvs{user.index}.1234567.com.cn",
         "tracestate": "pid=0x10630d5a0,taskid=0x282890a00",
         "Accept": "*/*",
-        "GTOKEN": "4474AFD3E15F441E937647556C01C174",
-        "clientInfo": "ttjj-iPhone 11 Pro-iOS-iOS16.2",
-        "MP-VERSION": "1.0.5",
+        "GTOKEN": DEFAULT_GTOKEN,
+        "clientInfo": IOS_CLIENT_INFO,
+        "MP-VERSION": "7.8.2",
         "Accept-Language": "zh-Hans-CN;q=1",
-        "User-Agent": "EMProjJijin/6.6.12 (iPhone; iOS 16.2; Scale/3.00)",
+        "User-Agent": IOS_USER_AGENT,
         "Referer": "https://mpservice.com/fund5e3619595b0346/release/pages/sell-fund/index",
         "traceparent": "00-c77bf29263684cbcb20397522ee7fa48-0000000000000000-01",
         "Content-Length": "1151",
@@ -280,15 +280,15 @@ def SFT1Transfer(user: User, sub_account_no: str, fund_code: str, fund_amount: f
     req_no = str(int(time.time() * 1000))  # 当前时间的毫秒级Unix时间戳
     
     payload = {
-        "ServerVersion": "6.6.12",
+        "ServerVersion": SERVER_VERSION,
         "secuId": "feefd4d8095a4dc3b31863dfb71dde3f",
         "fundAmount": str(fund_amount),
         "isAllTransfer": True,
         "reqNo": int(req_no),
         "shareID": share_id,
         "CustomerNo": user.customer_no,
-        "PhoneType": "Iphone",
-        "Version": "6.6.12",
+        "PhoneType": PHONE_TYPE,
+        "Version": SERVER_VERSION,
         "MobileKey": MOBILE_KEY,
         "UserId": user.customer_no,
         "fundOut": str(fund_code),

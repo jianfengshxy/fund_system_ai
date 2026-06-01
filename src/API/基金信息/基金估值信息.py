@@ -20,7 +20,16 @@ from src.common.errors import RetriableError, ValidationError
 import requests
 from src.common.requests_session import session
 from src.domain.fund.fund_info import FundInfo
-from src.common.constant import DEFAULT_USER, SERVER_VERSION, PHONE_TYPE, MOBILE_KEY, DEVICE_ID
+from src.common.constant import (
+    DEFAULT_GTOKEN,
+    DEFAULT_USER,
+    IOS_CLIENT_INFO,
+    IOS_USER_AGENT,
+    MOBILE_KEY,
+    PHONE_TYPE,
+    PLATFORM,
+    SERVER_VERSION,
+)
 
 def update_fund_estimated_value(user, fund_info: FundInfo) -> FundInfo:
     """
@@ -39,12 +48,12 @@ def update_fund_estimated_value(user, fund_info: FundInfo) -> FundInfo:
     headers = {
         "Host": "fundcomapi.tiantianfunds.com",
         "Accept": "*/*",
-        "GTOKEN": "03FC9273690F4DC4B71CB2247A0E4338",
-        "clientInfo": "ttjj-iPhone18,1-iOS-iOS26.0.1",
+        "GTOKEN": DEFAULT_GTOKEN,
+        "clientInfo": IOS_CLIENT_INFO,
         "MP-VERSION": "1.24.0",
         "Accept-Language": "zh-Hans-CN;q=1",
         "validmark": "Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZdSIrQ1Lx4ygfw5br2rQnUfMES8ernsO5lB/RKZKLdR3yoBJgvUEdjLzf1UcRv2jubOhDMdgTBXIMkwtWN4p0ISg==",
-        "User-Agent": "EMProjJijin/6.8.3 (iPhone; iOS 26.0.1; Scale/3.00)",
+        "User-Agent": IOS_USER_AGENT,
         "Referer": "https://mpservice.com/fundb5035dd2ee584a/release/pages/public-offer-fund/index",
         "Content-Type": "application/x-www-form-urlencoded"
     }
@@ -53,16 +62,16 @@ def update_fund_estimated_value(user, fund_info: FundInfo) -> FundInfo:
         "FCODES": fund_info.fund_code,
         "FIELDS": "GSZZL,GZTIME,GSZ",
         "ctoken": user.c_token,
-        "deviceid": DEVICE_ID, # 使用常量
+        "deviceid": MOBILE_KEY,
         "passportctoken": getattr(user, 'passport_ctoken', ''),
         "passportid": getattr(user, 'passport_id', ''),
         "passportutoken": getattr(user, 'passport_utoken', ''),
-        "plat": PHONE_TYPE, # 使用常量 'Iphone'
+        "plat": PLATFORM,
         "product": "EFund",
         "uid": user.customer_no, # 假设uid使用customer_no
         "userid": user.customer_no, # 假设userid使用customer_no
         "utoken": user.u_token,
-        "version": "6.8.3" # 这里硬编码为6.8.3，或者使用SERVER_VERSION
+        "version": SERVER_VERSION
     }
     
     logger = get_logger("FundValuation")

@@ -12,7 +12,7 @@ if __name__ == "__main__":
     if root_dir not in sys.path:
         sys.path.insert(0, root_dir)
 
-from src.common.constant import DEFAULT_USER
+from src.common.constant import DEFAULT_GTOKEN, DEFAULT_USER, IOS_CLIENT_INFO, IOS_USER_AGENT, MOBILE_KEY, MP_VERSION_DEFAULT, PLATFORM, SERVER_VERSION
 from src.common.requests_session import session
 from src.domain.fund_plan import ApiResponse
 from src.domain.fund.fund_info import FundInfo
@@ -123,35 +123,35 @@ def getThemeSelectedFunds(user, page_size=10) -> ApiResponse[List[FundInfo]]:
     headers = {
         "Host": "fundcomapi.tiantianfunds.com",
         "Accept": "*/*",
-        "GTOKEN": "03FC9273690F4DC4B71CB2247A0E4338",
-        "clientInfo": "ttjj-iPhone18,1-iOS-iOS26.0.1",
-        "MP-VERSION": "2.12.0",
+        "GTOKEN": DEFAULT_GTOKEN,
+        "clientInfo": IOS_CLIENT_INFO,
+        "MP-VERSION": MP_VERSION_DEFAULT,
         "tracestate": "pid=0x1050b0820,taskid=0x1699195c0",
         "Accept-Language": "zh-Hans-CN;q=1",
-        "User-Agent": "EMProjJijin/6.8.3 (iPhone; iOS 26.0.1; Scale/3.00)",
+        "User-Agent": IOS_USER_AGENT,
         "Referer": "https://mpservice.com/fund26a41652d42d4d/release/pages/home-sub-page",
         "traceparent": "00-3533964c7d85407988810aa51bc55d55-0000000000000000-01"
     }
     
     params = {
         "FIELDS": "SEC_CODE,FTYPE,FCODE,SHORTNAME,Y,SE,LJJZ,BFUNDTYPE,YRANK,YCOUNT",
-        "MobileKey": "F5F9C233-F56B-4ED8-8B09-CE448DB28B3C",
+        "MobileKey": MOBILE_KEY,
         "RELATETYPE": "",
         "TFIELDS": "Y,SEC_CODE,INDEXNAME,INDEXCODE",
         "ctoken": user.c_token,
-        "deviceId": "F5F9C233-F56B-4ED8-8B09-CE448DB28B3C",
-        "deviceid": "F5F9C233-F56B-4ED8-8B09-CE448DB28B3C",
-        "gtoken": "03FC9273690F4DC4B71CB2247A0E4338",
+        "deviceId": MOBILE_KEY,
+        "deviceid": MOBILE_KEY,
+        "gtoken": DEFAULT_GTOKEN,
         "pageIndex": "1",
         "pageSize": str(page_size),
         "passportId": user.passport_id,
         "passportctoken": user.passport_ctoken,
         "passportid": user.passport_id,
         "passportutoken": user.passport_utoken,
-        "plat": "Iphone",
+        "plat": PLATFORM,
         "platid": "1",
         "product": "EFund",
-        "serverversion": "6.8.3",
+        "serverversion": SERVER_VERSION,
         "sort": "desc",
         "sortColumn": "Y",
         "userId": user.customer_no,

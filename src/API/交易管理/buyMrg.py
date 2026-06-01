@@ -18,7 +18,7 @@ from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
 from src.domain.trade.TradeResult import TradeResult
 from src.domain.user.User import User
 from typing import List, Optional, Dict, Any
-from src.common.constant import MOBILE_KEY
+from src.common.constant import DEFAULT_GTOKEN, IOS_CLIENT_INFO, IOS_USER_AGENT, MOBILE_KEY, PHONE_TYPE, SERVER_VERSION
 from src.API.工具.utils import get_fund_system_time_trade
 from src.common.errors import TradePasswordError  # 新增：密码错误异常
 from src.common.errors import RetriableError, ValidationError
@@ -71,11 +71,11 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
         "Connection": "keep-alive",
         "Host": f"tradeapilvs{user.index}.1234567.com.cn",
         "Accept": "*/*",
-        "GTOKEN": "4474AFD3E15F441E937647556C01C174",
-        "User-Agent": "EMProjJijin/6.5.5 (iPhone; iOS 15.5; Scale/3.00)",
+        "GTOKEN": DEFAULT_GTOKEN,
+        "User-Agent": IOS_USER_AGENT,
         "Accept-Language": "zh-Hans-CN;q=1",
         "Referer": "https://mpservice.com/47e7241f3f0a46af8629dfe78fe62c55/release/pages/BuyTrade",
-        "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.5",
+        "clientInfo": IOS_CLIENT_INFO,
         "Content-Type": "application/x-www-form-urlencoded"
     }
 
@@ -100,11 +100,11 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
         f"TradeType=AsyJCJY022&"
         f"appType=ttjj&"
         f"cToken={user.c_token}&"
-        f"phoneType=Iphone&"
-        f"serverVersion=10.6.9&"
+        f"phoneType={PHONE_TYPE}&"
+        f"serverVersion={SERVER_VERSION}&"
         f"uToken={user.u_token}&"
         f"userId={user.customer_no}&"
-        f"version=10.6.9"
+        f"version={SERVER_VERSION}"
     )
 
     try:
@@ -169,18 +169,18 @@ def get_trace_id(user: User) -> Optional[str]:
         "Referer": "https://mpservice.com/47e7241f3f0a46af8629dfe78fe62c55/release/pages/BuyTrade",
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "Host": f"tradeapilvs{user.index}.1234567.com.cn",
-        "User-Agent": "EMProjJijin/6.6.11 (iPhone; iOS 15.5; Scale/3.00)"
+        "User-Agent": IOS_USER_AGENT
     }
     
     data = (
         f"MobileKey={MOBILE_KEY}&"
         f"appType=ttjj&"
         f"cToken={user.c_token}&"
-        f"phoneType=Iphone&"
-        f"serverVersion=6.6.11&"
+        f"phoneType={PHONE_TYPE}&"
+        f"serverVersion={SERVER_VERSION}&"
         f"uToken={user.u_token}&"
         f"userId={user.customer_no}&"
-        f"version=6.6.11"
+        f"version={SERVER_VERSION}"
     )
     
     try:

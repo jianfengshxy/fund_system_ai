@@ -1,7 +1,7 @@
-import urllib.parse
 import json
 import time
 import random
+from datetime import datetime
 
 if __name__ == "__main__":
     import os
@@ -14,9 +14,9 @@ if __name__ == "__main__":
 from src.common.logger import get_logger
 from src.common.errors import RetriableError, ValidationError
 from src.common.constant import (
-    CLIENT_INFO_ANDROID_ZTE_7534N_11,
+    IOS_CLIENT_INFO,
     DEFAULT_PAGE_INDEX_INT,
-    GTOKEN_CEAF_4A997831B1B3B90849F585F98CA6F30E,
+    DEFAULT_GTOKEN,
     MOBILE_KEY,
     MP_INSTANCE_ID_FUNDINFO,
     PHONE_TYPE,
@@ -24,7 +24,7 @@ from src.common.constant import (
     SERVER_VERSION,
     TRACEPARENT_FUNDINFO,
     TRACESTATE_FUNDINFO,
-    USER_AGENT_OKHTTP_3_12_13,
+    IOS_USER_AGENT,
     VALIDMARK_FUNDINFO,
 )
 
@@ -35,14 +35,94 @@ from src.domain.fund.fund_info import FundInfo
 
 # 移除本地Session配置，使用全局共享Session
 
-def getFundInfo(user,fund_code) -> Optional[FundInfo]:
+
+def _extract_date_part(date_text: Optional[str]) -> Optional[str]:
+    """从日期/时间字符串中提取 `YYYY-MM-DD` 日期部分。"""
+    if not date_text:
+        return None
+    candidate = str(date_text).strip()[:10]
+    try:
+        return datetime.strptime(candidate, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def _sync_official_nav_fields(target: FundInfo, source: FundInfo) -> None:
     """
-    获取基金信息
+    用最新正式净值字段覆盖当前基金对象。
+
+    当日正式净值已经出炉时，基础净值、收益率与交易状态应以正式数据为准，
+    不再继续沿用盘中估算值。
+    """
+    target.nav = source.nav
+    target.acc_nav = source.acc_nav
+    target.nav_date = source.nav_date
+    target.nav_change = source.nav_change
+    target.week_return = source.week_return
+    target.month_return = source.month_return
+    target.three_month_return = source.three_month_return
+    target.six_month_return = source.six_month_return
+    target.year_return = source.year_return
+    target.this_year_return = source.this_year_return
+    target.max_purchase = source.max_purchase
+    target.can_purchase = source.can_purchase
+    target.can_redeem = source.can_redeem
+    target.index_code = source.index_code
+    target.tracking_error = source.tracking_error
+    target.fund_sub_type = source.fund_sub_type
+
+
+def _apply_estimated_or_official_nav(
+    fund_info: FundInfo,
+    estimate_payload: dict,
+    user=None,
+) -> None:
+    """
+    回填估值信息；若估算日期的正式净值已发布，则优先切回正式净值。
+
+    业务规则：
+    1. 盘中尚未出当日净值时，使用估算净值与估算涨跌幅；
+    2. 一旦当日正式净值已经发布，则估算净值应等于当日净值，估算涨跌幅归零。
+    """
+    estimated_value = float(estimate_payload.get('gsz', 0))
+    estimated_change = float(estimate_payload.get('gszzl', 0))
+    estimated_time = estimate_payload.get('gztime', '')
+    estimated_date = _extract_date_part(estimated_time)
+    official_nav_date = _extract_date_part(getattr(fund_info, "nav_date", None))
+
+    fund_info.estimated_time = estimated_time
+
+    if estimated_date and official_nav_date == estimated_date and getattr(fund_info, "nav", None) is not None:
+        fund_info.estimated_value = fund_info.nav
+        fund_info.estimated_change = 0.0
+        return
+
+    if estimated_date and user is not None:
+        latest_fund_info = getFundInfo(user, fund_info.fund_code)
+        latest_nav_date = _extract_date_part(getattr(latest_fund_info, "nav_date", None)) if latest_fund_info else None
+        if latest_fund_info and latest_nav_date == estimated_date and getattr(latest_fund_info, "nav", None) is not None:
+            _sync_official_nav_fields(fund_info, latest_fund_info)
+            fund_info.estimated_value = latest_fund_info.nav
+            fund_info.estimated_change = 0.0
+            return
+
+    fund_info.estimated_value = estimated_value
+    fund_info.estimated_change = estimated_change
+
+def getFundInfo(user, fund_code) -> Optional[FundInfo]:
+    """
+    获取单只基金的基础资料与展示字段。
+
+    该函数请求东财基金详情接口，返回项目内统一的 `FundInfo` 对象，
+    主要用于后续的估值更新、收益率计算、止盈/加仓策略判断等场景。
+
     Args:
-        user: User对象，包含用户认证信息
-        fund_code: 基金代码
+        user: 已完成登录和 passport 鉴权的用户对象，需包含 token、passport 等上下文。
+        fund_code: 目标基金代码，例如 `021740`。
+
     Returns:
-        FundInfo: 基金信息对象，如果获取失败返回None
+        `FundInfo`: 成功时返回基金对象；
+        失败时抛出 `RetriableError` 或 `ValidationError`。
     """
     url = 'https://fundcomapi.tiantianfunds.com/mm/FundFavor/FundFavorInfo'
     
@@ -52,10 +132,10 @@ def getFundInfo(user,fund_code) -> Optional[FundInfo]:
         'Connection': 'keep-alive',
         'Host': 'fundcomapi.tiantianfunds.com',
         # 移除包含中文的 Referer 头，这是导致编码错误的主要原因
-        'User-Agent': USER_AGENT_OKHTTP_3_12_13,
-        'clientInfo': CLIENT_INFO_ANDROID_ZTE_7534N_11,
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
         'forceLog': '1',
-        'gtoken': GTOKEN_CEAF_4A997831B1B3B90849F585F98CA6F30E,
+        'gtoken': DEFAULT_GTOKEN,
         'mp_instance_id': MP_INSTANCE_ID_FUNDINFO,
         'traceparent': TRACEPARENT_FUNDINFO,
         'tracestate': TRACESTATE_FUNDINFO,
@@ -63,7 +143,7 @@ def getFundInfo(user,fund_code) -> Optional[FundInfo]:
         'validmark': VALIDMARK_FUNDINFO,
     }
     
-    # 使用不包含中文字符的 Referer
+    # Referer 统一使用纯 ASCII，避免历史上出现过的中文编码兼容问题。
     referer = 'https://mpservice.com/770ddc37537896dae8ecd8160cb25336/release/pages/fundList/all-list/index'
     headers['Referer'] = referer
     
@@ -91,7 +171,7 @@ def getFundInfo(user,fund_code) -> Optional[FundInfo]:
     logger = get_logger("FundInfo")
     extra = {"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "action": "get_fund_info", "fund_code": fund_code}
     try:
-        # 使用全局session发送请求
+        # 共享 session 可复用连接，同时保持项目内统一的请求配置。
         response = session.post(
             url,
             data=data,
@@ -100,10 +180,9 @@ def getFundInfo(user,fund_code) -> Optional[FundInfo]:
             timeout=30
         )
         
-        # 检查响应状态码
         response.raise_for_status()
-        
-        # 使用utf-8解码响应内容
+
+        # 接口偶发返回内容中带有非标准字符，显式按 UTF-8 解码更稳妥。
         response_text = response.content.decode('utf-8')
         
         try:
@@ -141,13 +220,23 @@ def getFundInfo(user,fund_code) -> Optional[FundInfo]:
         logger.error('异常堆栈: %s', traceback.format_exc(), extra=extra)
         raise ValidationError(str(e))
 
-def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
+def updateFundEstimatedValue(fund_info: FundInfo, user=None) -> Optional[FundInfo]:
     """
-    更新基金的估值信息
+    获取并更新基金实时估值信息。
+
+    该函数访问东财估值脚本接口 `fundgz.1234567.com.cn`，
+    将最新估算净值、估算涨跌幅、估值时间回填到传入的 `FundInfo` 对象。
+    同时会基于最新估算涨跌，联动修正近一周、近一月、近三月、近六月、
+    近一年和今年以来等区间收益字段，便于策略层直接消费。
+
     Args:
-        fund_info: FundInfo对象
+        fund_info: 已包含基础净值和收益字段的基金对象。
+        user: 可选用户对象。传入时会在需要时主动刷新基金基础信息，
+            用于判断估算日期对应的正式净值是否已经发布。
+
     Returns:
-        更新后的FundInfo对象，如果更新失败返回None
+        `FundInfo`: 更新成功时返回原对象；
+        连续重试失败时返回 `None`。
     """
     url = f'https://fundgz.1234567.com.cn/js/{fund_info.fund_code}.js'
     
@@ -160,13 +249,13 @@ def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
     
     logger = get_logger("FundInfo")
     
-    # 添加重试机制
+    # 估值脚本偶尔会返回空内容或临时失败，因此保留轻量重试。
     max_retries = 3
     retry_count = 0
     retry_delay = 2  # 初始延迟2秒
     
     while retry_count < max_retries:
-        # 动态生成参数，避免被识别为重复请求
+        # 动态参数用于降低被服务端识别为重复请求的概率。
         params = {
             'rt': int(time.time() * 1000),      # 时间戳
             '_': random.randint(100000, 999999) # 随机数
@@ -175,7 +264,7 @@ def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
         try:
             if retry_count > 0:
                 logger.debug(f"正在进行第 {retry_count} 次重试获取基金估值数据，基金代码: {fund_info.fund_code}")
-                # 指数退避策略，每次重试延迟时间翻倍
+                # 指数退避：避免在接口抖动时持续高频重试。
                 time.sleep(retry_delay)
                 retry_delay *= 2
                 
@@ -183,10 +272,9 @@ def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
             response = session.get(url, params=params, headers=headers, verify=False, timeout=30)
             response.raise_for_status()
             
-            # 响应格式为: jsonpgz({...});，需要提取JSON部分
+            # 响应格式固定为 `jsonpgz({...});`，需要先抽取其中 JSON 片段。
             content = response.text
             if content.strip() == "jsonpgz();":
-                # logger.info(f"{fund_info.fund_name}响应为空，设置估算涨跌为0.0")
                 fund_info.estimated_change = 0.0
                 return fund_info
             
@@ -195,11 +283,11 @@ def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
             try:
                 data = json.loads(json_str)
                 
-                # 更新估值信息
-                fund_info.estimated_value = float(data.get('gsz', 0))  # GSZ - 估算净值
-                fund_info.estimated_change = float(data.get('gszzl', 0))  # GSZZL - 估算涨跌幅
-                fund_info.estimated_time = data.get('gztime', '')  # GZTIME - 估算时间                
+                # 如果估算时间对应日期的正式净值已经发布，则切回正式净值；
+                # 否则继续使用盘中估算净值和估算涨跌幅。
+                _apply_estimated_or_official_nav(fund_info, data, user=user)
                 
+                # 当基础净值日期变化时，刷新一次收益率基线，避免重复叠加估算值。
                 baseline_nav_date = getattr(fund_info, "_baseline_nav_date", None)
                 if baseline_nav_date != getattr(fund_info, "nav_date", None):
                     fund_info._baseline_nav_date = getattr(fund_info, "nav_date", None)
@@ -210,6 +298,7 @@ def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
                     fund_info._baseline_year_return = fund_info.year_return
                     fund_info._baseline_this_year_return = fund_info.this_year_return
 
+                # 在静态收益率基线之上叠加实时估算涨跌，得到更接近当前时刻的收益表现。
                 est = fund_info.estimated_change or 0.0
                 base_week = getattr(fund_info, "_baseline_week_return", None)
                 base_month = getattr(fund_info, "_baseline_month_return", None)
@@ -264,7 +353,8 @@ def updateFundEstimatedValue(fund_info: FundInfo) -> Optional[FundInfo]:
 
 if __name__ == "__main__":
     import logging
-    from common.constant import DEFAULT_USER, FUND_CODE
+    from src.common.constant import DEFAULT_USER, FUND_CODE
+    from src.API.基金信息.FundRank import get_fund_growth_rate, get_fund_volatility, get_nav_rank
     
     # 配置日志
     logging.basicConfig(
@@ -273,15 +363,24 @@ if __name__ == "__main__":
     )
     
     try:
-        # 获取基金信息
-        fund_info = getFundInfo(DEFAULT_USER, '011707')
+        # 直接运行本文件时，使用默认用户与默认基金代码做一次只读调试调用。
+        fund_info = getFundInfo(DEFAULT_USER, FUND_CODE)
         
         if fund_info:
             print(f"基础信息获取成功: {fund_info.fund_name}")
             
-            # 测试实时估值更新
+            # 在基础信息上继续拉取实时估值，观察字段是否正确回填。
             print("正在获取实时估值...")
-            updateFundEstimatedValue(fund_info)
+            updateFundEstimatedValue(fund_info, DEFAULT_USER)
+
+            print("正在获取历史净值衍生指标...")
+            nav_rank_30 = get_nav_rank(DEFAULT_USER, fund_info, 30, fund_info.estimated_value or fund_info.nav)
+            mean_30, variance_30, volatility_30 = get_fund_volatility(DEFAULT_USER, fund_info, 30)
+            nav_rank_100 = get_nav_rank(DEFAULT_USER, fund_info, 100, fund_info.estimated_value or fund_info.nav)
+            mean_100, variance_100, volatility_100 = get_fund_volatility(DEFAULT_USER, fund_info, 100)
+            growth_week, rank_week, total_week = get_fund_growth_rate(fund_info, "Z")
+            growth_month, rank_month, total_month = get_fund_growth_rate(fund_info, "Y")
+            growth_three_month, rank_three_month, total_three_month = get_fund_growth_rate(fund_info, "3Y")
             
             print("\n最终基金信息:")
             print(f"基金代码: {fund_info.fund_code}")
@@ -298,6 +397,21 @@ if __name__ == "__main__":
             print(f"近三月收益: {fund_info.three_month_return or '暂无'}%")
             print(f"今年收益: {fund_info.this_year_return or '暂无'}%")
             print(f"是否可购买: {'是' if fund_info.can_purchase else '否'}")
+
+            print("\n历史净值衍生指标:")
+            print(f"近30日净值排名: {nav_rank_30}  (数值越小表示当前净值在样本中越低)")
+            print(f"近30日平均净值: {mean_30:.6f}")
+            print(f"近30日净值方差: {variance_30:.8f}")
+            print(f"近30日净值波动率: {volatility_30:.8f}")
+            print(f"近100日净值排名: {nav_rank_100}  (数值越小表示当前净值在样本中越低)")
+            print(f"近100日平均净值: {mean_100:.6f}")
+            print(f"近100日净值方差: {variance_100:.8f}")
+            print(f"近100日净值波动率: {volatility_100:.8f}")
+
+            print("\n区间增长率与同类排名:")
+            print(f"近一周(Z): 增长率={growth_week:.2f}%, 排名={rank_week}/{total_week}")
+            print(f"近一月(Y): 增长率={growth_month:.2f}%, 排名={rank_month}/{total_month}")
+            print(f"近三月(3Y): 增长率={growth_three_month:.2f}%, 排名={rank_three_month}/{total_three_month}")
         else:
             print("\n获取基金信息失败")
             

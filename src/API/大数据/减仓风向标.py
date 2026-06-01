@@ -10,7 +10,7 @@ if __name__ == "__main__":
     if root_dir not in sys.path:
         sys.path.insert(0, root_dir)
 
-from src.common.constant import DEFAULT_USER, FUND_CODE
+from src.common.constant import DEFAULT_GTOKEN, DEFAULT_USER, FUND_CODE, IOS_CLIENT_INFO, IOS_USER_AGENT, MOBILE_KEY, PLATFORM, SERVER_VERSION
 from src.common.requests_session import session
 from src.domain.fund_plan import ApiResponse
 from src.domain.fund.fund_investment_indicator import FundInvestmentIndicator
@@ -45,12 +45,12 @@ def getFundReductionInvestmentIndicators(user, page_size=20) -> ApiResponse[List
         'validmark': 'Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZdVcHJ8J2NdZhXTNMQR9BMpxG3EMlqXyJoFeiMLZWZZtJ1DXqiIOSu/kLYsAt37vKDllijg7ffsKY6LcVX2IpgamPZG7YN4mKd7mTYGSc0Sjg=',
         'mp_instance_id': '68',
         'Referer': 'https://mpservice.com/fund9bb5726fafc14e/release/pages/home/index',
-        'gtoken': 'ceaf-4a997831b1b3b90849f585f98ca6f30e',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
+        'gtoken': DEFAULT_GTOKEN,
+        'clientInfo': IOS_CLIENT_INFO,
         'traceparent': '00-0000000046aa4cae0000019426368b65-0000000000000000-01',
         'tracestate': 'pid=0x9cf938d,taskid=0x25b8739',
         'Host': 'fundcomapi.tiantianfunds.com',
-        'User-Agent': 'okhttp/3.12.13'
+        'User-Agent': IOS_USER_AGENT
     }
     
     data = {
@@ -60,15 +60,15 @@ def getFundReductionInvestmentIndicators(user, page_size=20) -> ApiResponse[List
         'passportctoken': user.passport_ctoken,
         'configType': '10',
         'passportutoken': user.passport_utoken,
-        'deviceid': '15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me',
+        'deviceid': MOBILE_KEY,
         'userid': user.customer_no,
-        'version': '6.7.0',
+        'version': SERVER_VERSION,
         'configSort': 'asc',
         'configSortColumn': 'PRODUCT_RANK',
         'ctoken': user.c_token,
         'uid': user.customer_no,
         'utoken': user.u_token,
-        'plat': 'Android',
+        'plat': PLATFORM,
         'passportid': user.passport_id
     }
     

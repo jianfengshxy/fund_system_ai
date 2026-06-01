@@ -12,7 +12,7 @@ if __name__ == "__main__":
     if root_dir not in sys.path:
         sys.path.insert(0, root_dir)
 
-from src.common.constant import DEFAULT_USER, SERVER_VERSION, PHONE_TYPE
+from src.common.constant import DEFAULT_GTOKEN, DEFAULT_USER, IOS_CLIENT_INFO, IOS_USER_AGENT, MOBILE_KEY, MP_VERSION_DEFAULT, PHONE_TYPE, PLATFORM, SERVER_VERSION
 from src.common.requests_session import session
 from src.domain.fund_plan import ApiResponse
 from src.domain.fund.fund_info import FundInfo
@@ -121,10 +121,10 @@ def getBatchFundDetails(user, fund_codes: List[str]) -> Dict[str, FundInfo]:
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive',
         'Host': 'fundcomapi.tiantianfunds.com',
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
         'forceLog': '1',
-        'gtoken': 'ceaf-4a997831b1b3b90849f585f98ca6f30e',
+        'gtoken': DEFAULT_GTOKEN,
         'mp_instance_id': '32',
         'traceparent': '00-0000000046aa4cae00000196718a8166-0000000000000000-01',
         'tracestate': 'pid=0x6f96620,taskid=0xabc5123',
@@ -150,7 +150,7 @@ def getBatchFundDetails(user, fund_codes: List[str]) -> Dict[str, FundInfo]:
             'passportctoken': user.passport_ctoken,
             'SortColumn': '',
             'passportutoken': user.passport_utoken,
-            'deviceid': '15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me',
+            'deviceid': MOBILE_KEY,
             'userid': user.customer_no,
             'version': SERVER_VERSION,
             'ctoken': user.c_token,
@@ -159,7 +159,7 @@ def getBatchFundDetails(user, fund_codes: List[str]) -> Dict[str, FundInfo]:
             'pageIndex': 1,
             'utoken': user.u_token,
             'Sort': '',
-            'plat': PHONE_TYPE,
+            'plat': PLATFORM,
             'passportid': user.passport_id
         }
         
@@ -201,13 +201,13 @@ def getFundTodayTrend(user, page_size=30) -> ApiResponse[List[FundInfo]]:
         "Host": "fundcomapi.tiantianfunds.com",
         "tracestate": "pid=0x1050b0820,taskid=0x1247e52c0",
         "Accept": "*/*",
-        "GTOKEN": "03FC9273690F4DC4B71CB2247A0E4338",
-        "clientInfo": "ttjj-iPhone18,1-iOS-iOS26.0.1",
-        "MP-VERSION": "2.24.0",
+        "GTOKEN": DEFAULT_GTOKEN,
+        "clientInfo": IOS_CLIENT_INFO,
+        "MP-VERSION": MP_VERSION_DEFAULT,
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept-Language": "zh-Hans-CN;q=1",
         "validmark": "Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZdSIrQ1Lx4ygfw5br2rQnUfMES8ernsO5lB/RKZKLdR3za+zXmG+KXv2Faw8YrK/HblrMME58Nj/V4PuxEdNaVuQ==",
-        "User-Agent": "EMProjJijin/6.8.3 (iPhone; iOS 26.0.1; Scale/3.00)",
+        "User-Agent": IOS_USER_AGENT,
         "Referer": "https://mpservice.com/fund94570b183d8ea9/release/pages/Valuation/index",
         "traceparent": "00-9f22cef31abe4424b6590e1e862f76e7-0000000000000000-01"
     }
@@ -226,11 +226,11 @@ def getFundTodayTrend(user, page_size=30) -> ApiResponse[List[FundInfo]]:
         "Sort": "desc",
         "SortColumn": "gszzl",
         "ctoken": user.c_token,
-        "deviceid": "F5F9C233-F56B-4ED8-8B09-CE448DB28B3C",
+        "deviceid": MOBILE_KEY,
         "passportctoken": user.passport_ctoken,
         "passportid": user.passport_id,
         "passportutoken": user.passport_utoken,
-        "plat": "Iphone",
+        "plat": PLATFORM,
         "product": "EFund",
         "uid": user.customer_no,
         "userid": user.customer_no

@@ -18,15 +18,15 @@ from src.domain.user.api_response import ApiResponse  # 修改为 src.domain.fun
 from src.common.requests_session import session
 
 from src.common.constant import (
-    CLIENT_INFO_ANDROID_ZTE_7534N_11,
-    GTOKEN_CEAF_4A997831B1B3B90849F585F98CA6F30E,
+    IOS_CLIENT_INFO,
+    DEFAULT_GTOKEN,
     MOBILE_KEY,
     MP_INSTANCE_ID_ASSET_MANAGER,
     PHONE_TYPE,
     SERVER_VERSION,
     TRACEPARENT_ASSET_MANAGER,
     TRACESTATE_ASSET_MANAGER,
-    USER_AGENT_OKHTTP_3_12_13,
+    IOS_USER_AGENT,
     USER_ID, U_TOKEN, C_TOKEN, PASSPORT_ID, DEFAULT_USER
 )
 from src.API.登录接口.login import ensure_user_fresh
@@ -56,9 +56,9 @@ def GetMyAssetMainPartAsync(user) -> ApiResponse:
         'Content-Type': 'application/json; charset=utf-8',
         'Host': f'tradeapilvs{u.index}.1234567.com.cn',
         'Referer': 'https://mpservice.com/882b8205738149eeb1b0f4f516953fe9/release/pages/home/index',
-        'User-Agent': USER_AGENT_OKHTTP_3_12_13,
-        'clientInfo': CLIENT_INFO_ANDROID_ZTE_7534N_11,
-        'gtoken': GTOKEN_CEAF_4A997831B1B3B90849F585F98CA6F30E,
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
+        'gtoken': DEFAULT_GTOKEN,
         'mp_instance_id': MP_INSTANCE_ID_ASSET_MANAGER,
         'traceparent': TRACEPARENT_ASSET_MANAGER,
         'tracestate': TRACESTATE_ASSET_MANAGER,

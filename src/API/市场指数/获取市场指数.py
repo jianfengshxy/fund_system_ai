@@ -13,7 +13,7 @@ if __name__ == "__main__":
 from src.common.logger import get_logger
 from src.common.requests_session import session
 from src.domain.user.User import User
-from src.common.constant import SERVER_VERSION, MOBILE_KEY, PHONE_TYPE, DEVICE_ID
+from src.common.constant import DEFAULT_GTOKEN, DEVICE_ID, IOS_CLIENT_INFO, IOS_USER_AGENT, MOBILE_KEY, MP_VERSION_DEFAULT, PHONE_TYPE, PLATFORM, SERVER_VERSION
 
 logger = get_logger("MarketIndex")
 
@@ -37,12 +37,12 @@ def get_market_index(user: User, type_code: str = "001003", page_index: int = 1,
         'Accept-Encoding': 'gzip, deflate, br',
         'Accept-Language': 'zh-Hans-CN;q=1',
         'Connection': 'keep-alive',
-        'GTOKEN': '03FC9273690F4DC4B71CB2247A0E4338',
+        'GTOKEN': DEFAULT_GTOKEN,
         'Host': 'fundcomapi.tiantianfunds.com',
-        'MP-VERSION': '1.3.6',
+        'MP-VERSION': MP_VERSION_DEFAULT,
         'Referer': 'https://mpservice.com/7d7b3460cd40444ba58cdabdfae34442/release/pages/rank',
-        'User-Agent': f'EMProjJijin/{SERVER_VERSION} (iPhone; iOS 16.0; Scale/3.00)',
-        'clientInfo': 'ttjj-iPhone18,1-iOS-iOS16.0',
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
         'traceparent': '00-b368e007d4eb4a6b9b833e67470de310-0000000000000000-01',
         'tracestate': 'pid=0x105032130,taskid=0x16e672340',
         'validmark': 'Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZdSIrQ1Lx4ygfw5br2rQnUfMES8ernsO5lB/RKZKLdR3zMThZx2ZX8G1uEXj73HzHkj4RnL0fUh8xQ7MADEom6wQ=='
@@ -57,7 +57,7 @@ def get_market_index(user: User, type_code: str = "001003", page_index: int = 1,
         'passportctoken': user.passport_ctoken or user.c_token,
         'passportid': user.passport_id,
         'passportutoken': user.passport_utoken or user.u_token,
-        'plat': 'Iphone',
+        'plat': PLATFORM,
         'product': 'EFund',
         'secCode': '0',
         'sortName': sort_name,

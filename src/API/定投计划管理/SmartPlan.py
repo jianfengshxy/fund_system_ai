@@ -27,9 +27,10 @@ from src.domain.fund_plan import RationCreateParameters, DiscountRate
 from src.domain.trade.share import Share
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.common.constant import (
-    SERVER_VERSION, PAGE_SIZE, PASSPORT_CTOKEN, PLAN_TYPE,
-    PASSPORT_UTOKEN, PHONE_TYPE, MOBILE_KEY, PAGE_INDEX,
-    USER_ID, U_TOKEN, C_TOKEN, PASSPORT_ID, DEFAULT_USER
+    DEFAULT_GTOKEN, DEFAULT_USER, IOS_CLIENT_INFO, IOS_USER_AGENT,
+    MOBILE_KEY, PAGE_INDEX, PAGE_SIZE, PASSPORT_CTOKEN, PASSPORT_ID,
+    PASSPORT_UTOKEN, PHONE_TYPE, PLAN_TYPE, PLATFORM, SERVER_VERSION,
+    USER_ID, U_TOKEN, C_TOKEN
 )
 from src.common.errors import RetriableError, ValidationError, NonRetriableError
 
@@ -107,12 +108,12 @@ def getFundRations(user, page_index=1, page_size=1000, planTypes=None, fundTypes
         'Connection': 'keep-alive',
         'Host': f'ibgapi{u.index}.1234567.com.cn',
         'Accept': '*/*',
-        'GTOKEN': '4474AFD3E15F441E937647556C01C174',
-        'clientInfo': 'ttjj-iPhone 11 Pro-iOS-iOS16.2',
+        'GTOKEN': DEFAULT_GTOKEN,
+        'clientInfo': IOS_CLIENT_INFO,
         'MP-VERSION': '4.10.4',
         'Content-Type': 'application/json',
         'Accept-Language': 'zh-Hans-CN;q=1',
-        'User-Agent': 'EMProjJijin/6.6.12 (iPhone; iOS 16.2; Scale/3.00)',
+        'User-Agent': IOS_USER_AGENT,
         'Referer': 'https://mpservice.com/fund7a71775da8f2ce/release/pages/home-sub-page/index',
         'traceparent': '00-4d761c9a842d43438229a02432ff17e6-0000000000000000-01'
     }
@@ -284,10 +285,10 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
         'Host': f'ibgapi{u.index}.1234567.com.cn',
         'If-Modified-Since': 'Sat, 26 Apr 2025 08:55:51 GMT',
         'Referer': f'https://mpservice.com/fund46516ffab83642/release/pages/home/index?fundCode={fund_code}&subAccountNo=&reference=holdDetail',
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
         'content-type': 'application/json',
-        'gtoken': 'ceaf-4a997831b1b3b90849f585f98ca6f30e',
+        'gtoken': DEFAULT_GTOKEN,
         'mp_instance_id': '40',
         'traceparent': '00-0000000046aa4cae00000196719b333e-0000000000000000-01',
         'tracestate': 'pid=0xb01a105,taskid=0x651cc79'
@@ -482,7 +483,7 @@ def getRationCreateParameters(fund_code,user) -> ApiResponse[RationCreateParamet
         ('fundCode', fund_code),
         ('UserId', user.customer_no),
         ('utoken', user.u_token),
-        ('plat', 'Android'),
+        ('plat', PLATFORM),
         ('UToken', user.u_token),
         ('passportid', user.passport_id),
         ('CToken', user.c_token),
@@ -496,10 +497,10 @@ def getRationCreateParameters(fund_code,user) -> ApiResponse[RationCreateParamet
         'Host': f'ibgapi{user.index}.1234567.com.cn',
         'If-Modified-Since': 'Sat, 26 Apr 2025 08:55:51 GMT',
         'Referer': f'https://mpservice.com/fund46516ffab83642/release/pages/home/index?fundCode={fund_code}&subAccountNo=&reference=holdDetail',
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
         'content-type': 'application/json',
-        'gtoken': 'ceaf-4a997831b1b3b90849f585f98ca6f30e',
+        'gtoken': DEFAULT_GTOKEN,
         'mp_instance_id': '40',
         'traceparent': '00-0000000046aa4cae00000196719ac91d-0000000000000000-01',
         'tracestate': 'pid=0xb01a105,taskid=0xa539a9d'
@@ -608,7 +609,7 @@ def getPlanDetailPro(plan_id, user) -> ApiResponse[FundPlanDetail]:
         'MobileKey': MOBILE_KEY,
         'UserId': u.customer_no,
         'utoken': u.u_token,
-        'plat': 'Android',
+        'plat': PLATFORM,
         'UToken': u.u_token,
         'passportid': u.passport_id,
         'CToken': u.c_token
@@ -620,9 +621,9 @@ def getPlanDetailPro(plan_id, user) -> ApiResponse[FundPlanDetail]:
         'Content-Type': 'application/json; charset=utf-8',
         'Host': f'ibgapi{u.index}.1234567.com.cn',
         'Referer': f'https://mpservice.com/fund46516ffab83642/release/pages/plan-detail/index?planId={plan_id}',
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
-        'gtoken': 'ceaf-4a997831b1b3b90849f585f98ca6f30e',
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
+        'gtoken': DEFAULT_GTOKEN,
         'mp_instance_id': '14'
     }
     logger = get_logger("SmartPlan")
@@ -769,7 +770,7 @@ def operateRation(user, plan_id: str, operation: str) -> ApiResponse[FundPlanDet
         "UserId": user.customer_no,
         "utoken": user.u_token,
         "planId": plan_id,
-        "plat": "Android",
+        "plat": PLATFORM,
         "UToken": user.u_token,
         "operation": operation,
         "passportid": user.passport_id,
@@ -782,8 +783,8 @@ def operateRation(user, plan_id: str, operation: str) -> ApiResponse[FundPlanDet
         'Connection': 'keep-alive',
         'Host': f'ibgapi{user.index}.1234567.com.cn',
         'Content-Type': 'application/json; charset=utf-8',
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
         'mp_instance_id': '80'
     }
     
@@ -963,11 +964,11 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
         "uid": user.customer_no,
         "payType": 1,
         "fundCode": fund_code,
-        "MobileKey": "15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me",
+        "MobileKey": MOBILE_KEY,
         "utoken": user.u_token,
         "isCurWorkdayEffect": False,
         "targetProfitRate": target_profit_rate_str,
-        "plat": "Android",
+        "plat": PLATFORM,
         "CToken": user.c_token,
         "Password": md5_password,
         "amount": amount,
@@ -981,12 +982,12 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
         "redeemWay": "1",
         "passportctoken": user.passport_ctoken,
         "passportutoken": user.passport_utoken,
-        "deviceid": "15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me",
+        "deviceid": MOBILE_KEY,
         "version": "6.7.1",
         "ctoken": user.c_token,
         "maxTimes": 2,
         "periodType": period_type,
-        "PhoneType": "Android",
+        "PhoneType": PHONE_TYPE,
         "redeemStrategy": 2,
         "amountStr": "",
         "UserId": user.customer_no,
@@ -1006,12 +1007,12 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
         "validmark": "Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZdVcHJ8J2NdZhXTNMQR9BMpxG3EMlqXyJoFeiMLZWZZtJ1DXqiIOSu/kLYsAt37vKDXPe9BVTye1bYiFCvKVkXfAFlxGf+9vZQhrgOcMt8KwY=",
         "mp_instance_id": "40",
         "Referer": "https://mpservice.com/fund46516ffab83642/release/pages/home/index",
-        "gtoken": "ceaf-4a997831b1b3b90849f585f98ca6f30e",
-        "clientInfo": "ttjj-ZTE 7534N-Android-11",
+        "gtoken": DEFAULT_GTOKEN,
+        "clientInfo": IOS_CLIENT_INFO,
         "traceparent": f"00-{uuid.uuid4().hex}-{secrets.token_hex(8)}-01",
         "tracestate": f"pid=0x{secrets.token_hex(4)},taskid=0x{secrets.token_hex(4)}",
         "Host": f'ibgapi{user.index}.1234567.com.cn',
-        "User-Agent": "okhttp/3.12.13"
+        "User-Agent": IOS_USER_AGENT
     }
 
     logger = logging.getLogger("SmartPlan")
@@ -1131,7 +1132,7 @@ def updatePlanStatus(user, plan_id: str, buyStrategySwitch: bool):
         "UserId": user.customer_no,
         "utoken": user.u_token,
         "planId": plan_id,
-        "plat": "Android",
+        "plat": PLATFORM,
         "UToken": user.u_token,
         "buyStrategySwitch": buyStrategySwitch,
         "passportid": user.passport_id,
@@ -1144,8 +1145,8 @@ def updatePlanStatus(user, plan_id: str, buyStrategySwitch: bool):
         'Connection': 'keep-alive',
         'Host': f'ibgapi{user.index}.1234567.com.cn',
         'Content-Type': 'application/json; charset=utf-8',
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
         'mp_instance_id': '80'
     }
     
@@ -1342,7 +1343,7 @@ def updateRation(user, plan_id: str,
         "UserId": user.customer_no,
         "utoken": user.u_token,
         "planId": plan_id,
-        "plat": "Android",
+        "plat": PLATFORM,
         "UToken": user.u_token,
         "passportid": user.passport_id,
         "CToken": user.c_token,
@@ -1374,9 +1375,9 @@ def updateRation(user, plan_id: str,
         "Content-Type": "application/json; charset=utf-8",
         "Host": f"ibgapi{user.index}.1234567.com.cn",
         "Referer": f"https://mpservice.com/fund46516ffab83642/release/pages/plan-detail/index?planId={plan_id}",
-        "User-Agent": "okhttp/3.12.13",
-        "clientInfo": "ttjj-ZTE 7534N-Android-11",
-        "gtoken": "ceaf-4a997831b1b3b90849f585f98ca6f30e",
+        "User-Agent": IOS_USER_AGENT,
+        "clientInfo": IOS_CLIENT_INFO,
+        "gtoken": DEFAULT_GTOKEN,
         "mp_instance_id": "14",
     }
 

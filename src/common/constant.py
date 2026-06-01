@@ -1,9 +1,7 @@
 import sys
 import os
-import json
 import yaml  # 导入 yaml 模块
 import logging # 导入 logging 模块
-import numpy as np  # 新增：导入 numpy 模块
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -19,23 +17,39 @@ if root_dir not in sys.path:
 
 # 使用相对导入而不是绝对导入
 from src.domain.user.User import User
-from src.domain.bank.bank import BankCard, HqbBank, BankApiResponse
+from src.domain.bank.bank import HqbBank
 from src.domain.fund_plan.fund_plan import FundPlan
 from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
 from src.domain.trade.share import Share
 
 # API请求参数常量
-SERVER_VERSION = '6.7.1'
+SERVER_VERSION = '6.8.8'
+APP_VERSION = SERVER_VERSION
+LOGIN_APP_VERSION = '7.8.1'
 PAGE_SIZE = '100'
-DEVICE_ID = '15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me'
+PAGE_INDEX = '1'
+PAGE_SIZE_INT = 100
+PAGE_INDEX_INT = 1
+
+IOS_DEVICE_OS = 'iOS 26.0.1'
+IOS_OS_VERSION = IOS_DEVICE_OS.replace('iOS ', '')
+IOS_DEVICE_MODEL = 'iPhone18,1'
+IOS_DEVICE_NAME = 'iPhone'
+PHONE_TYPE = 'Iphone'
+PLATFORM = PHONE_TYPE
+DEVICE_ID = 'F5F9C233-F56B-4ED8-8B09-CE448DB28B3C'
+MOBILE_KEY = DEVICE_ID
+
+IOS_USER_AGENT = 'EMProjJijin/6.8.8 (iPhone; iOS 26.0.1; Scale/3.00)'
+IOS_CLIENT_INFO = 'ttjj-iPhone18,1-iOS-iOS26.0.1'
+DEFAULT_GTOKEN = '03FC9273690F4DC4B71CB2247A0E4338'
+MP_VERSION_DEFAULT = '7.8.2'
+MP_VERSION_ASSET = '3.6.0'
+MP_VERSION_LOGIN = MP_VERSION_DEFAULT
+
 PASSPORT_CTOKEN = 'bOo9gglQX18xtG64BnG-Igsf5a-CuXf-juiDpldasTjEvqc-rZ8XOZm3FlaMbRuqO15TcdPkAxLJfDnTyZ4XK9VQ9doVEZoAF9OButgIz7II23dqvTnqFuISH0fFLN5UCMLfYM_ULPkUbgxD_WebQkAheKXB-QXBNGDiRu07R3k'
 PLAN_TYPE = '1'
 PASSPORT_UTOKEN = 'FobyicMgeV7VCVxp1r4B0kdVrm-y1EoJHx3-rXf1wfucAyPQk1w0-rDbUqn__OZ2Cw0i-oibZcOsklmsZ0ykpcrQ9glRksKpkatxjr4auUshSgF2LZHJuNXAphgoTjZYF6SSB71DAHZNkctNflwKrKjXU9Y9qYQ-SRl_IwkhgbknrmgaEcBrdf5JVF5Nt1O5a_ggVkk5asgXHFyXBmRWeagei7AUcAunGuh6nx6dK2bqdXsSgDFTKK_QcBKar5X9aGvLi3RG93dq3i-riQpjPaCWs0NU5nvZQuq0eeZJWfJNHjLmhbPbHZsMAHOOlF3thyskEBEZaLQ'
-PHONE_TYPE_ANDROID = 'Android'
-PHONE_TYPE_IOS = 'iOS'
-PHONE_TYPE = PHONE_TYPE_IOS
-MOBILE_KEY = DEVICE_ID
-PAGE_INDEX = '1'
 USER_ID = 'cd0b7906b53b43ffa508a99744b4055b'
 U_TOKEN = 'SI789hHl4gsEAbvrI_oZ3m5qNM7jK-aHpDOWmo2xPjHuJDhmTK-wWecGNvbWp070Duh7rbDcQVxwM0YEAVxNa4WoES6DftPZ0SGCpmjsuIqC6LrZuZ1kKutk-swjGs3IRpjx5IEsUAm_D-YBC3XeuoKFMZyMiTfjixU96Jqu4u0.5'
 C_TOKEN = 'xR1h5WuKZqVp9l_uzA4vmt1TbZvcuH97mfnMo8i25njxNggTR1F5Vy0FcmNOr7lcAhJSPqY1erg_deGhXFZ55j_xbVJbd19AHy1jCksXg7PjZtPuCTAF9keQTT-5TbG4qhOM6YtifyX15WE7Dn-F422CVLUdR766-RhPXoTP6laFP47mceaJCMyZyE5LawuJRkYfpEHnskeC76TmpF4ilFivNCnjiu3cnDWZsAr3k2WeAB3Cq2Su6HU3Ee5T00Np.5'
@@ -46,27 +60,6 @@ FUND_CODE = '020256'
 
 APP_TYPE_TTJJ = 'ttjj'
 PRODUCT_EFUND = 'EFund'
-
-DEVICE_OS_ANDROID_11 = 'Android 11'
-DEVICE_TYPE_ANDROID11 = 'Android11'
-DEVICE_NAME_ZTE = 'ZTE'
-
-PAGE_SIZE_INT = 100
-PAGE_INDEX_INT = 1
-
-USER_AGENT_OKHTTP_3_12_13 = 'okhttp/3.12.13'
-CLIENT_INFO_ANDROID_ZTE_7534N_11 = 'ttjj-ZTE 7534N-Android-11'
-
-USER_AGENT_IOS_EMPROJ_6_8_4 = 'EMProjJijin/6.8.4 (iPhone; iOS 26.0.1; Scale/3.00)'
-USER_AGENT_IOS_EMPROJ_6_8_6 = 'EMProjJijin/6.8.6 (iPhone; iOS 26.0.1; Scale/3.00)'
-CLIENT_INFO_IOS_IPHONE18_1_2601 = 'ttjj-iPhone18,1-iOS-iOS26.0.1'
-
-MP_VERSION_2_2_5 = '2.2.5'
-MP_VERSION_2_9_0 = '2.9.0'
-
-GTOKEN_CEAF_5EC1AEAF313A267434FBE314A1575707 = 'ceaf-5ec1aeaf313a267434fbe314a1575707'
-GTOKEN_CEAF_4A997831B1B3B90849F585F98CA6F30E = 'ceaf-4a997831b1b3b90849f585f98ca6f30e'
-GTOKEN_03FC9273690F4DC4B71CB2247A0E4338 = '03FC9273690F4DC4B71CB2247A0E4338'
 
 MP_INSTANCE_ID_LOGIN = '20'
 MP_INSTANCE_ID_FUNDINFO = '32'
@@ -93,14 +86,78 @@ TRACESTATE_ASSET_MANAGER = 'pid=0x186caf0,taskid=0x11a8e41'
 TRACEPARENT_ASSET_LIST_OF_SUB = '00-0000000046aa4cae000001968ae7a434-0000000000000000-01'
 TRACESTATE_ASSET_LIST_OF_SUB = 'pid=0xc3c6c4a,taskid=0x7f81dfc'
 
-GTOKEN_ACCOUNT_ANALYST_NEW = '03FC9273690F4DC4B71CB2247A0E4338'
-MP_VERSION_ACCOUNT_ANALYST_NEW = '2.9.0'
+GTOKEN_ACCOUNT_ANALYST_NEW = DEFAULT_GTOKEN
+MP_VERSION_ACCOUNT_ANALYST_NEW = MP_VERSION_ASSET
 TRACEPARENT_ACCOUNT_ANALYST_NEW = '00-715f86be36b64be4956edbf671fb05f5-0000000000000000-01'
 TRACESTATE_ACCOUNT_ANALYST_NEW = 'pid=0x104974860,taskid=0x13dd9eb80'
 
 DEFAULT_PAGE_INDEX_INT = 1
 
-APP_VERSION_7_6_0 = '7.6.0'
+# 基金类型/子类型映射
+#
+# 注意：不同接口里的“基金类型码”不是同一套字典，必须按上下文分别解释。
+# 1. Asset 类接口里的 `FundType`：用于账户资产查询，常见值如 `2`/`8`/`a`
+# 2. 基金信息/大数据接口里的 `RSFUNDTYPE`：天天基金一级分类，如 `000`/`001`/`002`/`007`
+# 3. 基金信息/大数据接口里的 `RSBTYPE`：天天基金二级分类，如 `000001`/`002001`
+#
+# 下面标记为“已确认”的值，均来自本项目真实接口返回以及对应天天基金页面展示的基金类型：
+# - 008888 / 008327 -> 类型: 指数型-股票
+# - 006503 -> 类型: 股票型
+# - 022365 -> 类型: 混合型-偏股
+# - 021523 -> 类型: 混合型-灵活
+# - 022184 -> 类型: QDII-普通股票
+
+ASSET_FUND_TYPE_LABELS = {
+    "2": "货币基金",
+    "4": "混合基金",
+    "8": "指数基金",
+    "a": "QDII基金",
+}
+
+RS_FUND_TYPE_LABELS = {
+    "000": "指数基金",
+    "001": "股票基金",
+    "002": "混合基金",
+    "007": "QDII基金",
+}
+
+RS_SUB_FUND_TYPE_LABELS = {
+    "000001": "指数型-股票",
+    "001001": "股票型",
+    "002001": "混合型-偏股",
+    "002004": "混合型-灵活",
+    "007001": "QDII-普通股票",
+}
+
+
+def _describe_code(code, mapping, *, fallback_prefix: str) -> str:
+    raw = "" if code is None else str(code)
+    if raw in mapping:
+        return mapping[raw]
+    return f"{fallback_prefix}(原始值={raw})" if raw else "暂无"
+
+
+def describe_asset_fund_type(fund_type) -> str:
+    """解释资产接口中的 FundType。"""
+    return _describe_code(fund_type, ASSET_FUND_TYPE_LABELS, fallback_prefix="未知资产基金类型")
+
+
+def describe_rs_fund_type(fund_type) -> str:
+    """解释基金信息/大数据接口中的 RSFUNDTYPE（天天基金一级分类）。"""
+    return _describe_code(fund_type, RS_FUND_TYPE_LABELS, fallback_prefix="未知一级分类")
+
+
+def describe_rs_sub_fund_type(fund_sub_type) -> str:
+    """解释基金信息/大数据接口中的 RSBTYPE（天天基金二级分类）。"""
+    return _describe_code(fund_sub_type, RS_SUB_FUND_TYPE_LABELS, fallback_prefix="未知二级分类")
+
+
+def format_type_with_label(code, label: str) -> str:
+    """将原始类型码与中文含义一起展示。"""
+    raw = "" if code is None else str(code)
+    if not raw:
+        return label
+    return f"{raw} ({label})"
 
 # 定义默认的活期宝银行卡数据
 DEFAULT_HQB_BANK_DATA = {
@@ -368,7 +425,7 @@ def _load_default_user():
         # get_user_all_info 内部逻辑：内存缓存 -> 文件缓存 -> 数据库 -> 登录
         user = get_user_all_info(target_account, password)
     except Exception as e:
-        print(f"Error loading default user via service: {e}")
+        logger.warning(f"加载 DEFAULT_USER 服务态失败，回退到本地常量用户: {e}")
         
     if not user:
         # 如果服务获取失败，回退到使用常量构建基础对象

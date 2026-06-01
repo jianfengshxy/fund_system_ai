@@ -13,7 +13,15 @@ from src.API._core.auth import build_auth_fields
 from src.API._core.client import default_client
 from src.API._core.headers import build_headers
 from src.API._core.normalize import error_code, error_message, is_success
-from src.common.constant import DEFAULT_USER, SERVER_VERSION
+from src.common.constant import (
+    DEFAULT_GTOKEN,
+    DEFAULT_USER,
+    IOS_CLIENT_INFO,
+    IOS_USER_AGENT,
+    MP_VERSION_DEFAULT,
+    PLATFORM,
+    SERVER_VERSION,
+)
 from src.common.logger import get_logger
 from src.domain.fund_plan import ApiResponse
 
@@ -31,10 +39,10 @@ def get_fund_system_time_trade(user) -> ApiResponse[Dict[str, Any]]:
         host="fundmobapi.eastmoney.com",
         content_type="application/x-www-form-urlencoded",
         referer="https://mpservice.com/770ddc37537896dae8ecd8160cb25336/release/pages/fundList/customListPage",
-        user_agent="EMProjJijin/6.6.3 (iPhone; iOS 16.2; Scale/3.00)",
-        client_info="ttjj-iPhone 11 Pro-iOS-iOS16.2",
-        mp_version="1.5.6",
-        gtoken="4474AFD3E15F441E937647556C01C174",
+        user_agent=IOS_USER_AGENT,
+        client_info=IOS_CLIENT_INFO,
+        mp_version=MP_VERSION_DEFAULT,
+        gtoken=DEFAULT_GTOKEN,
     )
 
     u = user
@@ -50,7 +58,7 @@ def get_fund_system_time_trade(user) -> ApiResponse[Dict[str, Any]]:
         {
             "appVersion": SERVER_VERSION,
             "product": "EFund",
-            "plat": "Iphone",
+            "plat": PLATFORM,
         }
     )
 

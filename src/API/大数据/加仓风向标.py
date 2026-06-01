@@ -1,6 +1,6 @@
 import logging
 import requests
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any
 
 if __name__ == "__main__":
     import os
@@ -10,21 +10,35 @@ if __name__ == "__main__":
     if root_dir not in sys.path:
         sys.path.insert(0, root_dir)
 
-from src.common.constant import DEFAULT_USER, FUND_CODE
+from src.common.constant import (
+    DEFAULT_GTOKEN,
+    DEFAULT_USER,
+    IOS_CLIENT_INFO,
+    IOS_USER_AGENT,
+    MOBILE_KEY,
+    PLATFORM,
+    SERVER_VERSION,
+    describe_rs_fund_type,
+    describe_rs_sub_fund_type,
+    format_type_with_label,
+)
 from src.common.requests_session import session
 from src.domain.fund_plan import ApiResponse
-from src.domain.fund.fund_investment_indicator import FundInvestmentIndicator
 
 def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[Dict[str, Any]]:
     """
-    获取加仓风向标基金信息 - 基础API接口
-    
-    参数:
-    user: 用户对象
-    page_size: 每页数量，默认为20
-    
-    返回:
-    ApiResponse: 包含原始API响应数据的响应对象
+    获取“加仓风向标”基金列表的原始结果。
+
+    返回结果中的关键字段：
+    - `RSFUNDTYPE`: 天天基金一级分类，如 `000/001/002/007`
+    - `RSBTYPE`: 天天基金二级分类，如 `000001/002001/002004/007001`
+    - `PRODUCT_RANK`: 在当前配置榜单里的排序
+    - `SYL_1N`: 近 1 年收益率
+    - `SYL_LN`: 成立以来收益率
+
+    注意：
+    - `RSFUNDTYPE` 和资产接口里的 `FundType` 不是同一套编码，不能混用。
+    - `RSBTYPE` 是天天基金的二级分类，比 `RSFUNDTYPE` 更细。
     """
     url = 'https://fundcomapi.tiantianfunds.com/mm/FundCustom/multiFundTypeSpeConfigListPage'
     
@@ -34,12 +48,12 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[Dict[str, Any
         'validmark': 'Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZdVcHJ8J2NdZhXTNMQR9BMpxG3EMlqXyJoFeiMLZWZZtJ1DXqiIOSu/kLYsAt37vKDllijg7ffsKY6LcVX2IpgamPZG7YN4mKd7mTYGSc0Sjg=',
         'mp_instance_id': '68',
         'Referer': 'https://mpservice.com/fund9bb5726fafc14e/release/pages/home/index',
-        'gtoken': 'ceaf-4a997831b1b3b90849f585f98ca6f30e',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
+        'gtoken': DEFAULT_GTOKEN,
+        'clientInfo': IOS_CLIENT_INFO,
         'traceparent': '00-0000000046aa4cae0000019426368b65-0000000000000000-01',
         'tracestate': 'pid=0x9cf938d,taskid=0x25b8739',
         'Host': 'fundcomapi.tiantianfunds.com',
-        'User-Agent': 'okhttp/3.12.13'
+        'User-Agent': IOS_USER_AGENT
     }
     
     data = {
@@ -49,15 +63,15 @@ def getFundInvestmentIndicators(user, page_size=20) -> ApiResponse[Dict[str, Any
         'passportctoken': user.passport_ctoken,
         'configType': '9',
         'passportutoken': user.passport_utoken,
-        'deviceid': '15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me',
+        'deviceid': MOBILE_KEY,
         'userid': user.customer_no,
-        'version': '6.7.0',
+        'version': SERVER_VERSION,
         'configSort': 'asc',
         'configSortColumn': 'PRODUCT_RANK',
         'ctoken': user.c_token,
         'uid': user.customer_no,
         'utoken': user.u_token,
-        'plat': 'Android',
+        'plat': PLATFORM,
         'passportid': user.passport_id
     }
     
@@ -112,9 +126,29 @@ if __name__ == "__main__":
             print("\n=== API调用成功 ===")
             print(f"成功状态: {result.Success}")
             print(f"错误代码: {result.ErrorCode if result.ErrorCode else '无'}")
-            print("返回数据:")
-            import json
-            print(json.dumps(result.Data, indent=4, ensure_ascii=False))
+            fund_list = (result.Data or {}).get("9", [])
+            print(f"榜单条数: {len(fund_list)}")
+            print("字段说明:")
+            print("  RSFUNDTYPE: 天天基金一级分类")
+            print("  RSBTYPE: 天天基金二级分类")
+            print("  PRODUCT_RANK: 榜单排序")
+            print("  SYL_1N: 近1年收益率")
+            print("  SYL_LN: 成立以来收益率")
+            print("  EUTIME: 数据更新时间")
+            print("")
+
+            for index, item in enumerate(fund_list, start=1):
+                rs_fund_type = item.get("RSFUNDTYPE")
+                rs_sub_type = item.get("RSBTYPE")
+                print(f"#{index}")
+                print(f"  基金: {item.get('SHORTNAME')} ({item.get('FCODE')})")
+                print(f"  一级分类 RSFUNDTYPE: {format_type_with_label(rs_fund_type, describe_rs_fund_type(rs_fund_type))}")
+                print(f"  二级分类 RSBTYPE: {format_type_with_label(rs_sub_type, describe_rs_sub_fund_type(rs_sub_type))}")
+                print(f"  榜单排名 PRODUCT_RANK: {item.get('PRODUCT_RANK')}")
+                print(f"  近1年收益率 SYL_1N: {item.get('SYL_1N')}")
+                print(f"  成立以来收益率 SYL_LN: {item.get('SYL_LN')}")
+                print(f"  更新时间 EUTIME: {item.get('EUTIME')}")
+                print("-" * 50)
         else:
             print("\n=== API调用失败 ===")
             print(f"错误代码: {result.ErrorCode}")

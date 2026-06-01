@@ -41,7 +41,7 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
                 fund_info.estimated_change = 0.0
                 logger.debug(f"{fund_info.fund_name} (QDII) 跳过估值查询，默认涨跌幅为 0.0%")
             else:
-                updated_fund_info = updateFundEstimatedValue(fund_info)
+                updated_fund_info = updateFundEstimatedValue(fund_info, user)
                 if updated_fund_info:
                     fund_info = updated_fund_info
                     fund_info_cache[fund_code] = fund_info  # 更新缓存
@@ -81,7 +81,7 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
             fund_info.estimated_change = 0.0
             logger.debug(f"{fund_info.fund_name} (QDII) 跳过估值查询，默认涨跌幅为 0.0%")
         else:
-            updated_fund_info = updateFundEstimatedValue(fund_info)
+            updated_fund_info = updateFundEstimatedValue(fund_info, user)
             if updated_fund_info:
                 fund_info = updated_fund_info
                 logger.debug(f"{fund_info.fund_name}成功获取基金估值信息: 估算净值={fund_info.estimated_value}, 估算涨跌={fund_info.estimated_change}%")

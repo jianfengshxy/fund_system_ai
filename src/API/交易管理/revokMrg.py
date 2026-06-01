@@ -17,7 +17,7 @@ from src.common.requests_session import session
 from src.domain.trade.TradeResult import TradeResult
 from src.domain.user.User import User
 from typing import List, Optional, Dict, Any
-from src.common.constant import MOBILE_KEY
+from src.common.constant import DEFAULT_GTOKEN, IOS_CLIENT_INFO, IOS_USER_AGENT, MOBILE_KEY, PHONE_TYPE, SERVER_VERSION
 
 def revoke_order(user: User, busin_serial_no: str, business_type: str, fund_code: str, 
                  amount: str, sub_account_no: str = "", bank_account_no: str = "") -> Dict[str, Any]:
@@ -42,11 +42,11 @@ def revoke_order(user: User, busin_serial_no: str, business_type: str, fund_code
         "Connection": "keep-alive",
         "Host": f"tradeapilvs{user.index}.1234567.com.cn",
         "Accept": "*/*",
-        "GTOKEN": "4474AFD3E15F441E937647556C01C174",
-        "User-Agent": "EMProjJijin/6.5.5 (iPhone; iOS 15.5; Scale/3.00)",
+        "GTOKEN": DEFAULT_GTOKEN,
+        "User-Agent": IOS_USER_AGENT,
         "Accept-Language": "zh-Hans-CN;q=1",
         "Referer": "https://mpservice.com/47e7241f3f0a46af8629dfe78fe62c55/release/pages/BuyTrade",
-        "clientInfo": "ttjj-iPhone12,3-iOS-iOS15.5",
+        "clientInfo": IOS_CLIENT_INFO,
         "Content-Type": "application/x-www-form-urlencoded"
     }
     
@@ -70,11 +70,11 @@ def revoke_order(user: User, busin_serial_no: str, business_type: str, fund_code
         "TradeType": "AsyJCJY022",
         "appType": "ttjj",
         "cToken": user.c_token,
-        "phoneType": "Iphone",
-        "serverVersion": "6.6.11",
+        "phoneType": PHONE_TYPE,
+        "serverVersion": SERVER_VERSION,
         "uToken": user.u_token,
         "userId": user.customer_no,
-        "version": "6.6.11",
+        "version": SERVER_VERSION,
         "BusinId": busin_serial_no,
         "BusinType": business_type
     }

@@ -1,3 +1,22 @@
+"""
+基金历史净值衍生指标接口。
+
+本文件围绕 `FundMNHisNetList` 和 `FundPeriodIncrease` 两类接口，
+提供三组常用能力：
+1. `get_nav_rank()`：当前净值在最近 N 个交易日中的相对排名；
+2. `get_fund_volatility()`：最近 N 个交易日的平均净值、方差和波动率；
+3. `get_fund_growth_rate()`：基金在特定收益区间内的增长率与同类排名。
+
+常见参数含义：
+- `FCODE`: 基金代码。
+- `DWJZ`: 单位净值。
+- `pageSize`: 拉取的历史净值条数，通常等于观察窗口 `N`。
+- `period_type`: 收益区间类型。
+  - `Z`: 近一周
+  - `Y`: 近一月
+  - `3Y`: 近三月
+"""
+
 from typing import Optional, Tuple
 
 if __name__ == "__main__":
@@ -10,24 +29,32 @@ if __name__ == "__main__":
 
 from src.common.logger import get_logger
 from src.common.errors import RetriableError, ValidationError
+import math
 import requests
-import numpy as np
+import statistics
 from src.common.requests_session import session
 from src.domain.fund.fund_info import FundInfo
-from src.common.constant import SERVER_VERSION, PHONE_TYPE, MOBILE_KEY, DEVICE_ID
+from src.common.constant import DEFAULT_GTOKEN, DEVICE_ID, IOS_CLIENT_INFO, IOS_OS_VERSION, IOS_USER_AGENT, MOBILE_KEY, PHONE_TYPE, PLATFORM, SERVER_VERSION
 
 def get_nav_rank(user, fund_info: FundInfo, N: int, nav: Optional[float] = None) -> Optional[int]:
     """
-    获取基金净值在最近N个交易日中的排名
-    
+    获取基金净值在最近 N 个交易日中的相对排名。
+
+    排名逻辑：
+    1. 先拉取最近 `N` 个交易日的历史单位净值；
+    2. 若未显式传入 `nav`，则默认以最新一日净值为当前净值；
+    3. 将当前净值插入样本后排序，返回从小到大的位置排名。
+
     Args:
-        user: User对象，包含用户认证信息
-        fund_info: FundInfo对象，包含基金的基本信息
-        N: 最近的交易日数量
-        nav: 当前净值，如果为None则使用最新一天的净值
-        
+        user: 用户对象，主要提供 `c_token/u_token/passport_id/customer_no` 等鉴权上下文。
+        fund_info: 基金对象，至少需要 `fund_code`、`fund_name`。
+        N: 历史净值窗口大小，例如 `30` 表示最近 30 个交易日。
+        nav: 可选的“当前净值”。如果传入，通常可以用估算净值参与排名；
+            如果不传，则默认使用历史列表中的最新正式净值。
+
     Returns:
-        int: 净值排名，如果获取失败返回None
+        int: 排名结果，数值越小代表净值越低；
+        失败时抛出异常，由调用方决定是否降级。
     """
     url = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNHisNetList'
     
@@ -35,11 +62,11 @@ def get_nav_rank(user, fund_info: FundInfo, N: int, nav: Optional[float] = None)
         'Connection': 'keep-alive',
         'Host': 'fundmobapi.eastmoney.com',
         'Accept': '*/*',
-        'GTOKEN': '4474AFD3E15F441E937647556C01C174',
-        'clientInfo': 'ttjj-iPhone12,3-iOS-iOS15.5',
+        'GTOKEN': DEFAULT_GTOKEN,
+        'clientInfo': IOS_CLIENT_INFO,
         'Accept-Language': 'zh-Hans-CN;q=1',
         'validmark': 'Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZd9JYBOfWXLz4ujEjOUCkzX5OOMubE0Xuw+PGl6/XhtW6uCaNvvGARgUd92574Ft++7hwQ65WREqAHqpIQXfammA==',
-        'User-Agent': 'EMProjJijin/6.5.5 (iPhone; iOS 15.5; Scale/3.00)',
+        'User-Agent': IOS_USER_AGENT,
         'Referer': 'https://mpservice.com/516939c37bdb4ba2b1138c50cf69a2e1/release/pages/fundHistoryWorth/index',
         'Content-Type': 'application/x-www-form-urlencoded'
     }
@@ -48,7 +75,7 @@ def get_nav_rank(user, fund_info: FundInfo, N: int, nav: Optional[float] = None)
         'FCODE': fund_info.fund_code,
         'IsShareNet': 'true',
         'MobileKey': MOBILE_KEY,
-        'OSVersion': '15.5',
+        'OSVersion': IOS_OS_VERSION,
         'appType': 'ttjj',
         'appVersion': SERVER_VERSION,
         'cToken': user.c_token,
@@ -56,7 +83,7 @@ def get_nav_rank(user, fund_info: FundInfo, N: int, nav: Optional[float] = None)
         'pageIndex': '0',
         'pageSize': str(N),
         'passportid': user.passport_id,
-        'plat': PHONE_TYPE,
+        'plat': PLATFORM,
         'product': 'EFund',
         'serverVersion': SERVER_VERSION,
         'uToken': user.u_token,
@@ -114,15 +141,21 @@ def get_nav_rank(user, fund_info: FundInfo, N: int, nav: Optional[float] = None)
 
 def get_fund_volatility(user, fund_info: FundInfo, N: int) -> Optional[Tuple[float, float, float]]:
     """
-    获取基金在最近N个交易日的波动率信息
-    
+    获取基金最近 N 个交易日的净值波动统计。
+
+    这里的波动率不是年化波动率，而是基于最近 `N` 条单位净值
+    直接计算出来的样本标准差，适合在策略里做相对比较或阈值判断。
+
     Args:
-        user: User对象，包含用户认证信息
-        fund_info: FundInfo对象，包含基金的基本信息
-        N: 最近的交易日数量
-        
+        user: 用户对象，提供查询历史净值所需的鉴权字段。
+        fund_info: 基金对象，至少需要 `fund_code`、`fund_name`。
+        N: 参与统计的最近交易日数量，例如 `5`、`30`。
+
     Returns:
-        Tuple[float, float, float]: (平均值, 方差, 波动率)的元组，如果计算失败返回None
+        Tuple[float, float, float]:
+        - 第 1 个值：平均净值
+        - 第 2 个值：样本方差
+        - 第 3 个值：样本标准差（波动率）
     """
     url = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNHisNetList'
     
@@ -130,11 +163,11 @@ def get_fund_volatility(user, fund_info: FundInfo, N: int) -> Optional[Tuple[flo
         'Connection': 'keep-alive',
         'Host': 'fundmobapi.eastmoney.com',
         'Accept': '*/*',
-        'GTOKEN': '4474AFD3E15F441E937647556C01C174',
-        'clientInfo': 'ttjj-iPhone12,3-iOS-iOS15.5',
+        'GTOKEN': DEFAULT_GTOKEN,
+        'clientInfo': IOS_CLIENT_INFO,
         'Accept-Language': 'zh-Hans-CN;q=1',
         'validmark': 'Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZd9JYBOfWXLz4ujEjOUCkzX5OOMubE0Xuw+PGl6/XhtW6uCaNvvGARgUd92574Ft++7hwQ65WREqAHqpIQXfammA==',
-        'User-Agent': 'EMProjJijin/6.5.5 (iPhone; iOS 15.5; Scale/3.00)',
+        'User-Agent': IOS_USER_AGENT,
         'Referer': 'https://mpservice.com/516939c37bdb4ba2b1138c50cf69a2e1/release/pages/fundHistoryWorth/index',
         'Content-Type': 'application/x-www-form-urlencoded'
     }
@@ -143,7 +176,7 @@ def get_fund_volatility(user, fund_info: FundInfo, N: int) -> Optional[Tuple[flo
         'FCODE': fund_info.fund_code,
         'IsShareNet': 'true',
         'MobileKey': MOBILE_KEY,
-        'OSVersion': '15.5',
+        'OSVersion': IOS_OS_VERSION,
         'appType': 'ttjj',
         'appVersion': SERVER_VERSION,
         'cToken': user.c_token,
@@ -151,7 +184,7 @@ def get_fund_volatility(user, fund_info: FundInfo, N: int) -> Optional[Tuple[flo
         'pageIndex': '0',
         'pageSize': str(N),
         'passportid': user.passport_id,
-        'plat': PHONE_TYPE,
+        'plat': PLATFORM,
         'product': 'EFund',
         'serverVersion': SERVER_VERSION,
         'uToken': user.u_token,
@@ -202,10 +235,10 @@ def get_fund_volatility(user, fund_info: FundInfo, N: int) -> Optional[Tuple[flo
                     navs.append(nav)
 
             if len(navs) >= 1:
-                mean = float(np.mean(navs))
+                mean = float(statistics.fmean(navs))
                 if len(navs) >= 2:
-                    variance = float(np.var(navs, ddof=1))
-                    volatility = float(np.sqrt(variance)) if variance > 0 else 0.0
+                    variance = float(statistics.variance(navs))
+                    volatility = float(math.sqrt(variance)) if variance > 0 else 0.0
                 else:
                     variance = 0.0
                     volatility = 0.0
@@ -232,12 +265,19 @@ def get_fund_volatility(user, fund_info: FundInfo, N: int) -> Optional[Tuple[flo
 
 
 def get_fund_growth_rate(fund_info: FundInfo, period_type: str) -> tuple[float, int, int]:
-    """获取基金在特定时期的增长率信息
-    
+    """
+    获取基金在指定区间内的增长率与同类排名。
+
+    该接口返回的是基金官方区间收益率，函数内部会把当前估算涨跌幅
+    `estimated_change` 叠加到区间收益中，使结果更接近当前时点的盘中表现。
+
     Args:
-        fund_info: FundInfo对象，包含基金的基本信息
-        period_type: 时间周期类型，可选值："3Y", "Z", "Y"
-        
+        fund_info: 基金对象，至少需要 `fund_code` 和 `estimated_change`。
+        period_type: 区间类型。
+            - `Z`: 近一周
+            - `Y`: 近一月
+            - `3Y`: 近三月
+
     Returns:
         tuple: (增长率, 排名, 总数)
             - 增长率: 包含估算涨跌幅的综合增长率
@@ -272,7 +312,7 @@ def get_fund_growth_rate(fund_info: FundInfo, period_type: str) -> tuple[float, 
         "Host": "fundcomapi.tiantianfunds.com",
         "Accept": "*/*",
         "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "EMProjJijin/6.5.9 (iPhone; iOS 15.6.1; Scale/3.00)",
+        "User-Agent": IOS_USER_AGENT,
         "Connection": "keep-alive",
         "Accept-Language": "zh-Hans-CN;q=1",
         "MobileKey": MOBILE_KEY,
@@ -291,7 +331,7 @@ def get_fund_growth_rate(fund_info: FundInfo, period_type: str) -> tuple[float, 
         "version": SERVER_VERSION,
         "MobileKey": MOBILE_KEY,
         "appType": "ttjj",
-        "OSVersion": "15.6.1",
+        "OSVersion": IOS_OS_VERSION,
         "appVersion": SERVER_VERSION,
         "serverVersion": SERVER_VERSION
     }

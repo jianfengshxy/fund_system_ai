@@ -13,7 +13,7 @@ if __name__ == "__main__":
 from src.common.logger import get_logger
 from src.common.requests_session import session
 from src.domain.user.User import User
-from src.common.constant import SERVER_VERSION, MOBILE_KEY, PHONE_TYPE, DEVICE_ID
+from src.common.constant import DEFAULT_GTOKEN, DEVICE_ID, IOS_CLIENT_INFO, IOS_USER_AGENT, MOBILE_KEY, MP_VERSION_DEFAULT, PHONE_TYPE, PLATFORM, SERVER_VERSION
 
 logger = get_logger("IndexStagePerf")
 
@@ -38,12 +38,12 @@ def get_index_stage_performance(user: User, index_code: str, range_type: str = "
         'Accept-Encoding': 'gzip, deflate, br',
         'Accept-Language': 'zh-Hans-CN;q=1',
         'Connection': 'keep-alive',
-        'GTOKEN': '03FC9273690F4DC4B71CB2247A0E4338',
+        'GTOKEN': DEFAULT_GTOKEN,
         'Host': 'fundcomapi.tiantianfunds.com',
-        'MP-VERSION': '1.3.6',
+        'MP-VERSION': MP_VERSION_DEFAULT,
         'Referer': 'https://mpservice.com/7d7b3460cd40444ba58cdabdfae34442/release/pages/index-detail/sub-pages/common/index',
-        'User-Agent': f'EMProjJijin/{SERVER_VERSION} (iPhone; iOS 16.0; Scale/3.00)',
-        'clientInfo': 'ttjj-iPhone18,1-iOS-iOS16.0',
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
         'traceparent': '00-7e4eac313ad34daaa59573ee4ef38cde-0000000000000000-01',
         'tracestate': 'pid=0x105032130,taskid=0x12e49ff60',
         'validmark': 'Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZdSIrQ1Lx4ygfw5br2rQnUfMES8ernsO5lB/RKZKLdR3yj54DzeINgWEBBLeGjQZaII+DeT0GPg7/PfGdusqta+Q=='
@@ -57,7 +57,7 @@ def get_index_stage_performance(user: User, index_code: str, range_type: str = "
         'passportctoken': user.passport_ctoken or user.c_token,
         'passportid': user.passport_id,
         'passportutoken': user.passport_utoken or user.u_token,
-        'plat': 'Iphone',
+        'plat': PLATFORM,
         'product': 'EFund',
         'uid': user.customer_no,
         'userid': user.customer_no,

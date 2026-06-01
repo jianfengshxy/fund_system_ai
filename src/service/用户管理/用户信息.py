@@ -40,14 +40,24 @@ def _set_user_cache(user):
         _user_cache[key] = (user, time.time())
 
 def _ensure_bank(user):
+    if user is None:
+        return user
+    if getattr(user, '_ensuring_bank', False):
+        return user
     try:
         has_bank = getattr(user, 'max_hqb_bank', None) is not None
         if not has_bank:
+            setattr(user, '_ensuring_bank', True)
             user2 = getMaxhqbBank(user)
             return user2 or user
         return user
     except Exception:
         return user
+    finally:
+        try:
+            setattr(user, '_ensuring_bank', False)
+        except Exception:
+            pass
 
 def _user_to_dict(user):
     return {
@@ -142,16 +152,18 @@ def update_user_cache(user):
     _set_user_cache(user)
     _save_file_cache(user)
 
-def get_user_all_info(account: str, password: str):
+def get_user_all_info(account: str, password: str, ensure_bank: bool = True):
     cached = _get_cached_user(account, password)
     if cached is not None:
-        cached = _ensure_bank(cached)
+        if ensure_bank:
+            cached = _ensure_bank(cached)
         _set_user_cache(cached)
         logger.info("令牌来源: 内存缓存", extra={"account": account, "token_source": "cache"})
         return cached
     file_cached = _load_file_cache(account, password)
     if file_cached is not None:
-        file_cached = _ensure_bank(file_cached)
+        if ensure_bank:
+            file_cached = _ensure_bank(file_cached)
         _set_user_cache(file_cached)
         logger.info("令牌来源: 文件缓存", extra={"account": account, "token_source": "file_cache"})
         return file_cached
@@ -168,7 +180,8 @@ def get_user_all_info(account: str, password: str):
                 setattr(db_user, 'paypassword', password)
         except Exception:
             pass
-        db_user = _ensure_bank(db_user)
+        if ensure_bank:
+            db_user = _ensure_bank(db_user)
         _set_user_cache(db_user)
         _save_file_cache(db_user)
         logger.info("令牌来源: 数据库", extra={"account": account, "token_source": "database"})
@@ -178,7 +191,8 @@ def get_user_all_info(account: str, password: str):
         logger.error("登录失败", extra={"account": account})
         fallback = DEFAULT_USER if getattr(DEFAULT_USER, 'account', None) == account else None
         if fallback:
-            fallback = _ensure_bank(fallback)
+            if ensure_bank:
+                fallback = _ensure_bank(fallback)
             _set_user_cache(fallback)
             _save_file_cache(fallback)
             try:
@@ -192,7 +206,8 @@ def get_user_all_info(account: str, password: str):
     if not user:
         logger.error("passport推断失败", extra={"account": account})
         return None
-    user = getMaxhqbBank(user)
+    if ensure_bank:
+        user = getMaxhqbBank(user)
     if user:
         _set_user_cache(user)
         _save_file_cache(user)
@@ -203,19 +218,67 @@ def get_user_all_info(account: str, password: str):
         logger.info("令牌来源: 登录聚合", extra={"account": account, "token_source": "login"})
     return user
 
-def refresh_user_tokens(account: str, password: str):
+def refresh_user_tokens(account: str, password: str, ensure_bank: bool = True):
     user = _get_cached_user(account, password)
     if not user:
-        return get_user_all_info(account, password)
+        user = _load_file_cache(account, password)
+    if not user:
+        user = login(account, password)
+        if not user:
+            return None
+        user = inference_passport_for_bind(user) or login_passport(user)
+        if not user:
+            return None
+        if ensure_bank:
+            user = _ensure_bank(user)
+        _set_user_cache(user)
+        _save_file_cache(user)
+        try:
+            UserTokenStore().upsert(user)
+        except Exception:
+            pass
+        logger.info("令牌来源: 强制重新登录", extra={"account": account, "token_source": "force_login"})
+        return user
     u1 = inference_passport_for_bind(user) or login_passport(user)
     if not u1:
         invalidate_user_cache(account, password)
-        return get_user_all_info(account, password)
+        fresh_user = login(account, password)
+        if not fresh_user:
+            return None
+        fresh_user = inference_passport_for_bind(fresh_user) or login_passport(fresh_user)
+        if not fresh_user:
+            return None
+        if ensure_bank:
+            fresh_user = _ensure_bank(fresh_user)
+        _set_user_cache(fresh_user)
+        _save_file_cache(fresh_user)
+        try:
+            UserTokenStore().upsert(fresh_user)
+        except Exception:
+            pass
+        logger.info("令牌来源: 刷新失败后重新登录", extra={"account": account, "token_source": "refresh_login"})
+        return fresh_user
     u2 = inference_passport_for_bind(u1)
     if not u2:
         invalidate_user_cache(account, password)
-        return get_user_all_info(account, password)
-    u2 = _ensure_bank(u2)
+        fresh_user = login(account, password)
+        if not fresh_user:
+            return None
+        fresh_user = inference_passport_for_bind(fresh_user) or login_passport(fresh_user)
+        if not fresh_user:
+            return None
+        if ensure_bank:
+            fresh_user = _ensure_bank(fresh_user)
+        _set_user_cache(fresh_user)
+        _save_file_cache(fresh_user)
+        try:
+            UserTokenStore().upsert(fresh_user)
+        except Exception:
+            pass
+        logger.info("令牌来源: 二次刷新失败后重新登录", extra={"account": account, "token_source": "refresh_login_retry"})
+        return fresh_user
+    if ensure_bank:
+        u2 = _ensure_bank(u2)
     _set_user_cache(u2)
     try:
         UserTokenStore().upsert(u2)
@@ -224,16 +287,18 @@ def refresh_user_tokens(account: str, password: str):
     logger.info("令牌来源: 刷新凭证", extra={"account": account, "token_source": "refresh"})
     return u2
 
-def get_user_from_store_or_cache(account: str, password: str):
+def get_user_from_store_or_cache(account: str, password: str, ensure_bank: bool = True):
     cached = _get_cached_user(account, password)
     if cached is not None:
-        cached = _ensure_bank(cached)
+        if ensure_bank:
+            cached = _ensure_bank(cached)
         _set_user_cache(cached)
         logger.info("令牌来源: 内存缓存(无登录)", extra={"account": account, "token_source": "cache_nologin"})
         return cached
     file_cached = _load_file_cache(account, password)
     if file_cached is not None:
-        file_cached = _ensure_bank(file_cached)
+        if ensure_bank:
+            file_cached = _ensure_bank(file_cached)
         _set_user_cache(file_cached)
         logger.info("令牌来源: 文件缓存(无登录)", extra={"account": account, "token_source": "file_cache_nologin"})
         return file_cached
@@ -251,7 +316,8 @@ def get_user_from_store_or_cache(account: str, password: str):
                     setattr(db_user, 'paypassword', password)
             except Exception:
                 pass
-            db_user = _ensure_bank(db_user)
+            if ensure_bank:
+                db_user = _ensure_bank(db_user)
             _set_user_cache(db_user)
             _save_file_cache(db_user)
             logger.info("令牌来源: 数据库(无登录)", extra={"account": account, "token_source": "database_nologin"})

@@ -19,7 +19,7 @@ from src.domain.sub_account.sub_asset_mult_list_response import SubAssetMultList
 
 from src.common.constant import (
     SERVER_VERSION, PHONE_TYPE, MOBILE_KEY,
-    USER_ID, U_TOKEN, C_TOKEN
+    USER_ID, U_TOKEN, C_TOKEN, DEFAULT_GTOKEN, IOS_CLIENT_INFO, IOS_USER_AGENT, PLATFORM
 )
 
 from src.domain.sub_account.sub_account import SubAccount
@@ -40,9 +40,9 @@ def createSubAccount(user, name: str, style: str = 'S1') -> ApiResponse[SubAccou
         'Connection': 'keep-alive',
         'Host': f'tradeapilvs{user.index}.1234567.com.cn',
         'Referer': 'https://mpservice.com/cd85628df2c04bd8a525f2ff4bbaf7d7/release/pages/index',
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
-        'gtoken': 'ceaf-5ec1aeaf313a267434fbe314a1575707',
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
+        'gtoken': DEFAULT_GTOKEN,
         'mp_instance_id': '26',
         'traceparent': '00-0000000046aa4cae000001968c26da88-0000000000000000-01',
         'tracestate': 'pid=0x2415841,taskid=0xc2035a6'
@@ -132,9 +132,9 @@ def disbandSubAccount(user, sub_account_no: str) -> ApiResponse[SubAccountRespon
         'Connection': 'keep-alive',
         'Host': f'tradeapilvs{user.index}.1234567.com.cn',
         'Referer': 'https://mpservice.com/33cb2e2622954432b6073633f27149ba/release/pages/subAccountDetail/index',
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
-        'gtoken': 'ceaf-5ec1aeaf313a267434fbe314a1575707',
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
+        'gtoken': DEFAULT_GTOKEN,
         'mp_instance_id': '22',
         'traceparent': '00-0000000046aa4cae000001968c23f5f2-0000000000000000-01',
         'tracestate': 'pid=0x1ed8479,taskid=0x7760c9e'
@@ -149,17 +149,17 @@ def disbandSubAccount(user, sub_account_no: str) -> ApiResponse[SubAccountRespon
         'SubType': -1,
         'PhoneType': PHONE_TYPE,
         'Password': md5_password,
-        'MobileKey': '15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me',
-        'Version': '6.7.1',
+        'MobileKey': MOBILE_KEY,
+        'Version': SERVER_VERSION,
         'UserId': user.customer_no,
         'SubAccountNo': sub_account_no,
         'UToken': user.u_token,
         'AppType': 'ttjj',
         'CustomerNo': user.customer_no,
         'CToken': user.c_token,
-        'deviceid': '15a16f86a738f59811cbd40da4da1d97||iemi_tluafed_me',
+        'deviceid': MOBILE_KEY,
         'uid': user.customer_no,
-        'plat': 'Android'
+        'plat': PLATFORM
     }
     
     logger = get_logger("SubAccountMrg")
@@ -238,9 +238,9 @@ def updateSubAccount(user, sub_account_no: str, open_state: int) -> ApiResponse[
         'Connection': 'keep-alive',
         'Host': f'tradeapilvs{user.index}.1234567.com.cn',
         'Referer': 'https://mpservice.com/a461099f332046f0b32783c5d3d980a8/release/pages/index/index',
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
-        'gtoken': 'ceaf-5ec1aeaf313a267434fbe314a1575707',
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
+        'gtoken': DEFAULT_GTOKEN,
         'mp_instance_id': '188',
         'traceparent': '00-0000000046aa4cae000001968af92885-0000000000000000-01',
         'tracestate': 'pid=0x71e334,taskid=0x52a82c9'
@@ -402,9 +402,9 @@ def getSubAccountList(user) -> ApiResponse[List[SubAccount]]:
         'Content-Type': 'application/json; charset=utf-8',
         'Host': f'tradeapilvs{u.index}.1234567.com.cn',
         'Referer': 'https://mpservice.com/fund46516ffab83642/release/pages/home/index',
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
-        'gtoken': 'ceaf-5ec1aeaf313a267434fbe314a1575707',
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
+        'gtoken': DEFAULT_GTOKEN,
         'mp_instance_id': '28',
         'traceparent': '00-0000000046aa4cae00000196baba22e2-0000000000000000-01',
         'tracestate': 'pid=0x71d3ee2,taskid=0x9e51735'
@@ -424,7 +424,7 @@ def getSubAccountList(user) -> ApiResponse[List[SubAccount]]:
         'CToken': u.c_token,
         'deviceid': MOBILE_KEY,
         'uid': u.customer_no,
-        'plat': 'Android'
+        'plat': PLATFORM
     }
         
     logger = get_logger("SubAccountMrg")
@@ -620,9 +620,9 @@ def getSubAssetMultList(user) -> ApiResponse[SubAssetMultListResponse]:
         'Connection': 'keep-alive',
         'Host': f'tradeapilvs{u.index}.1234567.com.cn',
         'Referer': 'https://mpservice.com/33cb2e2622954432b6073633f27149ba/release/pages/subAccountHome/index',
-        'User-Agent': 'okhttp/3.12.13',
-        'clientInfo': 'ttjj-ZTE 7534N-Android-11',
-        'gtoken': 'ceaf-5ec1aeaf313a267434fbe314a1575707',
+        'User-Agent': IOS_USER_AGENT,
+        'clientInfo': IOS_CLIENT_INFO,
+        'gtoken': DEFAULT_GTOKEN,
         'mp_instance_id': '162',
         'traceparent': '00-0000000046aa4cae000001968ae7a434-0000000000000000-01',
         'tracestate': 'pid=0xc3c6c4a,taskid=0x7f81dfc'

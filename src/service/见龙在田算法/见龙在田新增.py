@@ -308,7 +308,8 @@ def add_new_funds(
                 result = commit_order(user, sub_account_no, code, buy_amount)
                 if result:
                     order_no = getattr(result, 'busin_serial_no', 'N/A')
-                    logger.info(f"[见龙在田] 买入成功: {name}({code}) - 金额: {buy_amount}元 - 订单号: {order_no}")
+                    actual_amount = getattr(result, 'amount', buy_amount)
+                    logger.info(f"[见龙在田] 买入成功: {name}({code}) - 金额: {actual_amount}元 - 订单号: {order_no}")
                     success_count += 1
                 else:
                     logger.error(f"[见龙在田] 买入失败: {name}({code})")

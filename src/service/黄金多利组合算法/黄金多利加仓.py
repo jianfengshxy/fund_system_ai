@@ -106,7 +106,8 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 2000.
             logger.info(f"基金 {f_name}({f_code}) 未持有，执行初始化建仓，准备下单金额: {f_amt}")
             res = commit_order(user, sub_account_no, f_code, f_amt)
             if res:
-                logger.info(f"初始化建仓成功: {f_code} - 金额: {f_amt} - 订单号: {res.busin_serial_no}")
+                actual_amount = getattr(res, "amount", f_amt)
+                logger.info(f"初始化建仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
                 buy_triggered = True
             else:
                 logger.info(f"初始化建仓未提交或失败: {f_name}({f_code}) 金额: {f_amt}")
@@ -138,7 +139,8 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 2000.
             
             res = commit_order(user, sub_account_no, f_code, buy_amount)
             if res:
-                logger.info(f"加仓成功: {f_code} - 金额: {buy_amount} - 订单号: {res.busin_serial_no}")
+                actual_amount = getattr(res, "amount", buy_amount)
+                logger.info(f"加仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
                 buy_triggered = True
             else:
                 logger.info(f"加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")

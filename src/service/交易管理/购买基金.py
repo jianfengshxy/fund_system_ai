@@ -1,4 +1,3 @@
-import logging
 from src.common.logger import get_logger
 import random
 from typing import Optional
@@ -7,6 +6,7 @@ from src.domain.trade.TradeResult import TradeResult
 from src.service.公共服务.trade_time_service import is_trading_time
 from src.API.工具.utils import is_long_holiday
 from src.API.交易管理.buyMrg import commit_order as api_commit_order
+from src.API.基金信息.FundInfo import getFundInfo
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.common.errors import RetriableError, ValidationError, TradePasswordError
 from src.service.银行卡账户.bankAccoutService import getMaxhqbBank
@@ -54,9 +54,15 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
     except AttributeError:
         bank_card_info = None
 
+    original_request_amount = float(amount)
+
     # 2.1) 基金状态与购买限额检查
     try:
-        fund_info = get_all_fund_info(user, fund_code)
+        # 交易字段（如 max_purchase / can_purchase）不能盲信缓存，
+        # 下单前强制拉一次基础信息，避免沿用历史限额。
+        fund_info = getFundInfo(user, fund_code)
+        if not fund_info:
+            fund_info = get_all_fund_info(user, fund_code)
         if not fund_info:
             logger.warning(f"无法获取基金{fund_code}的信息", extra=extra)
             return None
@@ -71,7 +77,7 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
             return None
 
         max_amount = float(fund_info.max_purchase)
-        request_amount = float(amount)
+        request_amount = original_request_amount
         logger.info(f"基金{fund_code}限额检查: 请求金额{request_amount}, 限额{max_amount}", extra=extra)
 
         exceeded_limit = False
@@ -118,6 +124,10 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
             logger.warning(f"下单前刷新活期宝余额失败: {refresh_err}", extra=extra)
     balance = max(current_real_balance, bank_ava_vol)
     amount_to_submit = float(amount)
+    logger.info(
+        f"下单金额摘要: 原始请求={original_request_amount}, 实时限额={max_amount}, 实际提交={amount_to_submit}",
+        extra=extra,
+    )
     required_balance = max(100.0, amount_to_submit)
     if balance < required_balance:
         logger.error(
@@ -130,7 +140,13 @@ def commit_order(user: User, sub_account_no: str, fund_code: str, amount: float)
 
     # 5) 调用 API 层发起真实下单请求
     try:
-        return api_commit_order(user, sub_account_no, fund_code, amount_to_submit)
+        trade_result = api_commit_order(user, sub_account_no, fund_code, amount_to_submit)
+        if trade_result is not None:
+            try:
+                trade_result.amount = str(amount_to_submit)
+            except Exception:
+                pass
+        return trade_result
     except TradePasswordError:
         raise
     except RetriableError as e:

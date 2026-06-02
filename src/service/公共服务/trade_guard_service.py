@@ -1,5 +1,4 @@
 from __future__ import annotations
-import logging
 import datetime
 from typing import Optional, Set
 import os
@@ -10,6 +9,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from src.API.交易管理.trade import get_trades_list
+from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
 from src.domain.user.User import User
 from src.common.logger import get_logger
 
@@ -78,11 +78,87 @@ def _get_trade_date(t) -> Optional[datetime.date]:
                 return dt.date()
     return None
 
+def _get_on_way_trade_count(t) -> int:
+    """
+    从交易对象中尽量提取“在途交易个数/在途标记”。
+
+    背景：
+    - 有些活期宝转基金订单是在收盘后提交，交易记录展示时间还是前一自然日；
+    - 但实际会顺延到下一交易日处理，单纯靠 today/nav_date 做日期匹配会漏掉；
+    - 这类情况下如果交易对象自身已经带有在途标记，就应直接视为在途。
+    """
+    candidates = [
+        getattr(t, "on_way_trade_count", None),
+        getattr(t, "on_way_transaction_count", None),
+        getattr(t, "is_stay_on_way", None),
+    ]
+    raw = getattr(t, "raw", None) if isinstance(getattr(t, "raw", None), dict) else None
+    if raw:
+        candidates.extend(
+            [
+                raw.get("OnWayTradeCount"),
+                raw.get("OnWayTransactionCount"),
+                raw.get("IsStayOnWay"),
+                raw.get("StayOnWayCount"),
+            ]
+        )
+
+    for value in candidates:
+        if value is None or value == "":
+            continue
+        try:
+            return int(float(value))
+        except Exception:
+            text = str(value).strip().lower()
+            if text in {"true", "yes", "y"}:
+                return 1
+            if text in {"false", "no", "n"}:
+                return 0
+    return 0
+
+def _find_sub_account_asset(user: User, sub_account_no: str, fund_code: str):
+    """
+    在子账户资产列表里查找指定基金。
+
+    优先使用资产接口判断是否存在在途交易，因为交易记录接口可能有同步延迟，
+    或者盘后买入场景下日期落在前一自然日，导致交易记录守卫漏判。
+    """
+    if not sub_account_no:
+        return None
+    try:
+        assets = get_asset_list_of_sub(user, sub_account_no) or []
+    except Exception as e:
+        logger.warning(f"查询子账户资产失败（资产守卫降级为交易守卫）: fund={fund_code}, sub_account_no={sub_account_no}, err={e}")
+        return None
+
+    for asset in assets:
+        if str(getattr(asset, "fund_code", "") or "") == str(fund_code):
+            return asset
+    return None
+
 def has_buy_submission_on_dates(user: User, sub_account_no: str, fund_code: str, dates: Set[datetime.date]):
     """
     查询同一基金在指定日期集合是否存在“有效买入/定投提交”记录（排除撤单）。
     命中则返回该条交易对象，否则返回 None。
     """
+    asset = _find_sub_account_asset(user, sub_account_no, fund_code)
+    if asset is not None:
+        on_way_transaction_count = int(getattr(asset, "on_way_transaction_count", 0) or 0)
+        asset_value = float(getattr(asset, "asset_value", 0) or 0)
+        available_vol = float(getattr(asset, "available_vol", 0) or 0)
+        if on_way_transaction_count > 0:
+            logger.info(
+                f"资产守卫命中在途交易: fund={fund_code}, sub_account_no={sub_account_no}, "
+                f"on_way_transaction_count={on_way_transaction_count}, asset_value={asset_value}, available_vol={available_vol}"
+            )
+            return asset
+        if asset_value > 0 and available_vol <= 0:
+            logger.info(
+                f"资产守卫命中疑似在途持仓: fund={fund_code}, sub_account_no={sub_account_no}, "
+                f"asset_value={asset_value}, available_vol={available_vol}"
+            )
+            return asset
+
     try:
         trades = get_trades_list(user, sub_account_no=sub_account_no or "", fund_code=fund_code) or []
         if (not trades) and sub_account_no:
@@ -112,6 +188,13 @@ def has_buy_submission_on_dates(user: User, sub_account_no: str, fund_code: str,
         if _is_canceled_trade(t):
             # logger.info(f"忽略已撤单记录: {getattr(t, 'product_name','') or ''}({fund_code}) 状态={getattr(t, 'app_state_text', None) or getattr(t, 'status', None)}")
             continue
+        on_way_trade_count = _get_on_way_trade_count(t)
+        if on_way_trade_count > 0:
+            logger.info(
+                f"守卫命中在途标记: fund={fund_code}, on_way_trade_count={on_way_trade_count}, "
+                f"status={getattr(t, 'app_state_text', None) or getattr(t, 'status', None)}"
+            )
+            return t
         d = _get_trade_date(t)
         if d and d in dates:
             return t

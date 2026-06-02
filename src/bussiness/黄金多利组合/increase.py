@@ -5,7 +5,7 @@ from src.common.logger import get_logger
 
 logger = get_logger(__name__)
 
-def increase(user: User, sub_account_name: str, amount: float = 10000.0, fund_list=None) -> bool:
+def increase(user: User, sub_account_name: str, amount: float = 2000.0, fund_list=None) -> bool:
     """
     黄金多利组合加仓业务入口
     """

@@ -61,3 +61,11 @@ def getFee(user, fund_code: str):
         if isinstance(e, requests.exceptions.RequestException):
             raise RetriableError(str(e))
         raise ValidationError(str(e))
+
+if __name__ == "__main__":
+    from src.API.登录接口.login import ensure_user_fresh
+    from src.common.constant import DEFAULT_USER
+
+    user = ensure_user_fresh(DEFAULT_USER)
+    fund_code = '011707'
+    print(getFee(user, fund_code))

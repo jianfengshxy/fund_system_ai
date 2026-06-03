@@ -145,12 +145,16 @@ def invalidate_user_cache(account: str, password: str):
 
 def update_user_cache(user):
     """
-    主动更新用户缓存（内存+文件），通常在重新登录获取新token后调用
+    主动更新用户缓存（内存+文件+数据库），通常在重新登录获取新token后调用
     """
     if not user:
         return
     _set_user_cache(user)
     _save_file_cache(user)
+    try:
+        UserTokenStore().upsert(user)
+    except Exception as e:
+        logger.warning(f"写入用户令牌数据库失败: {e}", extra={"account": getattr(user, "account", None)})
 
 def get_user_all_info(account: str, password: str, ensure_bank: bool = True):
     cached = _get_cached_user(account, password)
@@ -193,12 +197,7 @@ def get_user_all_info(account: str, password: str, ensure_bank: bool = True):
         if fallback:
             if ensure_bank:
                 fallback = _ensure_bank(fallback)
-            _set_user_cache(fallback)
-            _save_file_cache(fallback)
-            try:
-                UserTokenStore().upsert(fallback)
-            except Exception:
-                pass
+            update_user_cache(fallback)
             logger.info("令牌来源: 默认用户", extra={"account": account, "token_source": "default_user"})
             return fallback
         return None
@@ -209,12 +208,7 @@ def get_user_all_info(account: str, password: str, ensure_bank: bool = True):
     if ensure_bank:
         user = getMaxhqbBank(user)
     if user:
-        _set_user_cache(user)
-        _save_file_cache(user)
-        try:
-            store.upsert(user)
-        except Exception:
-            pass
+        update_user_cache(user)
         logger.info("令牌来源: 登录聚合", extra={"account": account, "token_source": "login"})
     return user
 
@@ -231,12 +225,7 @@ def refresh_user_tokens(account: str, password: str, ensure_bank: bool = True):
             return None
         if ensure_bank:
             user = _ensure_bank(user)
-        _set_user_cache(user)
-        _save_file_cache(user)
-        try:
-            UserTokenStore().upsert(user)
-        except Exception:
-            pass
+        update_user_cache(user)
         logger.info("令牌来源: 强制重新登录", extra={"account": account, "token_source": "force_login"})
         return user
     u1 = inference_passport_for_bind(user) or login_passport(user)
@@ -250,12 +239,7 @@ def refresh_user_tokens(account: str, password: str, ensure_bank: bool = True):
             return None
         if ensure_bank:
             fresh_user = _ensure_bank(fresh_user)
-        _set_user_cache(fresh_user)
-        _save_file_cache(fresh_user)
-        try:
-            UserTokenStore().upsert(fresh_user)
-        except Exception:
-            pass
+        update_user_cache(fresh_user)
         logger.info("令牌来源: 刷新失败后重新登录", extra={"account": account, "token_source": "refresh_login"})
         return fresh_user
     u2 = inference_passport_for_bind(u1)
@@ -269,21 +253,12 @@ def refresh_user_tokens(account: str, password: str, ensure_bank: bool = True):
             return None
         if ensure_bank:
             fresh_user = _ensure_bank(fresh_user)
-        _set_user_cache(fresh_user)
-        _save_file_cache(fresh_user)
-        try:
-            UserTokenStore().upsert(fresh_user)
-        except Exception:
-            pass
+        update_user_cache(fresh_user)
         logger.info("令牌来源: 二次刷新失败后重新登录", extra={"account": account, "token_source": "refresh_login_retry"})
         return fresh_user
     if ensure_bank:
         u2 = _ensure_bank(u2)
-    _set_user_cache(u2)
-    try:
-        UserTokenStore().upsert(u2)
-    except Exception:
-        pass
+    update_user_cache(u2)
     logger.info("令牌来源: 刷新凭证", extra={"account": account, "token_source": "refresh"})
     return u2
 

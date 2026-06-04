@@ -679,7 +679,7 @@ def increase_gold_portfolio(event, context):
         account = payload.get('account')
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
-        amount = payload.get('amount', 10000.0) # Default 10000.0 if not specified
+        amount = payload.get('amount', 2000.0) # Default 10000.0 if not specified
         fund_list = payload.get('fund_list') or payload.get('funds')
         
         extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_increase"}

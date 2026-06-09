@@ -693,6 +693,30 @@ def increase_gold_portfolio(event, context):
             logger.error(f"获取用户 {account} 信息失败")
             return
 
+        if not fund_list:
+            from src.service.自选基金.自选组合服务 import get_all_group_names, get_group_funds_by_name
+
+            all_favorite_groups = get_all_group_names(user)
+            favorite_set = {g for g in all_favorite_groups} if all_favorite_groups else set()
+
+            if sub_account_name in favorite_set:
+                funds = get_group_funds_by_name(sub_account_name, user)
+                if funds:
+                    built_list = []
+                    for item in funds:
+                        code = item.get("fcode") or item.get("FundCode") or item.get("fund_code") or item.get("FCODE") or item.get("code")
+                        name_val = item.get("shortname") or item.get("fname") or item.get("FundName") or item.get("fund_name") or item.get("name")
+                        if not code:
+                            continue
+                        built_list.append({"fund_code": code, "fund_name": name_val, "amount": amount})
+                    if built_list:
+                        fund_list = built_list
+                        logger.info(f"[多利组合] 未传 fund_list，已从同名自选组合 {sub_account_name} 构建候选基金数: {len(fund_list)}", extra=extra)
+                else:
+                    logger.warning(f"[多利组合] 未传 fund_list，且同名自选组合 {sub_account_name} 下无基金", extra=extra)
+            else:
+                logger.warning(f"[多利组合] 未传 fund_list，且未找到同名自选组合: {sub_account_name}", extra=extra)
+
         logger.info(f"[多利组合] 开始执行加仓检查...", extra=extra)
         success = gold_increase_biz(user, sub_account_name, amount, fund_list)
         if success:

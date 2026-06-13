@@ -13,7 +13,7 @@ from src.common.logger import get_logger
 from src.domain.user.User import User
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
-from src.service.交易管理.赎回基金 import sell_0_fee_shares
+from src.service.交易管理.赎回基金 import sell_0_fee_shares, sell_low_fee_shares
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.交易管理.trade import get_bank_shares
 
@@ -97,22 +97,31 @@ def redeem_gold_funds(user: User, sub_account_name: str, fund_list: Optional[Lis
                 f"预估收益率: {estimated_profit_rate:.2f}%, 止盈点: {stop_rate:.2f}%"
             )
 
-            if estimated_profit_rate > stop_rate:
-                logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% > {stop_rate}%，尝试赎回0费率份额")
-                
+            if estimated_profit_rate > stop_rate or estimated_profit_rate > 10.0:
                 # 获取可用份额
                 shares = get_bank_shares(user, sub_account_no, fund_code)
                 if not shares:
                     logger.info(f"基金 {fund_name}({fund_code}) 无可用份额，跳过赎回")
                     continue
 
-                # 执行0费率赎回
-                # 注意：sell_0_fee_shares 内部会判断是否有0费率份额，如果有则赎回，没有则跳过
-                result = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
-                
-                if result: # 假设返回True表示成功提交或处理
-                    # 由于 sell_0_fee_shares 可能会打印日志，这里简单记录
-                    redeem_count += 1
+                redeemed = False
+
+                if estimated_profit_rate > stop_rate:
+                    logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% > {stop_rate}%，尝试赎回0费率份额")
+
+                    # 执行0费率赎回
+                    # 注意：sell_0_fee_shares 内部会判断是否有0费率份额，如果有则赎回，没有则跳过
+                    result = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
+                    if result:
+                        redeem_count += 1
+                        redeemed = True
+
+                # 兜底逻辑：当预估收益率 > 10.0% 时，若0费率未卖成，则尝试卖出低费率份额
+                if estimated_profit_rate > 10.0 and not redeemed:
+                    logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% > 10.0%，尝试赎回低费率份额")
+                    result = sell_low_fee_shares(user, sub_account_no, fund_code, shares)
+                    if result:
+                        redeem_count += 1
             else:
                  logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% <= {stop_rate}%，不满足止盈条件")
 

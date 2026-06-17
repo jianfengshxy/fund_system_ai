@@ -680,6 +680,7 @@ def increase_gold_portfolio(event, context):
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
         amount = payload.get('amount', 2000.0) # Default 10000.0 if not specified
+        total_limit = payload.get('total_limit')
         fund_list = payload.get('fund_list') or payload.get('funds')
         
         extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_increase"}
@@ -718,7 +719,13 @@ def increase_gold_portfolio(event, context):
                 logger.warning(f"[多利组合] 未传 fund_list，且未找到同名自选组合: {sub_account_name}", extra=extra)
 
         logger.info(f"[多利组合] 开始执行加仓检查...", extra=extra)
-        success = gold_increase_biz(user, sub_account_name, amount, fund_list)
+        success = gold_increase_biz(
+            user,
+            sub_account_name,
+            amount,
+            fund_list,
+            total_limit=total_limit,
+        )
         if success:
             logger.info(f"[多利组合] 加仓检查/执行成功", extra=extra)
         else:

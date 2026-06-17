@@ -1,4 +1,3 @@
-import logging
 import sys
 import os
 
@@ -22,12 +21,39 @@ from src.service.基金信息.基金信息 import get_all_fund_info
 
 logger = get_logger(__name__)
 
-def increase_gold_funds(user: User, sub_account_name: str, amount: float = 2000.0, fund_list: Optional[List[Dict]] = None) -> bool:
+def increase_gold_funds(
+    user: User,
+    sub_account_name: str,
+    amount: float = 2000.0,
+    fund_list: Optional[List[Dict]] = None,
+    total_limit: Optional[float] = None,
+) -> bool:
     """
     黄金多利组合加仓逻辑：
     只有收益率小于-1.0% 且 没有在途交易 就买入指定基金
     """
     logger.info(f"开始执行组合加仓检查，组合: {sub_account_name}", extra={"account": user.account, "sub_account_name": sub_account_name, "action": "gold_increase"})
+
+    def _safe_float(value, default: float = 0.0) -> float:
+        try:
+            if value is None:
+                return default
+            return float(value)
+        except Exception:
+            return default
+
+    def _normalize_limit(raw_limit) -> Optional[float]:
+        if raw_limit in (None, ""):
+            return None
+        try:
+            return float(raw_limit)
+        except Exception:
+            return None
+
+    def _get_asset_limit_metric(asset) -> float:
+        asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
+        profit_value = getattr(asset, "constant_profit", None)
+        return asset_value + _safe_float(profit_value, 0.0)
 
     # 获取子账户编号
     sub_account_no = getSubAccountNoByName(user, sub_account_name)
@@ -47,10 +73,14 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 2000.
                 fund_amount = float(item.get("amount", amount))
             except Exception:
                 fund_amount = amount
-            normalized_funds.append({"fund_code": str(fund_code), "amount": fund_amount})
+            normalized_funds.append({
+                "fund_code": str(fund_code),
+                "amount": fund_amount,
+                "limit": _normalize_limit(item.get("limit")),
+            })
 
-    if not normalized_funds:
-        normalized_funds = [{"fund_code": "021740", "amount": amount}]
+    # if not normalized_funds:
+    #     normalized_funds = [{"fund_code": "021740", "amount": amount, "limit": None}]
 
     def _get_check_dates_for_fund(fund_code: str) -> set:
         fi = get_all_fund_info(user, fund_code)
@@ -91,6 +121,58 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 2000.
     
     # 建立 payload 中基金的 amount 映射，用于加仓时取金额
     payload_amt_dict = {f["fund_code"]: f["amount"] for f in normalized_funds}
+    payload_limit_dict = {f["fund_code"]: f.get("limit") for f in normalized_funds}
+    total_limit = _normalize_limit(total_limit)
+    fund_metric_dict = {f_code: _get_asset_limit_metric(asset) for f_code, asset in asset_dict.items()}
+    total_metric = sum(fund_metric_dict.values())
+
+    logger.info(
+        f"组合 {sub_account_name} 当前资产限制口径值: {total_metric:.2f}, total_limit={total_limit if total_limit is not None else '无限制'}"
+    )
+
+    # 优先验证组合总资产是否已超过限制，超过则直接输出原因并返回
+    if total_limit is not None and total_metric >= total_limit:
+        logger.info(f"组合 {sub_account_name} 当前资产 {total_metric:.2f} 已达到或超过组合上限 {total_limit:.2f}，停止加仓操作。")
+        return True
+
+    def _can_submit_buy(fund_code: str, fund_name: str, buy_amount: float) -> bool:
+        nonlocal total_metric
+
+        current_fund_metric = fund_metric_dict.get(fund_code, 0.0)
+        fund_limit = payload_limit_dict.get(fund_code)
+        projected_fund_metric = current_fund_metric + buy_amount
+        projected_total_metric = total_metric + buy_amount
+
+        if fund_limit is not None:
+            if current_fund_metric >= fund_limit:
+                logger.info(
+                    f"基金 {fund_name}({fund_code}) 当前限制口径值 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过买入"
+                )
+                return False
+            if projected_fund_metric > fund_limit:
+                logger.info(
+                    f"基金 {fund_name}({fund_code}) 本次买入后限制口径值预计为 {projected_fund_metric:.2f}，超过单基金上限 {fund_limit:.2f}，跳过买入"
+                )
+                return False
+
+        if total_limit is not None:
+            if total_metric >= total_limit:
+                logger.info(
+                    f"组合 {sub_account_name} 当前限制口径值 {total_metric:.2f} 已达到组合上限 {total_limit:.2f}，跳过买入 {fund_name}({fund_code})"
+                )
+                return False
+            if projected_total_metric > total_limit:
+                logger.info(
+                    f"组合 {sub_account_name} 本次买入后限制口径值预计为 {projected_total_metric:.2f}，超过组合上限 {total_limit:.2f}，跳过买入 {fund_name}({fund_code})"
+                )
+                return False
+
+        return True
+
+    def _mark_buy_metric(fund_code: str, actual_amount: float) -> None:
+        nonlocal total_metric
+        total_metric += actual_amount
+        fund_metric_dict[fund_code] = fund_metric_dict.get(fund_code, 0.0) + actual_amount
 
     # 1. 遍历传过来的基金列表，如果未持有该基金，则执行该基金的初始化建仓
     for f in normalized_funds:
@@ -98,9 +180,19 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 2000.
         f_amt = f["amount"]
         f_name = _get_fund_name(f_code)
         
+        # 最先校验单个基金的资产是否已超过限制，超过则跳过该基金
+        current_fund_metric = fund_metric_dict.get(f_code, 0.0)
+        fund_limit = payload_limit_dict.get(f_code)
+        if fund_limit is not None and current_fund_metric >= fund_limit:
+            logger.info(f"基金 {f_name}({f_code}) 当前资产 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过初始化建仓")
+            continue
+
         if f_code not in asset_dict:
             if _has_pending_trade(f_code):
                 logger.info(f"目标基金 {f_code} 存在在途交易，跳过初始化建仓")
+                continue
+
+            if not _can_submit_buy(f_code, f_name, f_amt):
                 continue
                 
             logger.info(f"基金 {f_name}({f_code}) 未持有，执行初始化建仓，准备下单金额: {f_amt}")
@@ -108,6 +200,7 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 2000.
             if res:
                 actual_amount = getattr(res, "amount", f_amt)
                 logger.info(f"初始化建仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
+                _mark_buy_metric(f_code, _safe_float(actual_amount, f_amt))
                 buy_triggered = True
             else:
                 logger.info(f"初始化建仓未提交或失败: {f_name}({f_code}) 金额: {f_amt}")
@@ -116,6 +209,13 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 2000.
     for f_code, asset in asset_dict.items():
         f_name = getattr(asset, "fund_name", "") or _get_fund_name(f_code)
         
+        # 最先校验单个基金的资产是否已超过限制，超过则跳过该基金
+        current_fund_metric = fund_metric_dict.get(f_code, 0.0)
+        fund_limit = payload_limit_dict.get(f_code)
+        if fund_limit is not None and current_fund_metric >= fund_limit:
+            logger.info(f"持仓基金 {f_name}({f_code}) 当前资产 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过加仓")
+            continue
+
         if _has_pending_trade(f_code):
             logger.info(f"持仓基金 {f_name}({f_code}) 存在在途交易，跳过加仓")
             continue
@@ -136,11 +236,15 @@ def increase_gold_funds(user: User, sub_account_name: str, amount: float = 2000.
 
             logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -1.0%，触发加仓判定")
             logger.info(f"满足加仓条件，准备买入 {f_name}({f_code}) 金额: {buy_amount}")
+
+            if not _can_submit_buy(f_code, f_name, buy_amount):
+                continue
             
             res = commit_order(user, sub_account_no, f_code, buy_amount)
             if res:
                 actual_amount = getattr(res, "amount", buy_amount)
                 logger.info(f"加仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
+                _mark_buy_metric(f_code, _safe_float(actual_amount, buy_amount))
                 buy_triggered = True
             else:
                 logger.info(f"加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")

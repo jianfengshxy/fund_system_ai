@@ -79,35 +79,40 @@ def redeem_gold_funds(user: User, sub_account_name: str, fund_list: Optional[Lis
             fund_code = asset.fund_code
             fund_name = asset.fund_name
             fund_code_str = str(fund_code)
-            if fund_stop_rate is not None and fund_code_str not in fund_stop_rate:
-                continue
 
             # 获取基金估值信息
             fund_info = get_all_fund_info(user, fund_code)
             estimated_change = fund_info.estimated_change if fund_info and fund_info.estimated_change is not None else 0.0
+            
+            # 获取波动率和基金类型以供日志输出
+            volatility = _safe_float(getattr(fund_info, "volatility", None), 0.0) if fund_info else 0.0
+            fund_type = getattr(fund_info, "fund_type", "未知") if fund_info else "未知"
+            
             default_stop_rate = _get_default_stop_rate(fund_info) if fund_info else 5.0
             configured_stop_rate = fund_stop_rate.get(fund_code_str) if fund_stop_rate is not None else None
             stop_rate = configured_stop_rate if configured_stop_rate is not None else default_stop_rate
+            stop_rate_source = "自定义配置" if configured_stop_rate is not None else "默认动态计算"
             
             # 计算预估收益率 = 当前收益率 + 估值涨跌幅
             estimated_profit_rate = current_profit_rate + estimated_change
             
             logger.info(
-                f"基金 {fund_name}({fund_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, "
-                f"预估收益率: {estimated_profit_rate:.2f}%, 止盈点: {stop_rate:.2f}%"
+                f"基金 {fund_name}({fund_code}) 止盈指标 -> 类型: {fund_type}, 波动率: {volatility:.2f}%, "
+                f"当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, "
+                f"预估收益率: {estimated_profit_rate:.2f}%, 止盈点: {stop_rate:.2f}% ({stop_rate_source})"
             )
 
             if estimated_profit_rate > stop_rate or estimated_profit_rate > 10.0:
                 # 获取可用份额
                 shares = get_bank_shares(user, sub_account_no, fund_code)
                 if not shares:
-                    logger.info(f"基金 {fund_name}({fund_code}) 无可用份额，跳过赎回")
+                    logger.info(f"基金 {fund_name}({fund_code}) 满足收益率条件，但查无可用银行卡份额，无法执行止盈")
                     continue
 
                 redeemed = False
 
                 if estimated_profit_rate > stop_rate:
-                    logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% > {stop_rate}%，尝试赎回0费率份额")
+                    logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% > 止盈点 {stop_rate:.2f}%，尝试赎回0费率份额")
 
                     # 执行0费率赎回
                     # 注意：sell_0_fee_shares 内部会判断是否有0费率份额，如果有则赎回，没有则跳过
@@ -115,15 +120,25 @@ def redeem_gold_funds(user: User, sub_account_name: str, fund_list: Optional[Lis
                     if result:
                         redeem_count += 1
                         redeemed = True
+                    else:
+                        logger.info(f"基金 {fund_name}({fund_code}) 赎回0费率份额未成功 (可能查无0费率份额或接口拦截)")
 
                 # 兜底逻辑：当预估收益率 > 10.0% 时，若0费率未卖成，则尝试卖出低费率份额
                 if estimated_profit_rate > 10.0 and not redeemed:
-                    logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% > 10.0%，尝试赎回低费率份额")
+                    logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% > 兜底线 10.0%，尝试兜底赎回低费率份额")
                     result = sell_low_fee_shares(user, sub_account_no, fund_code, shares)
                     if result:
                         redeem_count += 1
+                    else:
+                        logger.info(f"基金 {fund_name}({fund_code}) 兜底赎回低费率份额未成功")
+                elif not redeemed:
+                    logger.info(f"基金 {fund_name}({fund_code}) 未能完成止盈 (预估收益 {estimated_profit_rate:.2f}% <= 兜底线 10.0%，不执行低费率兜底)")
             else:
-                 logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% <= {stop_rate}%，不满足止盈条件")
+                 logger.info(
+                     f"基金 {fund_name}({fund_code}) 不满足止盈条件: "
+                     f"预估收益率 {estimated_profit_rate:.2f}% <= 止盈点 {stop_rate:.2f}%，"
+                     f"且未达 10.0% 兜底线"
+                 )
 
         except Exception as e:
             logger.error(f"处理基金 {asset.fund_code} 止盈时发生错误: {e}")

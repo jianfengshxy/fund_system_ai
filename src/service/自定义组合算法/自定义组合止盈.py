@@ -125,10 +125,7 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
                 if res is not None and getattr(res, 'busin_serial_no', None):
                     success_count += 1
             else:
-                if estimated_profit_rate <= stop_rate:
-                    logger.info(f"基本止盈条件检查：预估收益{estimated_profit_rate} <= 止盈点{stop_rate}，不满足收益率条件")
-                else:
-                    logger.info(f"基本止盈条件检查：预估收益{estimated_profit_rate} > 止盈点{stop_rate}，但未满足趋势条件（未跌破5日均线）")
+                logger.info(f"基本止盈条件未满足 ({fund_name} {fund_code})，原因: 预估收益 {estimated_profit_rate:.2f}% <= 止盈点 {stop_rate:.2f}%")
             
             # 4. 现金流紧张时的紧急止盈逻辑
             # 获取活期宝占比 (此处需要调用公共服务或直接计算，为了保持一致性建议调用 risk_control_service 中的逻辑)
@@ -180,7 +177,7 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             #     logger.info(f"组合{sub_account_no}，基金{fund_name}({fund_code})资产{plan_assets:.2f}，当前资产倍数{times},满足限购保护，停止止盈。")
             #     continue
             if estimated_profit_rate < 1.0:
-                logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}的收益率{estimated_profit_rate}小于1.0.")
+                logger.info(f"额外止盈及兜底止盈被拦截 ({fund_name} {fund_code})，原因: 收益率 {estimated_profit_rate:.2f}% < 1.0%")
                 continue
 
             # 赎回 0 费率份额 (额外补充逻辑，针对QDII)
@@ -198,6 +195,25 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
                 res = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
                 if res is not None and getattr(res, 'busin_serial_no', None):
                     success_count += 1
+            else:
+                # 记录指数基金止盈未满足的原因
+                if fund_type == '000':
+                    reasons = []
+                    if fund_type == 'a' or "QDII" in fund_name:
+                        reasons.append("是QDII基金")
+                    if hqb_ratio_percent >= HQB_RATIO_THRESHOLD:
+                        reasons.append(f"活期宝占比 {hqb_ratio_percent:.2f}% >= 阈值 {HQB_RATIO_THRESHOLD}%")
+                    if estimated_change <= 0.5:
+                        reasons.append(f"估值上涨 {estimated_change:.2f}% <= 0.5%")
+                    if estimated_profit_rate <= 1.0:
+                        reasons.append(f"收益率 {estimated_profit_rate:.2f}% <= 1.0%")
+                    if rank_100 is None or rank_100 <= 90:
+                        reasons.append(f"100日排名 {rank_100} <= 90 或为空")
+                    
+                    if reasons:
+                        logger.info(f"指数基金额外止盈条件未满足 ({fund_name} {fund_code})，原因: {', '.join(reasons)}")
+                else:
+                    logger.info(f"非指数基金不适用额外止盈条件 ({fund_name} {fund_code})，原因: 基金类型为 {fund_type}")
 
             # 兜底止盈逻辑：当预期收益率 > 10.0 的时候 卖出低费率份额
             if estimated_profit_rate > 10.0:
@@ -205,6 +221,8 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
                 res = sell_low_fee_shares(user, sub_account_no, fund_code, shares)
                 if res is not None and getattr(res, 'busin_serial_no', None):
                     success_count += 1
+            else:
+                logger.info(f"兜底止盈条件未满足 ({fund_name} {fund_code})，原因: 预估收益率 {estimated_profit_rate:.2f}% <= 10.0%")
 
         except Exception as e:
             logger.error(f"处理 {fund_code} 失败: {e}")

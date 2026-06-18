@@ -29,7 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 活期宝风控阈值常量
-HQB_THRESHOLD = 20
+HQB_THRESHOLD = 10
 
 # 组合仓位占比阈值常量
 ASSET_RATIO_THRESHOLD = 80
@@ -42,8 +42,8 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
     logger.info(f"开始为用户 {customer_name} 执行新增操作，组合: {sub_account_name}，预算: {total_budget}")
 
     # 0) 全局风控检查：活期宝占比
-    if not check_hqb_risk_allowed(user,threshold=20):
-        logger.info(f"[自定义组合] 全局风控拦截：活期宝占比不足20%，退出新增流程")
+    if not check_hqb_risk_allowed(user,threshold=HQB_THRESHOLD):
+        logger.info(f"[自定义组合] 全局风控拦截：活期宝占比不足{HQB_THRESHOLD}，退出新增流程")
         return False
 
     # 0.1) 组合预算风控检查

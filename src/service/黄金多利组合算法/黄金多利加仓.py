@@ -42,13 +42,13 @@ def increase_gold_funds(
         except Exception:
             return default
 
-    def _normalize_limit(raw_limit) -> Optional[float]:
+    def _normalize_limit(raw_limit, default_val: Optional[float] = None) -> Optional[float]:
         if raw_limit in (None, ""):
-            return None
+            return default_val
         try:
             return float(raw_limit)
         except Exception:
-            return None
+            return default_val
 
     def _get_asset_limit_metric(asset) -> float:
         asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
@@ -76,7 +76,7 @@ def increase_gold_funds(
             normalized_funds.append({
                 "fund_code": str(fund_code),
                 "amount": fund_amount,
-                "limit": _normalize_limit(item.get("limit")),
+                "limit": _normalize_limit(item.get("limit"), 50000.0),
             })
 
     # if not normalized_funds:
@@ -139,7 +139,7 @@ def increase_gold_funds(
         nonlocal total_metric
 
         current_fund_metric = fund_metric_dict.get(fund_code, 0.0)
-        fund_limit = payload_limit_dict.get(fund_code)
+        fund_limit = payload_limit_dict.get(fund_code, 50000.0)
         projected_fund_metric = current_fund_metric + buy_amount
         projected_total_metric = total_metric + buy_amount
 
@@ -182,7 +182,7 @@ def increase_gold_funds(
         
         # 最先校验单个基金的资产是否已超过限制，超过则跳过该基金
         current_fund_metric = fund_metric_dict.get(f_code, 0.0)
-        fund_limit = payload_limit_dict.get(f_code)
+        fund_limit = payload_limit_dict.get(f_code, 50000.0)
         if fund_limit is not None and current_fund_metric >= fund_limit:
             logger.info(f"基金 {f_name}({f_code}) 当前资产 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过初始化建仓")
             continue
@@ -211,7 +211,7 @@ def increase_gold_funds(
         
         # 最先校验单个基金的资产是否已超过限制，超过则跳过该基金
         current_fund_metric = fund_metric_dict.get(f_code, 0.0)
-        fund_limit = payload_limit_dict.get(f_code)
+        fund_limit = payload_limit_dict.get(f_code, 50000.0)
         if fund_limit is not None and current_fund_metric >= fund_limit:
             logger.info(f"持仓基金 {f_name}({f_code}) 当前资产 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过加仓")
             continue
@@ -261,19 +261,43 @@ if __name__ == "__main__":
     from src.common.constant import DEFAULT_USER
     try:
         # 1. 构造测试用户（或者使用默认用户）
-        # 这里使用 DEFAULT_USER 进行测试，确保 s.yaml 中的账号密码配置正确
         test_user = DEFAULT_USER
+        test_user.account = "13918199137"
+        test_user.password = "sWX15706"
         
         # 2. 设置测试参数
         test_sub_account = "智投平台"
-        test_amount = 10000.0
+        test_amount = 2000.0
+        test_total_limit = 200000.0
+        test_fund_list = [ 
+            { 
+                "fund_code": "011707", 
+                "amount": 2000.0 
+            }, 
+            { 
+                "fund_code": "012769", 
+                "amount": 2000.0,
+                "limit": 50000.0 
+            }, 
+            { 
+                "fund_code": "004753", 
+                "amount": 2000.0, 
+                "limit": 20000.0 
+            } 
+        ]
 
         print(f"--- 开始测试黄金多利加仓 ---")
         print(f"用户: {test_user.customer_name}")
         print(f"组合: {test_sub_account}")
         
         # 3. 调用加仓函数
-        increase_gold_funds(test_user, test_sub_account, test_amount)
+        increase_gold_funds(
+            user=test_user, 
+            sub_account_name=test_sub_account, 
+            amount=test_amount, 
+            fund_list=test_fund_list,
+            total_limit=test_total_limit
+        )
         
         print(f"--- 测试结束 ---")
 

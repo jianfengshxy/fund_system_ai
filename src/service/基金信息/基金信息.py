@@ -34,11 +34,18 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
             if not hasattr(fund_info, "_baseline_nav_date"):
                 refreshed = getFundInfo(user, fund_code)
                 if refreshed:
+                    # 保留之前的扩展字段
+                    refreshed.rank_30day = getattr(fund_info, 'rank_30day', None)
+                    refreshed.rank_100day = getattr(fund_info, 'rank_100day', None)
+                    refreshed.volatility = getattr(fund_info, 'volatility', None)
+                    refreshed.nav_5day_avg = getattr(fund_info, 'nav_5day_avg', None)
                     fund_info = refreshed
             # QDII 基金 (type='a') 或 名字包含 "QDII" 估值不准，直接设为 0.0
             if (hasattr(fund_info, 'fund_type') and fund_info.fund_type == 'a') or \
                (hasattr(fund_info, 'fund_name') and "QDII" in fund_info.fund_name.upper()):
                 fund_info.estimated_change = 0.0
+                fund_info._baseline_nav_date = getattr(fund_info, "nav_date", None)
+                fund_info_cache[fund_code] = fund_info  # 更新缓存
                 logger.debug(f"{fund_info.fund_name} (QDII) 跳过估值查询，默认涨跌幅为 0.0%")
             else:
                 updated_fund_info = updateFundEstimatedValue(fund_info, user)
@@ -151,6 +158,6 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
 
 if __name__ == '__main__':
     # fund_info = get_all_fund_info(DEFAULT_USER, '021740')
-    fund_info = get_all_fund_info(DEFAULT_USER, '011036')
+    fund_info = get_all_fund_info(DEFAULT_USER, '016453')
     print(fund_info)
     pass

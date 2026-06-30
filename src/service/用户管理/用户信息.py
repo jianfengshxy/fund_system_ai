@@ -193,18 +193,12 @@ def get_user_all_info(account: str, password: str, ensure_bank: bool = True):
     user = login(account, password)
     if not user:
         logger.error("登录失败", extra={"account": account})
-        fallback = DEFAULT_USER if getattr(DEFAULT_USER, 'account', None) == account else None
-        if fallback:
-            if ensure_bank:
-                fallback = _ensure_bank(fallback)
-            update_user_cache(fallback)
-            logger.info("令牌来源: 默认用户", extra={"account": account, "token_source": "default_user"})
-            return fallback
-        return None
+        raise UserLoginError(account, "登录接口返回失败")
+    
     user = inference_passport_for_bind(user)
     if not user:
         logger.error("passport推断失败", extra={"account": account})
-        return None
+        raise UserLoginError(account, "passport推断失败")
     if ensure_bank:
         user = getMaxhqbBank(user)
     if user:
@@ -219,10 +213,10 @@ def refresh_user_tokens(account: str, password: str, ensure_bank: bool = True):
     if not user:
         user = login(account, password)
         if not user:
-            return None
+            raise UserLoginError(account, "强制重新登录失败")
         user = inference_passport_for_bind(user) or login_passport(user)
         if not user:
-            return None
+            raise UserLoginError(account, "强制重新登录后passport获取失败")
         if ensure_bank:
             user = _ensure_bank(user)
         update_user_cache(user)
@@ -233,10 +227,10 @@ def refresh_user_tokens(account: str, password: str, ensure_bank: bool = True):
         invalidate_user_cache(account, password)
         fresh_user = login(account, password)
         if not fresh_user:
-            return None
+            raise UserLoginError(account, "刷新失败后重新登录失败")
         fresh_user = inference_passport_for_bind(fresh_user) or login_passport(fresh_user)
         if not fresh_user:
-            return None
+            raise UserLoginError(account, "刷新失败后重新登录passport获取失败")
         if ensure_bank:
             fresh_user = _ensure_bank(fresh_user)
         update_user_cache(fresh_user)
@@ -247,10 +241,10 @@ def refresh_user_tokens(account: str, password: str, ensure_bank: bool = True):
         invalidate_user_cache(account, password)
         fresh_user = login(account, password)
         if not fresh_user:
-            return None
+            raise UserLoginError(account, "二次刷新失败后重新登录失败")
         fresh_user = inference_passport_for_bind(fresh_user) or login_passport(fresh_user)
         if not fresh_user:
-            return None
+            raise UserLoginError(account, "二次刷新失败后重新登录passport获取失败")
         if ensure_bank:
             fresh_user = _ensure_bank(fresh_user)
         update_user_cache(fresh_user)
@@ -302,6 +296,84 @@ def get_user_from_store_or_cache(account: str, password: str, ensure_bank: bool 
     logger.info("令牌来源: 默认用户(无登录)", extra={"account": account, "token_source": "default_user_nologin"})
     return DEFAULT_USER
 
+class UserLoginError(Exception):
+    """用户登录失败异常"""
+    def __init__(self, account: str, reason: str):
+        self.account = account
+        self.reason = reason
+        super().__init__(f"用户 {account} 登录失败: {reason}")
+
+class BatchLoginError(UserLoginError):
+    """批量登录失败异常"""
+    pass
+
+def batch_login_all_cached_users(ensure_bank: bool = True):
+    """
+    批量登录缓存文件中的所有用户，更新缓存和数据库
+    如果任何用户登录失败，立即抛出BatchLoginError异常并终止程序
+    
+    Args:
+        ensure_bank: 是否确保银行账户信息
+        
+    Returns:
+        list: 成功登录的用户对象列表
+        
+    Raises:
+        BatchLoginError: 当任何用户登录失败时抛出
+        FileNotFoundError: 当缓存文件不存在时抛出
+        json.JSONDecodeError: 当缓存文件格式错误时抛出
+    """
+    if not _FILE_CACHE_PATH.exists():
+        raise FileNotFoundError(f"用户缓存文件不存在: {_FILE_CACHE_PATH}")
+    
+    try:
+        with open(_FILE_CACHE_PATH, 'r', encoding='utf-8') as f:
+            cache_data = json.load(f)
+    except json.JSONDecodeError as e:
+        raise json.JSONDecodeError(f"用户缓存文件格式错误: {e}", e.doc, e.pos)
+    
+    if "users" not in cache_data:
+        raise ValueError(f"用户缓存文件格式不正确，缺少'users'字段: {_FILE_CACHE_PATH}")
+    
+    users_dict = cache_data["users"]
+    if not users_dict:
+        logger.warning("用户缓存文件中没有用户数据")
+        return []
+    
+    successful_users = []
+    total_users = len(users_dict)
+    logger.info(f"开始批量登录 {total_users} 个缓存用户")
+    
+    for i, (account, user_data) in enumerate(users_dict.items(), 1):
+        password = user_data.get('password', '')
+        if not password:
+            raise BatchLoginError(account, "密码为空")
+        
+        logger.info(f"[{i}/{total_users}] 正在登录用户: {account}")
+        
+        # 使用登录接口登录用户
+        user = login(account, password)
+        if not user:
+            raise BatchLoginError(account, "登录接口返回失败")
+        
+        # 获取passport信息
+        user = inference_passport_for_bind(user)
+        if not user:
+            raise BatchLoginError(account, "passport推断失败")
+        
+        # 确保银行账户信息
+        if ensure_bank:
+            user = getMaxhqbBank(user)
+        
+        # 更新三级缓存
+        update_user_cache(user)
+        
+        successful_users.append(user)
+        logger.info(f"[{i}/{total_users}] 用户 {account} 登录成功")
+    
+    logger.info(f"批量登录完成，成功登录 {len(successful_users)}/{total_users} 个用户")
+    return successful_users
+
 if __name__ == "__main__":
-    user = get_user_from_store_or_cache("13571973393", "wj121109")
+    user = get_user_from_store_or_cache("13918199137", "sWX15706")
     print(user)

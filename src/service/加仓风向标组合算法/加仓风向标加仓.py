@@ -1,17 +1,17 @@
 # 顶部导入片段
-import logging
-from src.common.logger import get_logger
 import os
 import sys
+
+# 获取项目根目录路径并添加到 Python 路径（必须在导入 src 模块之前）
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+
+import logging
 import math
 from typing import Optional
 
-# 获取项目根目录路径
-root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-# 如果项目根目录不在Python路径中，则添加
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
+from src.common.logger import get_logger
 
 from src.domain.user.User import User
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name

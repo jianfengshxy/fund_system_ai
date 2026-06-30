@@ -1,5 +1,4 @@
 # 顶部导入片段
-import logging
 import os
 import sys
 from typing import Optional
@@ -22,12 +21,10 @@ from src.service.交易管理.购买基金 import commit_order
 from src.common.constant import DEFAULT_USER
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
 from src.service.公共服务.nav_gate_service import nav5_gate
+from src.service.公共服务.trade_time_service import is_trading_time
+from src.common.logger import get_logger
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] = None) -> bool:
@@ -110,7 +107,16 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             today_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {today})
             if prev_trade_pre is not None or today_trade_pre is not None:
                 logger.info(f"跳过 {fund_name}({fund_code}): 昨日(nav_date)或今日存在买入/定投提交（非撤）")
+                # 记录交易守卫检查失败
+                filter_checks = []
+                filter_checks.append("✗ 交易守卫检查失败（存在近期买入记录）")
+                logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 未通过条件:")
+                for check in filter_checks:
+                    logger.info(f"  {check}")
                 continue
+            
+            # 记录过滤条件检查结果
+            filter_checks = []
 
             current_profit_rate = _safe_float(getattr(asset, 'constant_profit_rate', None), 0.0)
             estimated_change = _safe_float(getattr(fund_info, 'estimated_change', None), 0.0)
@@ -119,6 +125,15 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             times = safe_asset_value / float(fund_amount)
             if 0.0 < times < 0.95:
                 logger.info(f"组合{sub_account_no}，基金{fund_name}({fund_code})资产{safe_asset_value:.2f}，当前资产倍数{times:.4f},满足加仓条件。")
+                # 记录过滤条件检查通过
+                filter_checks.append("✓ 交易守卫检查通过（无近期买入记录）")
+                filter_checks.append(f"✓ 资产倍数检查通过（{times:.4f} < 0.95）")
+                
+                # 打印过滤条件汇总（无论是否交易时间）
+                logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 满足所有条件:")
+                for check in filter_checks:
+                    logger.info(f"  {check}")
+                
                 res0 = commit_order(user, sub_account_no, fund_code, float(fund_amount))
                 if res0 and getattr(res0, 'busin_serial_no', None):
                     success_count += 1
@@ -130,17 +145,34 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                     logger.info(f"限购加仓失败{fund_name}({fund_code})")
                 continue
             
+            # 记录交易守卫检查通过
+            filter_checks.append("✓ 交易守卫检查通过（无近期买入记录）")
+            
             # 提前进行五日均值过滤（候选阶段）
             if not nav5_gate(fund_info, fund_name, fund_code, logger):
                 logger.info(f"未处于上升趋势（估算净值≤5日均值），跳过候选加仓：{fund_name}({fund_code})")
+                # 打印已通过的过滤条件汇总
+                if filter_checks:
+                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 已通过条件:")
+                    for check in filter_checks:
+                        logger.info(f"  {check}")
                 continue
+            # 记录五日均值检查通过
+            filter_checks.append("✓ 五日均值检查通过（估算净值 > 5日均值）")
 
             # 回撤不足直接跳过（阈值：-1%）
             if estimated_profit_rate >= -1.0:
                 logger.info(
                     f"跳过 {fund_name}({fund_code}): 回撤不达标 estimated_profit_rate={estimated_profit_rate:.2f}% ，阈值<-1.00%"
                 )
+                # 打印已通过的过滤条件汇总
+                if filter_checks:
+                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 已通过条件:")
+                    for check in filter_checks:
+                        logger.info(f"  {check}")
                 continue
+            # 记录回撤检查通过
+            filter_checks.append(f"✓ 回撤检查通过（{estimated_profit_rate:.2f}% < -1.00%）")
 
             # 原先此处的净值门槛判断已提前到候选阶段，这里不再重复
 
@@ -148,13 +180,36 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             r30 = _safe_float(getattr(fund_info, 'rank_30day', None), 0.0)
             if r100 and r100 < 20:
                 logger.info(f"100日排名过低 - {fund_name} rank_100 {int(r100)} < 20, 跳过加仓")
+                # 打印已通过的过滤条件汇总
+                if filter_checks:
+                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 已通过条件:")
+                    for check in filter_checks:
+                        logger.info(f"  {check}")
                 continue
             if r100 and r100 > 90:
                 logger.info(f"100日排名过高 - {fund_name} rank_100 {int(r100)} > 90, 跳过加仓")
+                # 打印已通过的过滤条件汇总
+                if filter_checks:
+                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 已通过条件:")
+                    for check in filter_checks:
+                        logger.info(f"  {check}")
                 continue
             if r30 and r30 < 5:
                 logger.info(f"30日排名过低 - {fund_name} rank_30 {int(r30)} < 5, 跳过加仓")
+                # 打印已通过的过滤条件汇总
+                if filter_checks:
+                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 已通过条件:")
+                    for check in filter_checks:
+                        logger.info(f"  {check}")
                 continue
+            # 记录排名检查通过
+            rank_checks = []
+            if r100:
+                rank_checks.append(f"100日排名 {int(r100)} (20≤rank≤90)")
+            if r30:
+                rank_checks.append(f"30日排名 {int(r30)} (rank≥5)")
+            if rank_checks:
+                filter_checks.append(f"✓ 排名检查通过 ({', '.join(rank_checks)})")
 
             week_growth_rate = _safe_float(getattr(fund_info, 'week_return', None), 0.0)
             month_growth_rate = _safe_float(getattr(fund_info, 'month_return', None), 0.0)
@@ -165,41 +220,88 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
 
             if week_growth_rate < 0.0 and month_growth_rate < 0.0 and season_growth_rate < 0.0:
                 logger.info("全部收益率为负 - 周、月、季度收益率均为负数，跳过加仓")
+                # 打印已通过的过滤条件汇总
+                if filter_checks:
+                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 已通过条件:")
+                    for check in filter_checks:
+                        logger.info(f"  {check}")
                 continue
 
             if season_growth_rate < 0.0 and (month_growth_rate < 0.0 or week_growth_rate < 0.0):
                 logger.info("季度收益率为负且月/周收益率至少一个为负 - 跳过加仓")
+                # 打印已通过的过滤条件汇总
+                if filter_checks:
+                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 已通过条件:")
+                    for check in filter_checks:
+                        logger.info(f"  {check}")
                 continue
 
             if season_growth_rate > 0.0 and (month_growth_rate < 0.0 and week_growth_rate < 0.0):
                 logger.info("季度为正但月、周均为负 - 跳过加仓")
+                # 打印已通过的过滤条件汇总
+                if filter_checks:
+                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 已通过条件:")
+                    for check in filter_checks:
+                        logger.info(f"  {check}")
                 continue
+            
+            # 记录收益率检查通过
+            yield_checks = []
+            if week_growth_rate >= 0.0 or month_growth_rate >= 0.0 or season_growth_rate >= 0.0:
+                yield_checks.append("至少一个周期收益率为正")
+            if not (season_growth_rate < 0.0 and (month_growth_rate < 0.0 or week_growth_rate < 0.0)):
+                yield_checks.append("季度为负时月周不同时为负")
+            if not (season_growth_rate > 0.0 and (month_growth_rate < 0.0 and week_growth_rate < 0.0)):
+                yield_checks.append("季度为正时月周不同时为负")
+            if yield_checks:
+                filter_checks.append(f"✓ 收益率检查通过 ({', '.join(yield_checks)})")
 
             # 方法: increase_funds
             # 修复基础加仓与额外加仓成功判断
             try:
-                res1 = commit_order(user, sub_account_no, fund_code, float(fund_amount))
-                if res1 and getattr(res1, 'busin_serial_no', None):
-                    success_count += 1
-                    actual_amount = getattr(res1, 'amount', fund_amount)
-                    logger.info(
-                        f"基础加仓成功: {fund_name}({fund_code}) - 金额: {actual_amount} - 订单号: {getattr(res1, 'busin_serial_no', '')}"
-                    )
+                # 打印过滤条件汇总（无论是否交易时间）
+                logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 满足所有条件:")
+                for check in filter_checks:
+                    logger.info(f"  {check}")
+                
+                # 检查交易时间
+                if not is_trading_time(user):
+                    logger.info(f"基础加仓跳过：{fund_name}({fund_code}) - 非交易时间")
                 else:
-                    logger.info(f"基础加仓未成功或被系统保护跳过：{fund_name}({fund_code})")
-
-                if estimated_profit_rate < -5.0:
-                    res2 = commit_order(user, sub_account_no, fund_code, float(fund_amount))
-                    if res2 and getattr(res2, 'busin_serial_no', None):
+                    res1 = commit_order(user, sub_account_no, fund_code, float(fund_amount))
+                    if res1 and getattr(res1, 'busin_serial_no', None):
                         success_count += 1
-                        actual_amount = getattr(res2, 'amount', fund_amount)
+                        actual_amount = getattr(res1, 'amount', fund_amount)
                         logger.info(
-                            f"额外加仓成功(-5%): {fund_name}({fund_code}) - 金额: {actual_amount} - 订单号: {getattr(res2, 'busin_serial_no', '')}"
+                            f"基础加仓成功: {fund_name}({fund_code}) - 金额: {actual_amount} - 订单号: {getattr(res1, 'busin_serial_no', '')}"
                         )
                     else:
-                        logger.info(f"额外加仓未成功或被系统保护跳过：{fund_name}({fund_code})")
+                        logger.info(f"基础加仓未成功或被系统保护跳过：{fund_name}({fund_code})")
+
+                if estimated_profit_rate < -5.0:
+                    # 打印过滤条件汇总（额外加仓）
+                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 满足额外加仓条件（回撤<-5%）:")
+                    for check in filter_checks:
+                        logger.info(f"  {check}")
+                    
+                    if not is_trading_time(user):
+                        logger.info(f"额外加仓跳过：{fund_name}({fund_code}) - 非交易时间")
+                    else:
+                        res2 = commit_order(user, sub_account_no, fund_code, float(fund_amount))
+                        if res2 and getattr(res2, 'busin_serial_no', None):
+                            success_count += 1
+                            actual_amount = getattr(res2, 'amount', fund_amount)
+                            logger.info(
+                                f"额外加仓成功(-5%): {fund_name}({fund_code}) - 金额: {actual_amount} - 订单号: {getattr(res2, 'busin_serial_no', '')}"
+                            )
+                        else:
+                            logger.info(f"额外加仓未成功或被系统保护跳过：{fund_name}({fund_code})")
             except Exception as e:
                 logger.error(f"加仓失败：{fund_name}({fund_code})，异常: {e}")
+                # 打印过滤条件汇总（即使发生异常）
+                logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 满足所有条件但发生异常:")
+                for check in filter_checks:
+                    logger.info(f"  {check}")
 
         except Exception as e:
             logger.error(f"处理持仓基金 {getattr(asset, 'fund_code', 'unknown')} 失败: {e}")
@@ -233,6 +335,6 @@ if __name__ == "__main__":
             ]
         )
         
-        logging.info(f"用户 {DEFAULT_USER.customer_name} 加仓操作完成")
+        logger.info(f"用户 {DEFAULT_USER.customer_name} 加仓操作完成")
     except Exception as e:
-        logging.error(f"测试用户处理失败：{str(e)}")
+        logger.error(f"测试用户处理失败：{str(e)}")

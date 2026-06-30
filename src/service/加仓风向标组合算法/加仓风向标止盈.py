@@ -70,16 +70,32 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
         fund_code = asset.fund_code
         fund_info = get_all_fund_info(user, fund_code)
+        
+        # 记录过滤条件检查结果
+        filter_checks = []
+        
         if not fund_info:
             logger.info(f"跳过：无法获取基金信息 {fund_code}")
+            filter_checks.append("✗ 基金信息检查失败（无法获取信息）")
+            logger.info(f"[过滤条件汇总] 基金 {fund_code} 检查结果:")
+            for check in filter_checks:
+                logger.info(f"  {check}")
             continue
+        else:
+            filter_checks.append("✓ 基金信息检查通过（成功获取信息）")
 
         fund_name = getattr(fund_info, "fund_name", fund_code)
         fund_type = getattr(fund_info, "fund_type", None)
 
         if fund_type not in ["000", "001", "002"]:
             logger.info(f"跳过：{fund_name}({fund_code}) 基金类型为 {fund_type}，不在支持的类型(000, 001, 002)内")
+            filter_checks.append(f"✗ 基金类型检查失败（类型{fund_type}不在支持范围内）")
+            logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 检查结果:")
+            for check in filter_checks:
+                logger.info(f"  {check}")
             continue
+        else:
+            filter_checks.append(f"✓ 基金类型检查通过（类型{fund_type}在支持范围内）")
 
         # 预估收益率
         current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
@@ -98,7 +114,31 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         rank_100 = getattr(fund_info, "rank_100day", None)
 
         # 止盈前提条件：如果估值增长率不是默认的0，则必须大于0.5（确保是在上涨反弹时卖出）
+        # 记录第一个止盈条件的检查结果
+        first_stop_condition_checks = []
+        
+        if estimated_profit_rate > stop_rate:
+            first_stop_condition_checks.append(f"✓ 预估收益率检查通过（{estimated_profit_rate:.2f}% > {stop_rate:.2f}%）")
+        else:
+            first_stop_condition_checks.append(f"✗ 预估收益率检查失败（{estimated_profit_rate:.2f}% ≤ {stop_rate:.2f}%）")
+            
+        if estimated_change == 0.0 or estimated_change > 0.5:
+            first_stop_condition_checks.append(f"✓ 估值增长率检查通过（{estimated_change:.2f}% 满足条件）")
+        else:
+            first_stop_condition_checks.append(f"✗ 估值增长率检查失败（{estimated_change:.2f}% 不满足条件）")
+            
+        if rank_100 is not None and rank_100 > 90:
+            first_stop_condition_checks.append(f"✓ 100日排名检查通过（{rank_100} > 90）")
+        else:
+            rank_str = "未知" if rank_100 is None else str(rank_100)
+            first_stop_condition_checks.append(f"✗ 100日排名检查失败（{rank_str} ≤ 90）")
+        
         if estimated_profit_rate > stop_rate and (estimated_change == 0.0 or estimated_change > 0.5) and rank_100 is not None and rank_100 > 90:
+            # 打印过滤条件汇总
+            logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 满足分层止盈条件:")
+            for check in first_stop_condition_checks:
+                logger.info(f"  {check}")
+                
             try:
                 shares = get_bank_shares(user, sub_account_no, fund_code)
                 
@@ -113,12 +153,37 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                         success_count += 1
                     else:
                         logger.info(f"{user.customer_name} 低费率止盈未成功：{fund_name}({fund_code})")
+                else:
+                    logger.info(f"跳过分层止盈：{fund_name}({fund_code}) 低费率份额≤10 ({low_fee_shares:.2f})")
           
             except Exception as e:
                 logger.error(f"止盈失败：{fund_name}({fund_code}) 异常={e}")
+        else:
+            # 打印过滤条件汇总（即使失败）
+            logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 不满足分层止盈条件:")
+            for check in first_stop_condition_checks:
+                logger.info(f"  {check}")
 
+        # 记录第二个止盈条件（兜底止盈）的检查结果
+        second_stop_condition_checks = []
+        
+        if estimated_profit_rate > 10.0:
+            second_stop_condition_checks.append(f"✓ 预估收益率检查通过（{estimated_profit_rate:.2f}% > 10.0%）")
+        else:
+            second_stop_condition_checks.append(f"✗ 预估收益率检查失败（{estimated_profit_rate:.2f}% ≤ 10.0%）")
+            
+        if "C" not in fund_name:
+            second_stop_condition_checks.append(f"✓ 基金类型检查通过（非C类基金）")
+        else:
+            second_stop_condition_checks.append(f"✗ 基金类型检查失败（C类基金不支持兜底止盈）")
+        
         #如果不是C类基金且预估收益率 > 10.0，卖出低费率份额
         if estimated_profit_rate > 10.0 and "C" not in fund_name:
+            # 打印过滤条件汇总
+            logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 满足兜底止盈条件:")
+            for check in second_stop_condition_checks:
+                logger.info(f"  {check}")
+                
             try:
                 shares = get_bank_shares(user, sub_account_no, fund_code)
                 low_fee_shares = _safe_float(get_low_fee_shares(user, fund_code), 0.0)
@@ -137,6 +202,12 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             except Exception as e:
                 logger.error(f"兜底止盈失败：{fund_name}({fund_code}) 异常={e}")
         else:
+            # 打印过滤条件汇总（即使失败）
+            logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 不满足兜底止盈条件:")
+            for check in second_stop_condition_checks:
+                logger.info(f"  {check}")
+            
+            # 原有的跳过日志
             logger.info(f"跳过：{fund_name}({fund_code}) 预估收益未达标或今日涨幅不足（预估={estimated_profit_rate:.2f}%, 止盈点={stop_rate:.2f}%, 今日估值涨幅={estimated_change:.2f}%, 100日排名={rank_100}）")
 
     logger.info(f"止盈完成：{user.customer_name} 成功执行 {success_count} 次赎回操作（最多3个）")
@@ -146,6 +217,6 @@ if __name__ == "__main__":
     try:
         redeem_funds(DEFAULT_USER, "飞龙在天", 1000000.0)
         # redeem_funds(DEFAULT_USER, "马丁格尔plus", 1000000.0)
-        logging.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
+        logger.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
     except Exception as e:
-        logging.error(f"测试用户处理失败：{str(e)}")
+        logger.error(f"测试用户处理失败：{str(e)}")

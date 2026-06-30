@@ -291,6 +291,9 @@ def add_new_funds(
             code = getattr(f, 'fund_code', None)
             name = getattr(f, 'fund_name', code or 'N/A')
             buy_amount = base_per_fund
+            
+            # 记录过滤条件检查结果
+            filter_checks = []
         
             # 判断是否可申购（若可获取）
             info = None
@@ -298,20 +301,48 @@ def add_new_funds(
                 info = get_all_fund_info(user, code)
                 if info and hasattr(info, 'can_purchase') and not info.can_purchase:
                     logger.warning(f"基金 {name}({code}) 当前不可申购，跳过")
+                    # 打印过滤条件汇总（即使失败）
+                    filter_checks.append("✗ 申购状态检查失败（当前不可申购）")
+                    logger.info(f"[过滤条件汇总] 基金 {name}({code}) 检查结果:")
+                    for check in filter_checks:
+                        logger.info(f"  {check}")
                     continue
+                else:
+                    filter_checks.append("✓ 申购状态检查通过（可申购）")
             except Exception as e:
                 logger.warning(f"获取基金 {code} 申购状态失败，跳过该基金：{e}")
+                filter_checks.append("✗ 申购状态检查失败（获取信息异常）")
+                logger.info(f"[过滤条件汇总] 基金 {name}({code}) 检查结果:")
+                for check in filter_checks:
+                    logger.info(f"  {check}")
                 continue
 
             if not info:
                 logger.info(f"无法获取基金信息，跳过新增：{name}({code})")
+                filter_checks.append("✗ 基金信息检查失败（无法获取信息）")
+                logger.info(f"[过滤条件汇总] 基金 {name}({code}) 检查结果:")
+                for check in filter_checks:
+                    logger.info(f"  {check}")
                 continue
+            else:
+                filter_checks.append("✓ 基金信息检查通过（成功获取信息）")
         
             # 新增：估算净值（或上一交易日净值）> 5 日均值判定，不满足则跳过（公共方法）
             if not nav5_gate(info, name, code, logger):
                 logger.info(f"净值未达条件（未处于上升趋势），跳过新增：{name}({code})")
+                filter_checks.append("✗ 净值门槛检查失败（未处于上升趋势）")
+                logger.info(f"[过滤条件汇总] 基金 {name}({code}) 检查结果:")
+                for check in filter_checks:
+                    logger.info(f"  {check}")
                 continue
+            else:
+                filter_checks.append("✓ 净值门槛检查通过（处于上升趋势）")
 
+            # 打印过滤条件汇总信息
+            logger.info(f"[过滤条件汇总] 基金 {name}({code}) 满足所有条件:")
+            for check in filter_checks:
+                logger.info(f"  {check}")
+            
             # 补充日志：打印所有最终过滤条件，便于人工辅助定位为何没买
             rank_100_final = getattr(info, 'rank_100day', '未知')
             rank_30_final = getattr(info, 'rank_30day', '未知')
@@ -356,6 +387,6 @@ if __name__ == "__main__":
         hqb = getattr(bank, "CurrentRealBalance", None) if bank is not None else None
         logger.info(f"测试用户: {test_user.customer_name}, 活期宝: {hqb if hqb is not None else getattr(test_user, 'hqb_value', 'N/A')}")
         add_new_funds(test_user, "飞龙在天", 1000000.0, fund_type="non_index")
-        logging.info(f"用户 {test_user.customer_name} 新增操作完成")
+        logger.info(f"用户 {test_user.customer_name} 新增操作完成")
     except Exception as e:
-        logging.error(f"测试用户处理失败：{str(e)}")
+        logger.error(f"测试用户处理失败：{str(e)}")

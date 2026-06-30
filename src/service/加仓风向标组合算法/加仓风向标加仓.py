@@ -194,6 +194,19 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             continue
         logger.info(f"[检查通过] 步骤5-组合总资产限制 ✓ (当前={current_total_asset:.2f} + 加仓={buy_amount:.2f} ≤ 总预算={total_budget:.2f})")
 
+        # 记录过滤条件检查结果
+        filter_checks = []
+        filter_checks.append("✓ 5日均值判定通过（估算净值 > 5日均值）")
+        filter_checks.append("✓ 公共排名检查通过（20≤rank_100day≤90 且 rank_30day≥5）")
+        filter_checks.append(f"✓ 百分位排名检查通过（month={month_rank_rate:.2%}, season={season_rank_rate:.2%} ≤ 75%）")
+        filter_checks.append(f"✓ 单个基金资产限制通过（持仓={safe_asset_value:.2f} ≤ 15%预算={budget_threshold:.2f}）")
+        filter_checks.append(f"✓ 组合总资产限制通过（当前={current_total_asset:.2f} + 加仓={buy_amount:.2f} ≤ 总预算={total_budget:.2f}）")
+
+        # 打印过滤条件汇总信息
+        logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 满足所有条件:")
+        for check in filter_checks:
+            logger.info(f"  {check}")
+
         # 先尝试风向标路径（仅对风向标标的）
         if in_wind_vane:
             try:
@@ -212,6 +225,10 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                     logger.info(f"[检查失败] 步骤6-不连续交易守卫触发 (状态={state})")
                     continue
                 logger.info(f"[检查通过] 步骤6-不连续交易守卫 ✓")
+                
+                # 为风向标路径添加额外的过滤条件记录
+                filter_checks.append("✓ 风向标基金检查通过（在风向标集合中）")
+                filter_checks.append("✓ 不连续交易守卫检查通过（无近期买入记录）")
 
                 # 执行加仓
                 res = commit_order(user, sub_account_no, fund_code, buy_amount)
@@ -257,6 +274,10 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                 logger.info(f"[检查失败] 步骤7-不连续交易守卫触发 (状态={state})")
                 continue
             logger.info(f"[检查通过] 步骤7-不连续交易守卫 ✓")
+            
+            # 为非风向标路径添加额外的过滤条件记录
+            filter_checks.append(f"✓ 趋势条件检查通过（week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%, season={season_growth_rate:.2f}%）")
+            filter_checks.append("✓ 不连续交易守卫检查通过（无近期买入记录）")
 
             # 基础加仓
             res1 = commit_order(user, sub_account_no, fund_code, buy_amount)

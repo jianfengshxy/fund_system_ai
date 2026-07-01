@@ -59,8 +59,9 @@ def increase_gold_dimension_funds(user: User, sub_account_name: str, amount: flo
 
     # 2. 检查在途交易
     if check_pending_trade(user, sub_account_no, TARGET_FUND_CODE):
-        logger.info(f"目标基金 {TARGET_FUND_CODE} 存在在途交易，跳过加仓")
+        logger.info(f"[在途检查] 目标基金 {TARGET_FUND_CODE} 存在在途交易，跳过加仓")
         return True
+    logger.info(f"[在途检查] 目标基金 {TARGET_FUND_CODE} 无在途交易，继续加仓流程")
 
     # 3. 获取基金详细信息 (排名、收益率等)
     fi = get_all_fund_info(user, TARGET_FUND_CODE)
@@ -179,16 +180,26 @@ def check_pending_trade(user: User, sub_account_no: str, fund_code: str) -> bool
     try:
         fi = get_all_fund_info(user, fund_code)
         nav_date_str = getattr(fi, "nav_date", None)
-        prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
-    except Exception:
-        prev_trade_day = None
+    except Exception as e:
+        logger.warning(f"[在途检查] 获取基金 {fund_code} 信息失败: {e}")
+        nav_date_str = None
     
-    today = datetime.date.today()
-    check_dates = {today}
-    if prev_trade_day:
-        check_dates.add(prev_trade_day)
-
-    return has_buy_submission_on_dates(user, sub_account_no, fund_code, check_dates)
+    if nav_date_str:
+        try:
+            prev_trade_day = datetime.datetime.strptime(str(nav_date_str), "%Y-%m-%d").date()
+            logger.info(f"[在途检查] 基金 {fund_code} nav_date={nav_date_str}, prev_trade_day={prev_trade_day}")
+        except Exception as e:
+            logger.warning(f"[在途检查] 解析 nav_date '{nav_date_str}' 失败: {e}")
+            prev_trade_day = None
+    else:
+        prev_trade_day = None
+        logger.info(f"[在途检查] 基金 {fund_code} nav_date 为空")
+    
+    prev_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
+    logger.info(f"[在途检查] 基金 {fund_code} 在 {prev_trade_day} 的查询结果: {'有交易' if prev_trade_pre else '无交易'}")
+    if prev_trade_pre:
+        return True
+    return False
 
 if __name__ == "__main__":
     from src.common.constant import DEFAULT_USER

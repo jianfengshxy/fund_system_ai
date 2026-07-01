@@ -216,10 +216,8 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                     prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
                 except Exception:
                     prev_trade_day = None
-                today = datetime.date.today()
-                date_set = {d for d in [prev_trade_day, today] if d}
                 from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
-                stay_trade = has_buy_submission_on_dates(user, sub_account_no, fund_code, date_set)
+                stay_trade = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
                 if stay_trade:
                     state = getattr(stay_trade, "app_state_text", None) or getattr(stay_trade, "status", None)
                     logger.info(f"[检查失败] 步骤6-不连续交易守卫触发 (状态={state})")
@@ -266,9 +264,10 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             except Exception:
                 prev_trade_day = None
             today = datetime.date.today()
-            date_set = {d for d in [prev_trade_day, today] if d}
             from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
-            stay_trade = has_buy_submission_on_dates(user, sub_account_no, fund_code, date_set)
+            stay_trade = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
+            if not stay_trade:
+                stay_trade = has_buy_submission_on_dates(user, sub_account_no, fund_code, today)
             if stay_trade:
                 state = getattr(stay_trade, "app_state_text", None) or getattr(stay_trade, "status", None)
                 logger.info(f"[检查失败] 步骤7-不连续交易守卫触发 (状态={state})")

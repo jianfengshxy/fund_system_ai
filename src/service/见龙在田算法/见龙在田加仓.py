@@ -117,11 +117,9 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
         except Exception:
             prev_trade_day = None
-        today = datetime.date.today()
-        prev_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {d for d in [prev_trade_day] if d})
-        today_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {today})
-        if prev_trade_pre is not None or today_trade_pre is not None:
-            logger.info(f"跳过 {fi.fund_name}({fund_code}): 昨日(nav_date)或今日存在买入/定投提交（非撤）")
+        prev_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
+        if prev_trade_pre is not None:
+            logger.info(f"跳过 {fi.fund_name}({fund_code}): 上个交易日净值日(nav_date)存在买入/定投提交（非撤）")
             continue
 
         in_wind_vane = (fi.fund_type != '000' and fund_code in wind_vane_codes) or (fi.fund_type == '000' and fi.index_code in wind_vane_indices)

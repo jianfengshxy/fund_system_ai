@@ -82,23 +82,20 @@ def increase_gold_funds(
     # if not normalized_funds:
     #     normalized_funds = [{"fund_code": "021740", "amount": amount, "limit": None}]
 
-    def _get_check_dates_for_fund(fund_code: str) -> set:
+    def _has_pending_trade(fund_code: str) -> bool:
         fi = get_all_fund_info(user, fund_code)
         nav_date_str = getattr(fi, "nav_date", None) if fi else None
-        try:
-            prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
-        except Exception:
+        if nav_date_str:
+            try:
+                prev_trade_day = datetime.datetime.strptime(str(nav_date_str), "%Y-%m-%d").date()
+            except Exception:
+                prev_trade_day = None
+        else:
             prev_trade_day = None
-        today = datetime.date.today()
-        check_dates = {today}
-        if prev_trade_day:
-            check_dates.add(prev_trade_day)
-        return check_dates
-
-    def _has_pending_trade(fund_code: str) -> bool:
-        check_dates = _get_check_dates_for_fund(fund_code)
-        pending_trade = has_buy_submission_on_dates(user, sub_account_no, fund_code, check_dates)
-        return pending_trade is not None
+        
+        result = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
+        logger.info(f"[在途检查] 基金 {fund_code} nav_date={nav_date_str}, prev_trade_day={prev_trade_day}, 查询结果: {'有交易' if result else '无交易'}")
+        return bool(result)
         
     def _get_fund_name(fund_code: str) -> str:
         fi = get_all_fund_info(user, fund_code)

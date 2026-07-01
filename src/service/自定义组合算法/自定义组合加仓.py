@@ -94,7 +94,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             fund_name = getattr(fund_info, 'fund_name', fund_name)
             logger.info(f"基金信息：{fund_name}({fund_code})，可申购：{getattr(fund_info, 'can_purchase', None)}")
 
-            # 使用“昨日净值日(nav_date)+今天”的守卫：任一天存在非撤的买入/定投则跳过
+            # 使用“上个交易日净值日(nav_date)”的守卫：任一天存在非撤的买入/定投则跳过
             from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
             import datetime
             nav_date_str = getattr(fund_info, "nav_date", None)
@@ -102,11 +102,9 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
             except Exception:
                 prev_trade_day = None
-            today = datetime.date.today()
-            prev_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {d for d in [prev_trade_day] if d})
-            today_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {today})
-            if prev_trade_pre is not None or today_trade_pre is not None:
-                logger.info(f"跳过 {fund_name}({fund_code}): 昨日(nav_date)或今日存在买入/定投提交（非撤）")
+            prev_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
+            if prev_trade_pre is not None:
+                logger.info(f"跳过 {fund_name}({fund_code}): 上个交易日净值日(nav_date)存在买入/定投提交（非撤）")
                 # 记录交易守卫检查失败
                 filter_checks = []
                 filter_checks.append("✗ 交易守卫检查失败（存在近期买入记录）")

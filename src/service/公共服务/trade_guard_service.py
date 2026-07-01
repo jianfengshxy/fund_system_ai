@@ -4,14 +4,32 @@ from typing import Optional, Set
 import os
 import sys
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from src.API.交易管理.trade import get_trades_list
-from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
-from src.domain.user.User import User
-from src.common.logger import get_logger
+# 导入所有需要的模块
+try:
+    from src.API.交易管理.trade import get_trades_list
+    from src.API.基金信息.FundInfo import getFundInfo
+    from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
+    from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
+    from src.domain.user.User import User
+    from src.common.logger import get_logger
+    from src.service.基金信息.基金信息 import get_all_fund_info
+except ImportError as e:
+    print(f"导入错误: {e}")
+    print(f"PROJECT_ROOT: {PROJECT_ROOT}")
+    print(f"sys.path: {sys.path}")
+    raise
+
+# 创建本地 DEFAULT_USER 用于测试
+DEFAULT_USER = User(
+    account="13918199137",
+    password="sWX15706"  # 测试用密码
+)
+DEFAULT_USER.customer_no = "cd0b7906b53b43ffa508a99744b4055b"
+DEFAULT_USER.mobile_phone = "13918199137"
 
 logger = get_logger(__name__)
 
@@ -78,6 +96,26 @@ def _get_trade_date(t) -> Optional[datetime.date]:
                 return dt.date()
     return None
 
+def _get_trade_datetime(t) -> Optional[datetime.datetime]:
+    """
+    获取交易的完整日期时间（包括时间部分）
+    """
+    cand = (
+        getattr(t, "apply_work_day", None)
+        or getattr(t, "strike_start_date", None)
+        or getattr(t, "cash_bag_app_time", None)
+    )
+    dt = _parse_dt(cand)
+    if dt:
+        return dt
+    raw = getattr(t, "raw", None) if isinstance(getattr(t, "raw", None), dict) else None
+    if raw:
+        for k in ("ApplyWorkDay", "StrikeStartDate", "CashBagAppTime", "ApplyTime", "PayFinishTime", "CreateTime"):
+            dt = _parse_dt(raw.get(k))
+            if dt:
+                return dt
+    return None
+
 def _get_on_way_trade_count(t) -> int:
     """
     从交易对象中尽量提取“在途交易个数/在途标记”。
@@ -136,70 +174,45 @@ def _find_sub_account_asset(user: User, sub_account_no: str, fund_code: str):
             return asset
     return None
 
-def has_buy_submission_on_dates(user: User, sub_account_no: str, fund_code: str, dates: Set[datetime.date]):
+def has_buy_submission_on_dates(user: User, sub_account_no: str, fund_code: str, trans_date: datetime.date):
     """
-    查询同一基金在指定日期集合是否存在“有效买入/定投提交”记录（排除撤单）。
+    查询同一基金在指定日期是否存在“有效买入/定投提交”记录（排除撤单）。
     命中则返回该条交易对象，否则返回 None。
     """
-    asset = _find_sub_account_asset(user, sub_account_no, fund_code)
-    if asset is not None:
-        on_way_transaction_count = int(getattr(asset, "on_way_transaction_count", 0) or 0)
-        asset_value = float(getattr(asset, "asset_value", 0) or 0)
-        available_vol = float(getattr(asset, "available_vol", 0) or 0)
-        if on_way_transaction_count > 0:
-            logger.info(
-                f"资产守卫命中在途交易: fund={fund_code}, sub_account_no={sub_account_no}, "
-                f"on_way_transaction_count={on_way_transaction_count}, asset_value={asset_value}, available_vol={available_vol}"
-            )
-            return asset
-        if asset_value > 0 and available_vol <= 0:
-            logger.info(
-                f"资产守卫命中疑似在途持仓: fund={fund_code}, sub_account_no={sub_account_no}, "
-                f"asset_value={asset_value}, available_vol={available_vol}"
-            )
-            return asset
-
     try:
-        trades = get_trades_list(user, sub_account_no=sub_account_no or "", fund_code=fund_code) or []
-        if (not trades) and sub_account_no:
-            extra = get_trades_list(user, sub_account_no="", fund_code=fund_code) or []
-            trades = extra
-        logger.info(f"守卫查询: fund={fund_code}, scope={'子账户' if sub_account_no else '全账户'}, 记录数={len(trades)}")
-
-        # 打印最近两个交易的所有信息（按日期倒序）
-        # try:
-        #     sorted_trades = sorted(
-        #         trades,
-        #         key=lambda x: (_get_trade_date(x) or datetime.date.min),
-        #         reverse=True
-        #     )
-        #     for i, tt in enumerate(sorted_trades[:2], start=1):
-        #         d = _get_trade_date(tt)
-        #         _log_trade_full(tt, title=f"最近交易#{i} (date={d})")
-        # except Exception as e:
-        #     logger.warning(f"打印最近交易失败: {e}")
+        trades = get_trades_list(user, sub_account_no=sub_account_no,fund_code=fund_code, date_type="5") 
+        logger.info(f"守卫查询: fund={fund_code}, scope={'子账户'}, 记录数={len(trades)}")
+        # 打印所有交易信息（按日期倒序）
+        try:
+            sorted_trades = sorted(
+                trades,
+                key=lambda x: (_get_trade_date(x) or datetime.date.min),
+                reverse=True
+            )
+            for i, tt in enumerate(sorted_trades, start=1):
+                d = _get_trade_date(tt)
+                _log_trade_full(tt, title=f"最近一周交易#{i} (date={d})")
+        except Exception as e:
+            logger.warning(f"打印交易记录失败: {e}")
     except Exception as e:
         logger.warning(f"查询基金 {fund_code} 交易记录失败（不连续守卫跳过）：{e}")
         return None
 
+    # 过滤出在 trans_date 日期0点到15:00点之间发生的交易
+    filtered_trades = []
     for t in trades:
-        if not _is_buy_trade(t):
+        trade_dt = _get_trade_datetime(t)
+        if not trans_date or not trade_dt:
             continue
-        if _is_canceled_trade(t):
-            # logger.info(f"忽略已撤单记录: {getattr(t, 'product_name','') or ''}({fund_code}) 状态={getattr(t, 'app_state_text', None) or getattr(t, 'status', None)}")
-            continue
-        on_way_trade_count = _get_on_way_trade_count(t)
-        if on_way_trade_count > 0:
-            logger.info(
-                f"守卫命中在途标记: fund={fund_code}, on_way_trade_count={on_way_trade_count}, "
-                f"status={getattr(t, 'app_state_text', None) or getattr(t, 'status', None)}"
-            )
-            return t
-        d = _get_trade_date(t)
-        if d and d in dates:
-            return t
-
-    return None
+        if trade_dt.date() == trans_date:
+            if trade_dt.time() >= datetime.time(0, 0, 0) and trade_dt.time() <= datetime.time(15, 0, 0):
+                filtered_trades.append(t)
+    
+    logger.info(f"时间过滤后: trans_date={trans_date}, 0:00-15:00时间段内的交易记录数={len(filtered_trades)}") 
+    
+    if not filtered_trades:
+        return None
+    return filtered_trades[0]
 
 def _log_trade_full(t, title: str):
     summary = {
@@ -218,25 +231,48 @@ def _log_trade_full(t, title: str):
     }
     logger.info(f"{title} 概览: {summary}")
 
-    try:
-        attrs = []
-        for attr in dir(t):
-            if not attr.startswith("_") and not callable(getattr(t, attr)):
-                try:
-                    attrs.append((attr, getattr(t, attr)))
-                except Exception:
-                    pass
-        logger.info(f"{title} 对象属性({len(attrs)}项):")
-        for k, v in attrs:
-            logger.info(f"{title} obj.{k} = {v}")
-    except Exception as e:
-        logger.warning(f"{title} 打印对象属性失败: {e}")
-
-    raw = getattr(t, "raw", None)
-    if isinstance(raw, dict):
+if __name__ == "__main__":
+    import datetime as dt
+    fund_code = "008706"
+    sub_account_name = "海外基金组合"
+    fund_info = getFundInfo(DEFAULT_USER, fund_code)
+    # 打印 fund_info 所有属性
+    # if fund_info:
+    #     for attr in dir(fund_info):
+    #         if not attr.startswith("_") and not callable(getattr(fund_info, attr)):
+    #             try:
+    #                 logger.info(f"fund_info.{attr} = {getattr(fund_info, attr)}")
+    #             except Exception:
+    #                 pass
+    #     raw = getattr(fund_info, "raw", None)
+    #     if isinstance(raw, dict):
+    #         logger.info(f"fund_info.raw 原始字段({len(raw)}项):")
+    #         for k, v in raw.items():
+    #             logger.info(f"  raw.{k} = {v}")
+    # else:
+    #     logger.error("fund_info 为空")
+    # 通过组合名称获取组合ID
+    sub_account_no = getSubAccountNoByName(DEFAULT_USER, sub_account_name)
+    if not sub_account_no:
+        logger.error(f"未找到组合 '{sub_account_name}' 的ID")
+        sub_account_no = ""
+    else:
+        logger.info(f"组合 '{sub_account_name}' 的ID为: {sub_account_no}")
+    nav_date_str = getattr(fund_info, "nav_date", None)
+    logger.info(f"nav_date_str 原始值: '{nav_date_str}', 类型: {type(nav_date_str)}")
+    if nav_date_str:
         try:
-            logger.info(f"{title} 原始字段({len(raw)}项):")
-            for k, v in raw.items():
-                logger.info(f"{title} raw.{k} = {v}")
+            prev_trade_day = datetime.datetime.strptime(str(nav_date_str), "%Y-%m-%d").date()
         except Exception as e:
-            logger.warning(f"{title} 打印原始字段失败: {e}")
+            logger.error(f"解析 nav_date 失败: {e}, 值: '{nav_date_str}'")
+            prev_trade_day = None
+    else:
+        prev_trade_day = None
+    logger.info(f"上日期prev_trade_day为: {prev_trade_day}")
+    result = has_buy_submission_on_dates(DEFAULT_USER, sub_account_no, fund_code, prev_trade_day)
+    # result = has_buy_submission_on_dates(DEFAULT_USER, sub_account_no, fund_code, datetime.date(2026, 6, 24))
+
+    if result:
+        logger.info(f"找到符合条件的交易: {getattr(result, 'product_name', 'Unknown')}")
+    else:
+        logger.info("未找到符合条件的交易")

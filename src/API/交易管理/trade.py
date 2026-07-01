@@ -656,7 +656,7 @@ if __name__ == "__main__":
     logger.info("开始获取交易列表并逐个查询结果...")
     
     # 获取最近 20 条交易记录
-    trades = get_trades_list(DEFAULT_USER, page_size=20, date_type="1")
+    trades = get_trades_list(DEFAULT_USER, page_size=20, date_type="5")
     logger.info(f"获取到 {len(trades)} 条交易记录")
     
     for i, trade in enumerate(trades):

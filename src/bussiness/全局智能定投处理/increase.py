@@ -38,7 +38,7 @@ from src.API.交易管理.trade import get_trades_list, get_bank_shares
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
-
+from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
@@ -322,20 +322,18 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                 logger.error(f"     回撤失败: {e}")
         return True
         
-    # 使用“昨日净值日(nav_date)+今天”的守卫：任一天存在非撤的买入/定投则回撤并跳过
-    from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
+    # 使用“上个交易日净值日(nav_date)”的守卫：任一天存在非撤的买入/定投则回撤并跳过
     nav_date_str = getattr(fund_info, "nav_date", None)
-    try:
-        prev_trade_day = datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
-    except Exception:
+    if nav_date_str:
+        try:
+            prev_trade_day = datetime.datetime.strptime(str(nav_date_str), "%Y-%m-%d").date()
+        except Exception:
+            prev_trade_day = None
+    else:
         prev_trade_day = None
-    today = datetime.now().date()
-
-    prev_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {d for d in [prev_trade_day] if d})
-    today_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, {today})
-    
-    if prev_trade_pre is not None:
-        logger.info(f"{fund_name}({fund_code}) [频率风控] 交易过于频繁 - 昨日/今日已存在交易，避免重复加仓，撤回本次交易")
+    prev_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
+    if prev_trade_pre:
+        logger.info(f"{fund_name}({fund_code}) [频率风控] 交易过于频繁 - 上个交易日净值日{nav_date_str}已存在交易，避免重复加仓，撤回本次交易")
         # 撤回交易
         for i, trade in enumerate(trades):
             logger.info(f"  -> 执行回撤 {i+1}/{len(trades)}: 序列号={trade.busin_serial_no}, 金额={trade.amount}")
@@ -346,7 +344,6 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
                 logger.error(f"     回撤失败: {e}")
         return True
         
-
     logger.info(f"[加仓决策] 进入加仓逻辑判断...")
     
     # 首次定投例外：优先以计划执行次数判断，其次以资产倍数兜底

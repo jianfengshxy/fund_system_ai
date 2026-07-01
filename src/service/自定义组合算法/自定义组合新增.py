@@ -86,29 +86,12 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
         try:
             fund_code = (fund_item or {}).get('fund_code')
             fund_amount = (fund_item or {}).get('amount')
-            
-            # 记录过滤条件检查结果
-            filter_checks = []
-            
             if not fund_code:
                 logger.info("fund_code 缺失，跳过该条目")
-                filter_checks.append("✗ 基金代码检查失败（缺失）")
-                logger.info(f"[过滤条件汇总] 基金条目检查结果:")
-                for check in filter_checks:
-                    logger.info(f"  {check}")
                 continue
-            else:
-                filter_checks.append("✓ 基金代码检查通过（存在）")
-                
             if not fund_amount or float(fund_amount) <= 0:
                 logger.info(f"基金 {fund_code} 的 amount 缺失或无效，跳过该基金")
-                filter_checks.append("✗ 金额检查失败（缺失或无效）")
-                logger.info(f"[过滤条件汇总] 基金 {fund_code} 检查结果:")
-                for check in filter_checks:
-                    logger.info(f"  {check}")
                 continue
-            else:
-                filter_checks.append("✓ 金额检查通过（有效）")
 
             fund_info = get_all_fund_info(user, fund_code)
             fund_name = getattr(fund_info, 'fund_name', fund_code)
@@ -124,7 +107,6 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                         max_amount = float(max_purchase)
                         if max_amount < 2000:
                             logger.info(f"基金 {fund_name}({fund_code}) 限购金额 {max_amount} < 2000，触发无条件买入逻辑！")
-                            filter_checks.append(f"✓ 限购金额检查通过（{max_amount} < 2000，触发无条件买入）")
                             # 如果请求金额大于限购金额，调整为限购金额
                             actual_amount = float(fund_amount)
                             if actual_amount > max_amount:
@@ -141,28 +123,14 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                             except Exception as e:
                                 logger.error(f"无条件购买失败：{fund_name}({fund_code})，异常: {e}")
                             
-                            # 打印过滤条件汇总
-                            logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 满足无条件买入条件:")
-                            for check in filter_checks:
-                                logger.info(f"  {check}")
                             continue # 处理完毕，进入下一个基金
-                        else:
-                            filter_checks.append(f"✓ 限购金额检查通过（{max_amount} ≥ 2000，继续正常流程）")
                     except (ValueError, TypeError):
-                        filter_checks.append("✓ 限购金额检查通过（无法解析，继续正常流程）")
-                else:
-                    filter_checks.append("✓ 限购金额检查通过（无限制，继续正常流程）")
+                        pass
 
                 # 候选阶段先应用五日均值过滤
                 if not nav5_gate(fund_info, fund_name, fund_code, logger):
                     logger.info(f"净值未达条件，跳过候选：{fund_name}({fund_code})")
-                    filter_checks.append("✗ 五日均值检查失败（未处于上升趋势）")
-                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 检查结果:")
-                    for check in filter_checks:
-                        logger.info(f"  {check}")
                     continue
-                else:
-                    filter_checks.append("✓ 五日均值检查通过（处于上升趋势）")
                 
                 # 增加过滤条件：基金的1年收益率和半年收益率有一个小于0就跳过
                 # 参考increase.py中的风控逻辑
@@ -176,13 +144,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 # 如果年收益率 <= 0 或 半年收益率 <= 0，则跳过
                 if (year_val is not None and year_val <= 0) or (half_year_val is not None and half_year_val <= 0):
                     logger.info(f"基金1年收益率({year_val})或半年收益率({half_year_val})小于等于0，跳过候选：{fund_name}({fund_code})")
-                    filter_checks.append(f"✗ 收益率检查失败（1年={year_val}，半年={half_year_val}）")
-                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 检查结果:")
-                    for check in filter_checks:
-                        logger.info(f"  {check}")
                     continue
-                else:
-                    filter_checks.append(f"✓ 收益率检查通过（1年={year_val}，半年={half_year_val}）")
 
                 # 增加条件：基金的100日净值排名 < 20 就 continue
                 rank_100 = getattr(fund_info, 'rank_100day', None)
@@ -191,58 +153,27 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                         rank_100_val = float(rank_100)
                         if rank_100_val < 20:
                             logger.info(f"基金100日排名 {rank_100} < 20，跳过候选：{fund_name}({fund_code})")
-                            filter_checks.append(f"✗ 100日排名检查失败（{rank_100_val} < 20）")
-                            logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 检查结果:")
-                            for check in filter_checks:
-                                logger.info(f"  {check}")
                             continue
                         if rank_100_val > 90:
                             logger.info(f"基金100日排名 {rank_100} > 90，跳过候选：{fund_name}({fund_code})")
-                            filter_checks.append(f"✗ 100日排名检查失败（{rank_100_val} > 90）")
-                            logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 检查结果:")
-                            for check in filter_checks:
-                                logger.info(f"  {check}")
                             continue
-                        else:
-                            filter_checks.append(f"✓ 100日排名检查通过（{rank_100_val} 在20-90之间）")
                     except (ValueError, TypeError):
-                        filter_checks.append("✓ 100日排名检查通过（无法解析，继续正常流程）")
-                else:
-                    filter_checks.append("✓ 100日排名检查通过（无数据，继续正常流程）")
+                        pass
 
                 rank_30 = getattr(fund_info, 'rank_30day', None)
                 if rank_30 is not None:
                     try:
                         if float(rank_30) < 5:
                             logger.info(f"基金30日排名 {rank_30} < 5，跳过候选：{fund_name}({fund_code})")
-                            filter_checks.append(f"✗ 30日排名检查失败（{rank_30} < 5）")
-                            logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 检查结果:")
-                            for check in filter_checks:
-                                logger.info(f"  {check}")
                             continue
-                        else:
-                            filter_checks.append(f"✓ 30日排名检查通过（{rank_30} ≥ 5）")
                     except (ValueError, TypeError):
-                        filter_checks.append("✓ 30日排名检查通过（无法解析，继续正常流程）")
-                else:
-                    filter_checks.append("✓ 30日排名检查通过（无数据，继续正常流程）")
+                        pass
 
                 # 进行五日均值过滤（购买前最后确认）
                 if not nav5_gate(fund_info, fund_name, fund_code, logger):
                     logger.info(f"未处于上升趋势（估算净值≤5日均值），跳过购买：{fund_name}({fund_code})")
-                    filter_checks.append("✗ 最终五日均值检查失败（未处于上升趋势）")
-                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 检查结果:")
-                    for check in filter_checks:
-                        logger.info(f"  {check}")
                     continue
-                else:
-                    filter_checks.append("✓ 最终五日均值检查通过（处于上升趋势）")
 
-                # 打印过滤条件汇总信息
-                logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 满足所有条件:")
-                for check in filter_checks:
-                    logger.info(f"  {check}")
-                    
                 logger.info(f"候选通过，准备购买：{fund_name}({fund_code}) [year_return={year_val}, half_year_return={half_year_val}, rank_100day={rank_100}, rank_30day={rank_30}]，金额: {fund_amount}")
                 try:
                     res = commit_order(user, sub_account_no, fund_code, float(fund_amount))
@@ -279,6 +210,6 @@ if __name__ == "__main__":
             ],
             total_budget=1000000.0,
         )
-        logger.info(f"用户 {DEFAULT_USER.customer_name} 新增操作完成")
+        logging.info(f"用户 {DEFAULT_USER.customer_name} 新增操作完成")
     except Exception as e:
-        logger.error(f"测试用户处理失败：{str(e)}")
+        logging.error(f"测试用户处理失败：{str(e)}")

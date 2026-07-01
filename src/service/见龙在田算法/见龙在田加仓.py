@@ -119,7 +119,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             prev_trade_day = None
         prev_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
         if prev_trade_pre is not None:
-            logger.info(f"跳过 {fi.fund_name}({fund_code}): 上个交易日净值日(nav_date)存在买入/定投提交（非撤）")
+            logger.info(f"跳过 {fi.fund_name}({fund_code}): 上个交易日净值日({nav_date_str})存在买入/定投提交（非撤）")
             continue
 
         in_wind_vane = (fi.fund_type != '000' and fund_code in wind_vane_codes) or (fi.fund_type == '000' and fi.index_code in wind_vane_indices)

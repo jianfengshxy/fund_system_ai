@@ -104,7 +104,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 prev_trade_day = None
             prev_trade_pre = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
             if prev_trade_pre is not None:
-                logger.info(f"跳过 {fund_name}({fund_code}): 上个交易日净值日(nav_date)存在买入/定投提交（非撤）")
+                logger.info(f"跳过 {fund_name}({fund_code}): 上个交易日净值日({nav_date_str})存在买入/定投提交（非撤）")
                 # 记录交易守卫检查失败
                 filter_checks = []
                 filter_checks.append("✗ 交易守卫检查失败（存在近期买入记录）")

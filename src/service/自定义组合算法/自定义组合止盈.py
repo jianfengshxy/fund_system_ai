@@ -1,4 +1,3 @@
-import logging
 import os
 import sys
 from typing import Optional
@@ -29,12 +28,9 @@ from src.service.定投管理.定投查询.定投查询 import get_all_fund_plan
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 from src.common.constant import DEFAULT_USER, HQB_RATIO_THRESHOLD, PROFIT_THRESHOLD_FOR_LOW_BALANCE
 from src.service.公共服务.nav_gate_service import nav5_fall_gate
+from src.common.logger import get_logger
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = None) -> bool:
@@ -119,13 +115,26 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             logger.info(f"组合{sub_account_name}的{fund_name}{fund_code}波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（3.0~10.0之间）")
 
             # 3. 检查基本止盈条件
+            # 记录基本止盈条件检查结果
+            basic_stop_condition_checks = []
+            
             if estimated_profit_rate > stop_rate:
+                basic_stop_condition_checks.append(f"✓ 预估收益率检查通过（{estimated_profit_rate:.2f}% > {stop_rate:.2f}%）")
                 logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},实际止盈点:{stop_rate}")
                 res = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
                 if res is not None and getattr(res, 'busin_serial_no', None):
                     success_count += 1
+                # 打印过滤条件汇总信息
+                logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 满足基本止盈条件:")
+                for check in basic_stop_condition_checks:
+                    logger.info(f"  {check}")
             else:
+                basic_stop_condition_checks.append(f"✗ 预估收益率检查失败（{estimated_profit_rate:.2f}% ≤ {stop_rate:.2f}%）")
                 logger.info(f"基本止盈条件未满足 ({fund_name} {fund_code})，原因: 预估收益 {estimated_profit_rate:.2f}% <= 止盈点 {stop_rate:.2f}%")
+                # 打印过滤条件汇总信息
+                logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 基本止盈条件检查结果:")
+                for check in basic_stop_condition_checks:
+                    logger.info(f"  {check}")
             
             # 4. 现金流紧张时的紧急止盈逻辑
             # 获取活期宝占比 (此处需要调用公共服务或直接计算，为了保持一致性建议调用 risk_control_service 中的逻辑)
@@ -185,19 +194,65 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             #      logger.info(f"{customer_name}的止盈操作开始：QDII基金{fund_name}{fund_code}预估收益{estimated_profit_rate},赎回0费率份额,实际止盈点:3.0")
             #      sell_0_fee_shares(user, sub_account_no, fund_code, shares)
 
-            if fund_type == '000' and fund_type != 'a' and "QDII" not in fund_name and hqb_ratio_percent < HQB_RATIO_THRESHOLD and estimated_change > 0.5 and estimated_profit_rate > 1.0 and rank_100 is not None and rank_100 > 90:
-                logger.info(
-                    f"{customer_name}的止盈操作开始：指数基金{fund_name}{fund_code}且非QDII，"
-                    f"活期宝占比{hqb_ratio_percent:.2f}%<{HQB_RATIO_THRESHOLD}%，"
-                    f"100日排名{rank_100}>90，"
-                    f"今日估值上涨{estimated_change:.2f}%，且收益率{estimated_profit_rate:.2f}%>1.0%，赎回0费率份额"
-                )
-                res = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
-                if res is not None and getattr(res, 'busin_serial_no', None):
-                    success_count += 1
-            else:
-                # 记录指数基金止盈未满足的原因
-                if fund_type == '000':
+            # 记录指数基金额外止盈条件检查结果
+            index_fund_stop_condition_checks = []
+            
+            # 检查是否为指数基金
+            if fund_type == '000':
+                index_fund_stop_condition_checks.append("✓ 基金类型检查通过（指数基金）")
+                
+                # 检查是否为QDII基金
+                if fund_type != 'a' and "QDII" not in fund_name:
+                    index_fund_stop_condition_checks.append("✓ QDII检查通过（非QDII基金）")
+                else:
+                    index_fund_stop_condition_checks.append("✗ QDII检查失败（是QDII基金）")
+                
+                # 检查活期宝占比
+                if hqb_ratio_percent < HQB_RATIO_THRESHOLD:
+                    index_fund_stop_condition_checks.append(f"✓ 活期宝占比检查通过（{hqb_ratio_percent:.2f}% < {HQB_RATIO_THRESHOLD}%）")
+                else:
+                    index_fund_stop_condition_checks.append(f"✗ 活期宝占比检查失败（{hqb_ratio_percent:.2f}% ≥ {HQB_RATIO_THRESHOLD}%）")
+                
+                # 检查今日估值上涨
+                if estimated_change > 0.5:
+                    index_fund_stop_condition_checks.append(f"✓ 估值上涨检查通过（{estimated_change:.2f}% > 0.5%）")
+                else:
+                    index_fund_stop_condition_checks.append(f"✗ 估值上涨检查失败（{estimated_change:.2f}% ≤ 0.5%）")
+                
+                # 检查收益率
+                if estimated_profit_rate > 1.0:
+                    index_fund_stop_condition_checks.append(f"✓ 收益率检查通过（{estimated_profit_rate:.2f}% > 1.0%）")
+                else:
+                    index_fund_stop_condition_checks.append(f"✗ 收益率检查失败（{estimated_profit_rate:.2f}% ≤ 1.0%）")
+                
+                # 检查100日排名
+                if rank_100 is not None and rank_100 > 90:
+                    index_fund_stop_condition_checks.append(f"✓ 100日排名检查通过（{rank_100} > 90）")
+                else:
+                    index_fund_stop_condition_checks.append(f"✗ 100日排名检查失败（{rank_100} ≤ 90 或为空）")
+                
+                # 检查所有条件是否都满足
+                if fund_type == '000' and fund_type != 'a' and "QDII" not in fund_name and hqb_ratio_percent < HQB_RATIO_THRESHOLD and estimated_change > 0.5 and estimated_profit_rate > 1.0 and rank_100 is not None and rank_100 > 90:
+                    logger.info(
+                        f"{customer_name}的止盈操作开始：指数基金{fund_name}{fund_code}且非QDII，"
+                        f"活期宝占比{hqb_ratio_percent:.2f}%<{HQB_RATIO_THRESHOLD}%，"
+                        f"100日排名{rank_100}>90，"
+                        f"今日估值上涨{estimated_change:.2f}%，且收益率{estimated_profit_rate:.2f}%>1.0%，赎回0费率份额"
+                    )
+                    res = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
+                    if res is not None and getattr(res, 'busin_serial_no', None):
+                        success_count += 1
+                    # 打印过滤条件汇总信息
+                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 满足指数基金额外止盈条件:")
+                    for check in index_fund_stop_condition_checks:
+                        logger.info(f"  {check}")
+                else:
+                    # 打印过滤条件汇总信息
+                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 指数基金额外止盈条件检查结果:")
+                    for check in index_fund_stop_condition_checks:
+                        logger.info(f"  {check}")
+                    
+                    # 记录指数基金止盈未满足的原因
                     reasons = []
                     if fund_type == 'a' or "QDII" in fund_name:
                         reasons.append("是QDII基金")
@@ -212,17 +267,35 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
                     
                     if reasons:
                         logger.info(f"指数基金额外止盈条件未满足 ({fund_name} {fund_code})，原因: {', '.join(reasons)}")
-                else:
-                    logger.info(f"非指数基金不适用额外止盈条件 ({fund_name} {fund_code})，原因: 基金类型为 {fund_type}")
+            else:
+                index_fund_stop_condition_checks.append(f"✗ 基金类型检查失败（非指数基金，类型为 {fund_type}）")
+                logger.info(f"非指数基金不适用额外止盈条件 ({fund_name} {fund_code})，原因: 基金类型为 {fund_type}")
+                # 打印过滤条件汇总信息
+                logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 指数基金额外止盈条件检查结果:")
+                for check in index_fund_stop_condition_checks:
+                    logger.info(f"  {check}")
 
             # 兜底止盈逻辑：当预期收益率 > 10.0 的时候 卖出低费率份额
+            # 记录兜底止盈条件检查结果
+            fallback_stop_condition_checks = []
+            
             if estimated_profit_rate > 10.0:
+                fallback_stop_condition_checks.append(f"✓ 预估收益率检查通过（{estimated_profit_rate:.2f}% > 10.0%）")
                 logger.info(f"{customer_name}的兜底止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate:.2f}% > 10.0%，赎回低费率份额")
                 res = sell_low_fee_shares(user, sub_account_no, fund_code, shares)
                 if res is not None and getattr(res, 'busin_serial_no', None):
                     success_count += 1
+                # 打印过滤条件汇总信息
+                logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 满足兜底止盈条件:")
+                for check in fallback_stop_condition_checks:
+                    logger.info(f"  {check}")
             else:
+                fallback_stop_condition_checks.append(f"✗ 预估收益率检查失败（{estimated_profit_rate:.2f}% ≤ 10.0%）")
                 logger.info(f"兜底止盈条件未满足 ({fund_name} {fund_code})，原因: 预估收益率 {estimated_profit_rate:.2f}% <= 10.0%")
+                # 打印过滤条件汇总信息
+                logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 兜底止盈条件检查结果:")
+                for check in fallback_stop_condition_checks:
+                    logger.info(f"  {check}")
 
         except Exception as e:
             logger.error(f"处理 {fund_code} 失败: {e}")
@@ -256,6 +329,6 @@ if __name__ == "__main__":
                 {"fund_code": "007844", "fund_name": "华宝标普油气上游股票人民币C", "amount": 5000.0}
             ]
         )
-        logging.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
+        logger.info(f"用户 {DEFAULT_USER.customer_name} 止盈操作完成")
     except Exception as e:
-        logging.error(f"测试用户处理失败：{str(e)}")
+        logger.error(f"测试用户处理失败：{str(e)}")

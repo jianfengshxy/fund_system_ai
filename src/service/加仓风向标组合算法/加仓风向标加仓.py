@@ -24,6 +24,7 @@ from src.common.constant import DEFAULT_USER
 from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
 from src.service.公共服务.nav_gate_service import nav5_gate
+from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
 # 新增导入 get_user_all_info
 from src.service.用户管理.用户信息 import get_user_all_info
 def _get_max_funds_threshold():
@@ -207,23 +208,33 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
         for check in filter_checks:
             logger.info(f"  {check}")
 
+        # 步骤6: 不连续交易守卫（通用）：检查上一个交易日是否有有效买入/定投
+        try:
+            nav_date_str = getattr(fi, "nav_date", None)
+            prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
+        except Exception:
+            nav_date_str = None
+            prev_trade_day = None
+        
+        prev_trade_record = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
+        if prev_trade_record:
+            state = getattr(prev_trade_record, "app_state_text", None) or getattr(prev_trade_record, "status", None)
+            logger.info(f"[检查失败] 步骤6-不连续交易守卫触发 (nav_date={nav_date_str}, 状态={state})")
+            continue
+        logger.info(f"[检查通过] 步骤6-不连续交易守卫 ✓ (nav_date={nav_date_str})")
+
+        # 步骤7: 当日不重复交易：检查今天是否有有效买入/定投
+        today = datetime.date.today()
+        today_trade_record = has_buy_submission_on_dates(user, sub_account_no, fund_code, today)
+        if today_trade_record:
+            state = getattr(today_trade_record, "app_state_text", None) or getattr(today_trade_record, "status", None)
+            logger.info(f"[检查失败] 步骤7-当日不重复交易触发 (today={today}, 状态={state})")
+            continue
+        logger.info(f"[检查通过] 步骤7-当日不重复交易 ✓ (today={today})")
+
         # 先尝试风向标路径（仅对风向标标的）
         if in_wind_vane:
             try:
-                # 检查步骤6: 不连续交易守卫
-                try:
-                    nav_date_str = getattr(fi, "nav_date", None)
-                    prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
-                except Exception:
-                    prev_trade_day = None
-                from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
-                stay_trade = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
-                if stay_trade:
-                    state = getattr(stay_trade, "app_state_text", None) or getattr(stay_trade, "status", None)
-                    logger.info(f"[检查失败] 步骤6-不连续交易守卫触发 (状态={state})")
-                    continue
-                logger.info(f"[检查通过] 步骤6-不连续交易守卫 ✓")
-                
                 # 为风向标路径添加额外的过滤条件记录
                 filter_checks.append("✓ 风向标基金检查通过（在风向标集合中）")
                 filter_checks.append("✓ 不连续交易守卫检查通过（无近期买入记录）")
@@ -255,25 +266,8 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                (season_growth_rate > 0.0 and (month_growth_rate < 0.0 and week_growth_rate < 0.0)):
                 logger.info(f"[检查失败] 步骤6-趋势条件不满足 (week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%, season={season_growth_rate:.2f}%)")
                 continue
-            logger.info(f"[检查通过] 步骤6-趋势条件检查 ✓ (week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%, season={season_growth_rate:.2f}%)")
+            logger.info(f"[检查通过] 趋势条件检查 ✓ (week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%, season={season_growth_rate:.2f}%)")
 
-            # 检查步骤7: 不连续交易守卫
-            try:
-                nav_date_str = getattr(fi, "nav_date", None)
-                prev_trade_day = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date() if nav_date_str else None
-            except Exception:
-                prev_trade_day = None
-            today = datetime.date.today()
-            from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
-            stay_trade = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
-            if not stay_trade:
-                stay_trade = has_buy_submission_on_dates(user, sub_account_no, fund_code, today)
-            if stay_trade:
-                state = getattr(stay_trade, "app_state_text", None) or getattr(stay_trade, "status", None)
-                logger.info(f"[检查失败] 步骤7-不连续交易守卫触发 (状态={state})")
-                continue
-            logger.info(f"[检查通过] 步骤7-不连续交易守卫 ✓")
-            
             # 为非风向标路径添加额外的过滤条件记录
             filter_checks.append(f"✓ 趋势条件检查通过（week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%, season={season_growth_rate:.2f}%）")
             filter_checks.append("✓ 不连续交易守卫检查通过（无近期买入记录）")

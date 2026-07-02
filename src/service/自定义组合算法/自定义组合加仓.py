@@ -113,6 +113,18 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                     logger.info(f"  {check}")
                 continue
             
+            # 当日不重复交易：检查今天是否有有效买入/定投
+            today = datetime.date.today()
+            today_trade_record = has_buy_submission_on_dates(user, sub_account_no, fund_code, today)
+            if today_trade_record is not None:
+                logger.info(f"跳过 {fund_name}({fund_code}): 今日({today})已存在买入/定投提交（非撤）")
+                filter_checks = []
+                filter_checks.append("✗ 当日不重复交易检查失败（今日已有交易记录）")
+                logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 未通过条件:")
+                for check in filter_checks:
+                    logger.info(f"  {check}")
+                continue
+            
             # 记录过滤条件检查结果
             filter_checks = []
 

@@ -198,7 +198,7 @@ def has_buy_submission_on_dates(user: User, sub_account_no: str, fund_code: str,
         logger.warning(f"查询基金 {fund_code} 交易记录失败（不连续守卫跳过）：{e}")
         return None
 
-    # 过滤出在 trans_date 日期0点到15:00点之间发生的交易
+    # 过滤出在 trans_date 日期0点到15:00点之间发生的交易（排除已撤单）
     filtered_trades = []
     for t in trades:
         trade_dt = _get_trade_datetime(t)
@@ -206,9 +206,10 @@ def has_buy_submission_on_dates(user: User, sub_account_no: str, fund_code: str,
             continue
         if trade_dt.date() == trans_date:
             if trade_dt.time() >= datetime.time(0, 0, 0) and trade_dt.time() <= datetime.time(15, 0, 0):
-                filtered_trades.append(t)
+                if not _is_canceled_trade(t):
+                    filtered_trades.append(t)
     
-    logger.info(f"时间过滤后: trans_date={trans_date}, 0:00-15:00时间段内的交易记录数={len(filtered_trades)}") 
+    logger.info(f"时间过滤后: trans_date={trans_date}, 0:00-15:00时间段内的有效交易记录数={len(filtered_trades)}") 
     
     if not filtered_trades:
         return None

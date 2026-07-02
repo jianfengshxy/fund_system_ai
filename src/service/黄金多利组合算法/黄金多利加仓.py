@@ -252,7 +252,8 @@ def increase_gold_funds(
             # 取对应的下单金额，优先取 payload 中配置的金额，否则用默认传参的 amount
             base_amt = payload_amt_dict.get(f_code, amount)
             # 新的加仓逻辑：小于-1.0%加仓1份，小于-3.0%加仓2倍
-            buy_multiplier = 2.0 if estimated_profit_rate < -3.0 else 1.0
+            # buy_multiplier = 2.0 if estimated_profit_rate < -3.0 else 1.0
+            buy_multiplier -= 1.0
             buy_amount = base_amt * buy_multiplier
 
             logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -1.0%，触发加仓判定")

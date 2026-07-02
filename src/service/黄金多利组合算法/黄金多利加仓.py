@@ -51,9 +51,9 @@ def increase_gold_funds(
             return default_val
 
     def _get_asset_limit_metric(asset) -> float:
+        # 只使用资产值进行上限检查，忽略浮动盈亏
         asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
-        profit_value = getattr(asset, "constant_profit", None)
-        return asset_value + _safe_float(profit_value, 0.0)
+        return asset_value
 
     # 获取子账户编号
     sub_account_no = getSubAccountNoByName(user, sub_account_name)
@@ -76,7 +76,8 @@ def increase_gold_funds(
             normalized_funds.append({
                 "fund_code": str(fund_code),
                 "amount": fund_amount,
-                "limit": _normalize_limit(item.get("limit"), 50000.0),
+                # 没有配置limit时返回None，表示不做限制
+                "limit": _normalize_limit(item.get("limit"), None),
             })
 
     # if not normalized_funds:
@@ -93,9 +94,23 @@ def increase_gold_funds(
         else:
             prev_trade_day = None
         
-        result = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
-        logger.info(f"[在途检查] 基金 {fund_code} nav_date={nav_date_str}, prev_trade_day={prev_trade_day}, 查询结果: {'有交易' if result else '无交易'}")
-        return bool(result)
+        # 步骤1: 检查上一个交易日是否有有效买入/定投
+        prev_trade_record = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
+        if prev_trade_record:
+            state = getattr(prev_trade_record, "app_state_text", None) or getattr(prev_trade_record, "status", None)
+            logger.info(f"[在途检查] 基金 {fund_code} 上一个交易日({nav_date_str})已有有效交易（状态={state}），跳过加仓")
+            return True
+        
+        # 步骤2: 检查今天是否有有效买入/定投（当日不重复交易）
+        today = datetime.date.today()
+        today_trade_record = has_buy_submission_on_dates(user, sub_account_no, fund_code, today)
+        if today_trade_record:
+            state = getattr(today_trade_record, "app_state_text", None) or getattr(today_trade_record, "status", None)
+            logger.info(f"[在途检查] 基金 {fund_code} 今日({today})已有有效交易（状态={state}），跳过加仓")
+            return True
+        
+        logger.info(f"[在途检查] 基金 {fund_code} nav_date={nav_date_str}, prev_trade_day={prev_trade_day}, 查询结果: 无交易")
+        return False
         
     def _get_fund_name(fund_code: str) -> str:
         fi = get_all_fund_info(user, fund_code)
@@ -136,31 +151,32 @@ def increase_gold_funds(
         nonlocal total_metric
 
         current_fund_metric = fund_metric_dict.get(fund_code, 0.0)
-        fund_limit = payload_limit_dict.get(fund_code, 50000.0)
+        # 只在有配置limit时进行检查，没有配置就不限制
+        fund_limit = payload_limit_dict.get(fund_code)
         projected_fund_metric = current_fund_metric + buy_amount
         projected_total_metric = total_metric + buy_amount
 
         if fund_limit is not None:
             if current_fund_metric >= fund_limit:
                 logger.info(
-                    f"基金 {fund_name}({fund_code}) 当前限制口径值 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过买入"
+                    f"基金 {fund_name}({fund_code}) 当前资产值 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过买入"
                 )
                 return False
             if projected_fund_metric > fund_limit:
                 logger.info(
-                    f"基金 {fund_name}({fund_code}) 本次买入后限制口径值预计为 {projected_fund_metric:.2f}，超过单基金上限 {fund_limit:.2f}，跳过买入"
+                    f"基金 {fund_name}({fund_code}) 本次买入后资产值预计为 {projected_fund_metric:.2f}，超过单基金上限 {fund_limit:.2f}，跳过买入"
                 )
                 return False
 
         if total_limit is not None:
             if total_metric >= total_limit:
                 logger.info(
-                    f"组合 {sub_account_name} 当前限制口径值 {total_metric:.2f} 已达到组合上限 {total_limit:.2f}，跳过买入 {fund_name}({fund_code})"
+                    f"组合 {sub_account_name} 当前资产值 {total_metric:.2f} 已达到组合上限 {total_limit:.2f}，跳过买入 {fund_name}({fund_code})"
                 )
                 return False
             if projected_total_metric > total_limit:
                 logger.info(
-                    f"组合 {sub_account_name} 本次买入后限制口径值预计为 {projected_total_metric:.2f}，超过组合上限 {total_limit:.2f}，跳过买入 {fund_name}({fund_code})"
+                    f"组合 {sub_account_name} 本次买入后资产值预计为 {projected_total_metric:.2f}，超过组合上限 {total_limit:.2f}，跳过买入 {fund_name}({fund_code})"
                 )
                 return False
 
@@ -179,9 +195,10 @@ def increase_gold_funds(
         
         # 最先校验单个基金的资产是否已超过限制，超过则跳过该基金
         current_fund_metric = fund_metric_dict.get(f_code, 0.0)
-        fund_limit = payload_limit_dict.get(f_code, 50000.0)
+        # 只在有配置limit时进行检查，没有配置就不限制
+        fund_limit = payload_limit_dict.get(f_code)
         if fund_limit is not None and current_fund_metric >= fund_limit:
-            logger.info(f"基金 {f_name}({f_code}) 当前资产 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过初始化建仓")
+            logger.info(f"基金 {f_name}({f_code}) 当前资产值 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过初始化建仓")
             continue
 
         if f_code not in asset_dict:
@@ -208,9 +225,10 @@ def increase_gold_funds(
         
         # 最先校验单个基金的资产是否已超过限制，超过则跳过该基金
         current_fund_metric = fund_metric_dict.get(f_code, 0.0)
-        fund_limit = payload_limit_dict.get(f_code, 50000.0)
+        # 只在有配置limit时进行检查，没有配置就不限制
+        fund_limit = payload_limit_dict.get(f_code)
         if fund_limit is not None and current_fund_metric >= fund_limit:
-            logger.info(f"持仓基金 {f_name}({f_code}) 当前资产 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过加仓")
+            logger.info(f"持仓基金 {f_name}({fund_code}) 当前资产值 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过加仓")
             continue
 
         if _has_pending_trade(f_code):
@@ -226,9 +244,15 @@ def increase_gold_funds(
         logger.info(f"持仓基金 {f_name}({f_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%")
 
         if estimated_profit_rate < -1.0:
+            # 检查是否跌幅过大（小于-5.0%），如果是则跳过加仓，防止单边下跌
+            if estimated_profit_rate < -5.0:
+                logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，跌幅过大，暂停加仓等待反弹")
+                continue
+            
             # 取对应的下单金额，优先取 payload 中配置的金额，否则用默认传参的 amount
             base_amt = payload_amt_dict.get(f_code, amount)
-            buy_multiplier = 2.0 if estimated_profit_rate < -5.0 else 1.0
+            # 新的加仓逻辑：小于-1.0%加仓1份，小于-3.0%加仓2倍
+            buy_multiplier = 2.0 if estimated_profit_rate < -3.0 else 1.0
             buy_amount = base_amt * buy_multiplier
 
             logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -1.0%，触发加仓判定")
@@ -265,7 +289,7 @@ if __name__ == "__main__":
         # 2. 设置测试参数
         test_sub_account = "智投平台"
         test_amount = 2000.0
-        test_total_limit = 200000.0
+        test_total_limit = 500000.0
         test_fund_list = [ 
             { 
                 "fund_code": "011707", 

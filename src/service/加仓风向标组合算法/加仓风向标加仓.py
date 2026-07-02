@@ -308,7 +308,8 @@ if __name__ == "__main__":
         user = DEFAULT_USER
         # user = get_user_all_info("13500819290","guojing1985")
         # 执行加仓操作
-        increase_funds(user, "飞龙在天",1000000.0, None, 'non_index')  # 使用 DEFAULT_USER，并假设参数合适
+        # increase_funds(user, "飞龙在天",1000000.0, None, 'non_index')  # 使用 DEFAULT_USER，并假设参数合适
+        increase_funds(user, "马丁格尔plus",1000000.0, None, 'index')  # 使用 DEFAULT_USER，并假设参数合适
         logging.info(f"用户 {user.customer_name} 加仓操作完成")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

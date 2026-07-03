@@ -50,7 +50,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
     logger.info(f"组合中共有 {fund_count} 个基金资产")
     
     # 引入费率份额查询（函数内导入，避免顶部改动）
-    from src.service.交易管理.费率查询 import get_low_fee_shares
+    from src.service.交易管理.费率查询 import get_low_fee_shares, get_0_fee_shares
     
     success_count = 0
 
@@ -142,19 +142,19 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             try:
                 shares = get_bank_shares(user, sub_account_no, fund_code)
                 
-                low_fee_shares = _safe_float(get_low_fee_shares(user, fund_code), 0.0)
-                if low_fee_shares > 10.0:
+                zero_fee_shares = _safe_float(get_0_fee_shares(user, fund_code), 0.0)
+                if zero_fee_shares > 10.0:
                     logger.info(
                         f"{user.customer_name} 分层止盈(rank_100>90)：{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% "
-                        f"止盈点={stop_rate:.2f}% 波动率={volatility:.2f} 100日排名={rank_100} 低费率份额={low_fee_shares:.2f}，执行卖出低费率份额"
+                        f"止盈点={stop_rate:.2f}% 波动率={volatility:.2f} 100日排名={rank_100} 0费率份额={zero_fee_shares:.2f}，执行卖出0费率份额"
                     )
                     redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))
                     if redeem_ok:
                         success_count += 1
                     else:
-                        logger.info(f"{user.customer_name} 低费率止盈未成功：{fund_name}({fund_code})")
+                        logger.info(f"{user.customer_name} 0费率止盈未成功：{fund_name}({fund_code})")
                 else:
-                    logger.info(f"跳过分层止盈：{fund_name}({fund_code}) 低费率份额≤10 ({low_fee_shares:.2f})")
+                    logger.info(f"跳过分层止盈：{fund_name}({fund_code}) 0费率份额≤10 ({zero_fee_shares:.2f})")
           
             except Exception as e:
                 logger.error(f"止盈失败：{fund_name}({fund_code}) 异常={e}")

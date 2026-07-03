@@ -709,7 +709,11 @@ def increase_gold_portfolio(event, context):
                         name_val = item.get("shortname") or item.get("fname") or item.get("FundName") or item.get("fund_name") or item.get("name")
                         if not code:
                             continue
-                        built_list.append({"fund_code": code, "fund_name": name_val, "amount": amount})
+                        # 获取基金amount，遵循优先级规则：
+                        # 1. 如果基金有自己的amount配置，使用它
+                        # 2. 否则使用组合级别的amount值
+                        fund_amount = item.get("amount", amount)
+                        built_list.append({"fund_code": code, "fund_name": name_val, "amount": fund_amount})
                     if built_list:
                         fund_list = built_list
                         logger.info(f"[多利组合] 未传 fund_list，已从同名自选组合 {sub_account_name} 构建候选基金数: {len(fund_list)}", extra=extra)

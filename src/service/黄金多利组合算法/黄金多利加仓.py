@@ -70,6 +70,9 @@ def increase_gold_funds(
             if not fund_code:
                 continue
             try:
+                # 获取基金买入金额，遵循优先级规则：
+                # 1. 基金级别的amount优先级最高（在item中配置）
+                # 2. 如果没有基金级别的amount，则使用组合级别的amount（函数参数amount）
                 fund_amount = float(item.get("amount", amount))
             except Exception:
                 fund_amount = amount
@@ -243,19 +246,41 @@ def increase_gold_funds(
         
         logger.info(f"持仓基金 {f_name}({f_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%")
 
-        if estimated_profit_rate < -1.0:
+        # 获取当前资产值和该基金的买入金额
+        current_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
+        # 获取该基金的买入金额，遵循优先级规则：
+        # 1. 基金级别的amount优先级最高（在fund_list中配置）
+        # 2. 如果没有基金级别的amount，则使用组合级别的amount（函数参数amount）
+        # payload_amt_dict是从normalized_funds构建的，已经遵循了这个优先级
+        base_amt = payload_amt_dict.get(f_code, amount)
+        
+        # 检查是否满足加仓条件：
+        # 1. 如果当前资产值 <= 买入金额（可能是因为限购导致持仓不足），则允许加仓（忽略-1%过滤器）
+        # 2. 否则，需要满足预估收益率 < -1.0% 的条件
+        should_increase = False
+        increase_reason = ""
+        
+        if current_asset_value <= base_amt:
+            # 持有资产小于或等于一次性买入量，可能是因为限购，允许加仓
+            should_increase = True
+            increase_reason = f"持仓资产({current_asset_value:.2f}) <= 买入金额({base_amt:.2f})，可能因限购导致持仓不足"
+        elif estimated_profit_rate < -1.0:
+            # 满足原来的-1%过滤器条件
+            should_increase = True
+            increase_reason = f"预估收益率({estimated_profit_rate:.2f}%) < -1.0%"
+        
+        if should_increase:
+            logger.info(f"持仓基金 {f_name}({f_code}) {increase_reason}，触发加仓判定")
+            
             # 检查是否跌幅过大（小于-5.0%），如果是则跳过加仓，防止单边下跌
             if estimated_profit_rate < -5.0:
                 logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，跌幅过大，暂停加仓等待反弹")
                 continue
             
-            # 取对应的下单金额，优先取 payload 中配置的金额，否则用默认传参的 amount
-            base_amt = payload_amt_dict.get(f_code, amount)
             # 新的加仓逻辑：小于-1.0%加仓1份，小于-4.0%加仓2倍
             buy_multiplier = 2.0 if estimated_profit_rate < -4.0 else 1.0
             buy_amount = base_amt * buy_multiplier
 
-            logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -1.0%，触发加仓判定")
             logger.info(f"满足加仓条件，准备买入 {f_name}({f_code}) 金额: {buy_amount}")
 
             if not _can_submit_buy(f_code, f_name, buy_amount):
@@ -270,7 +295,7 @@ def increase_gold_funds(
             else:
                 logger.info(f"加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")
         else:
-            logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% >= -1.0%，不满足加仓条件")
+            logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% >= -1.0%，且持仓资产({current_asset_value:.2f}) > 买入金额({base_amt:.2f})，不满足加仓条件")
 
 
     if not buy_triggered:
@@ -288,7 +313,7 @@ if __name__ == "__main__":
         
         # 2. 设置测试参数
         test_sub_account = "智投平台"
-        test_amount = 2000.0
+        test_amount = 10000.0
         test_total_limit = 500000.0
         test_fund_list = [ 
             { 

@@ -834,7 +834,7 @@ if __name__ == "__main__":
             print(f"Error invoking {name}: {e}")
 
     # 1. fixed_ratio_redeem
-    p_fixed = '{"account": "13918199137", "password": "sWX15706", "fundcodelist": [{"fundcode":"021740","stoprate":"1.0"}]}'
+    p_fixed = '{"account": "13918199137", "password": "sWX15706", "fundcodelist": [{"fundcode":"021740","stoprate":"1.0","periodtype":"1"}]}'
     # invoke(fixed_ratio_redeem, p_fixed, "fixed_ratio_redeem")
 
     # 2. add_new_jianlong

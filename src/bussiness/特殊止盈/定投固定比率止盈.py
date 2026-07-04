@@ -3,7 +3,7 @@ import sys
 import logging
 import yaml
 import json
-from typing import List, Dict
+from typing import Dict
 
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -63,6 +63,10 @@ def process_fixed_ratio_redeem(user: User, config: Dict):
     for fund_item in fund_list:
         fund_code = fund_item.get('fundcode')
         stop_rate_str = fund_item.get('stoprate')
+        target_period_type = fund_item.get('periodtype')
+        if target_period_type is None:
+            target_period_type = fund_item.get('periodType')
+        target_period_type = str(target_period_type).strip() if target_period_type is not None else ""
         
         if not fund_code or not stop_rate_str:
             logger.warning(f"配置项缺失: {fund_item}")
@@ -83,27 +87,29 @@ def process_fixed_ratio_redeem(user: User, config: Dict):
                 logger.info(f"基金 {fund_code} 没有找到定投计划")
                 continue
 
-            # 过滤出周定投计划
-            plans = []
-            for plan in all_plans:
-                try:
-                    # 查询定投计划详情以获取准确的周期类型
-                    # 列表接口返回的 periodType 往往为 0，必须通过详情接口获取
-                    detail_resp = getPlanDetailPro(plan.planId, user)
-                    if detail_resp.Success and detail_resp.Data and detail_resp.Data.rationPlan:
-                        ration_plan = detail_resp.Data.rationPlan
-                        # periodType: 1-周
-                        if str(ration_plan.periodType) == "1":
-                            plans.append(plan)
-                            # logger.info(f"计划 {plan.planId} 确认为周定投")
-                        # else:
-                        #     logger.info(f"计划 {plan.planId} 周期类型为 {ration_plan.periodType}，跳过")
-                    else:
-                        logger.warning(f"无法获取计划 {plan.planId} 的详情，跳过")
-                except Exception as e:
-                    logger.error(f"获取计划 {plan.planId} 详情失败: {e}")
+            # 未传 periodtype 时，默认处理该基金全部周期的定投计划
+            if not target_period_type:
+                plans = all_plans
+                logger.info(f"基金 {fund_code} 未指定 periodtype，默认处理全部 {len(plans)} 个定投计划")
+            else:
+                plans = []
+                for plan in all_plans:
+                    try:
+                        # 查询定投计划详情以获取准确的周期类型
+                        # 列表接口返回的 periodType 往往为 0，必须通过详情接口获取
+                        detail_resp = getPlanDetailPro(plan.planId, user)
+                        if detail_resp.Success and detail_resp.Data and detail_resp.Data.rationPlan:
+                            ration_plan = detail_resp.Data.rationPlan
+                            if str(ration_plan.periodType) == target_period_type:
+                                plans.append(plan)
+                        else:
+                            logger.warning(f"无法获取计划 {plan.planId} 的详情，跳过")
+                    except Exception as e:
+                        logger.error(f"获取计划 {plan.planId} 详情失败: {e}")
 
-            logger.info(f"基金 {fund_code} 共找到 {len(all_plans)} 个计划，其中周定投计划 {len(plans)} 个")
+                logger.info(
+                    f"基金 {fund_code} 共找到 {len(all_plans)} 个计划，按 periodtype={target_period_type} 过滤后剩余 {len(plans)} 个"
+                )
             
             if not plans:
                 continue

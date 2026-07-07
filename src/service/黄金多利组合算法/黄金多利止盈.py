@@ -50,7 +50,7 @@ def redeem_gold_funds(user: User, sub_account_name: str, fund_list: Optional[Lis
         fund_type = getattr(fund_info, "fund_type", None)
         volatility = _safe_float(getattr(fund_info, "volatility", None), 0.0)
         if fund_type == "000":
-            return min(max(volatility, 3.0), 10.0)
+            return min(max(volatility, 5.0), 10.0)
         return min(max(volatility, 5.0), 15.0)
 
     fund_stop_rate = None

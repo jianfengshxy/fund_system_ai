@@ -176,4 +176,5 @@ if __name__ == '__main__':
         with open('templates/index.html', 'w') as f:
             f.write('<html><body><h1>请填充模板内容</h1></body></html>')
             
-    app.run(debug=True, port=9000)
+    # 生产环境绑定 0.0.0.0，函数计算自定义运行时要求监听所有网络接口
+    app.run(host='0.0.0.0', port=9000)

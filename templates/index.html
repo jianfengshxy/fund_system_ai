@@ -40,35 +40,43 @@
         .text-green { color: #52c41a; }
     </style>
 </head>
-<body class="flex flex-col h-screen bg-[#f0f2f5] font-sans text-gray-800 text-sm overflow-hidden">
+<body class="flex flex-col h-screen bg-[#f0f2f5] font-sans text-gray-800 text-sm overflow-hidden relative">
     <!-- 顶部导航栏 -->
-    <header class="h-14 bg-brand text-white flex items-center justify-between px-6 shrink-0 shadow-md z-10">
+    <header class="h-14 bg-brand text-white flex items-center justify-between px-4 md:px-6 shrink-0 shadow-md z-30">
         <div class="flex items-center gap-4">
+            <!-- 移动端菜单按钮 -->
+            <button id="mobile-menu-btn" class="md:hidden p-1 hover:bg-white/10 rounded transition">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+            </button>
             <div class="font-bold text-lg flex items-center gap-2">
-                <!-- 类似公司Logo的占位 -->
                 <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                <span>仪表盘</span>
+                <span class="hidden sm:inline">仪表盘</span>
             </div>
         </div>
-        <div class="flex items-center gap-6 text-sm">
-            <span class="text-white/80">测试环境</span>
+        <div class="flex items-center gap-4 md:gap-6 text-sm">
+            <span class="text-white/80 hidden xs:inline">测试环境</span>
             <div class="flex items-center gap-2 cursor-pointer hover:bg-white/10 px-2 py-1 rounded transition">
                 <div class="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-xs">U</div>
-                <span>User</span>
+                <span class="hidden sm:inline">User</span>
             </div>
         </div>
     </header>
 
-    <div class="flex flex-1 overflow-hidden">
+    <div class="flex flex-1 overflow-hidden relative">
+        <!-- 移动端遮罩层 -->
+        <div id="mobile-overlay" class="fixed inset-0 bg-black/50 z-20 hidden md:hidden transition-opacity"></div>
+
         <!-- 左侧边栏 -->
-        <aside class="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0 shadow-[2px_0_8px_rgba(0,0,0,0.05)] z-0">
+        <aside id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 flex flex-col shrink-0 shadow-xl md:shadow-[2px_0_8px_rgba(0,0,0,0.05)] z-20 transform -translate-x-full md:translate-x-0 md:static transition-transform duration-300 ease-in-out">
             <div class="px-4 py-3 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center cursor-pointer">
                 <span class="font-medium text-gray-700">我的组合</span>
-                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                <button id="close-sidebar" class="md:hidden p-1 text-gray-400 hover:text-gray-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
             </div>
             <nav class="flex-1 overflow-y-auto py-2 px-2 flex flex-col gap-1" id="sidebar-nav">
                 {% for portfolio in portfolios %}
-                <button onclick="loadPortfolio('{{ portfolio.sub_account_name }}')" 
+                <button onclick="handlePortfolioSelect('{{ portfolio.sub_account_name }}')" 
                         class="portfolio-btn w-full text-left px-4 py-2.5 rounded transition-all flex items-center justify-between group 
                         {% if portfolio.sub_account_name == selected_portfolio_name %}bg-brand-light text-brand font-medium border-r-2 border-brand{% else %}text-gray-600 hover:bg-brand-light/50 hover:text-brand{% endif %}"
                         data-name="{{ portfolio.sub_account_name }}">
@@ -80,16 +88,16 @@
         </aside>
 
         <!-- 主内容区 -->
-        <main class="flex-1 overflow-y-auto p-6 flex flex-col gap-5">
+        <main class="flex-1 overflow-y-auto p-3 md:p-6 flex flex-col gap-4 md:gap-5">
             <!-- 页面标题 & 操作区 -->
-            <div class="flex justify-between items-center">
+            <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                 <div class="flex items-center gap-2">
-                    <span class="text-lg font-medium text-gray-800" id="current-portfolio-name">{{ selected_portfolio_name }}</span>
-                    <span class="px-2 py-0.5 rounded bg-brand-light text-brand text-xs border border-brand/20">当前选中</span>
+                    <span class="text-lg font-medium text-gray-800 truncate max-w-[200px] sm:max-w-none" id="current-portfolio-name">{{ selected_portfolio_name }}</span>
+                    <span class="px-2 py-0.5 rounded bg-brand-light text-brand text-xs border border-brand/20 shrink-0">当前选中</span>
                 </div>
-                <div class="flex gap-3">
-                    <button class="px-4 py-1.5 bg-white border border-gray-300 text-gray-600 rounded shadow-sm hover:text-brand hover:border-brand transition text-sm">重置</button>
-                    <button onclick="loadPortfolio(document.getElementById('current-portfolio-name').textContent)" class="px-4 py-1.5 bg-brand text-white rounded shadow-sm hover:bg-brand-dark transition flex items-center gap-1 text-sm">
+                <div class="flex gap-2 sm:gap-3">
+                    <button class="flex-1 sm:flex-none px-4 py-1.5 bg-white border border-gray-300 text-gray-600 rounded shadow-sm hover:text-brand hover:border-brand transition text-sm">重置</button>
+                    <button onclick="loadPortfolio(document.getElementById('current-portfolio-name').textContent)" class="flex-1 sm:flex-none px-4 py-1.5 bg-brand text-white rounded shadow-sm hover:bg-brand-dark transition flex items-center justify-center gap-1 text-sm whitespace-nowrap">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
                         刷新数据
                     </button>
@@ -97,34 +105,33 @@
             </div>
 
             <!-- 数据概览卡片 -->
-            <div class="bg-white rounded-md shadow-sm border border-gray-100 p-5">
-                <div class="grid grid-cols-4 gap-6" id="summary-panel">
-                    <div class="col-span-4 text-center text-gray-400 py-6">正在加载组合数据...</div>
+            <div class="bg-white rounded-md shadow-sm border border-gray-100 p-4 md:p-5">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6" id="summary-panel">
+                    <div class="col-span-full text-center text-gray-400 py-6">正在加载组合数据...</div>
                 </div>
             </div>
 
             <!-- 数据表格区 -->
-            <div class="bg-white rounded-md shadow-sm border border-gray-100 flex-1 flex flex-col min-h-[400px]">
-                <div class="px-5 py-3 border-b border-gray-100 flex justify-between items-center bg-white rounded-t-md">
+            <div class="bg-white rounded-md shadow-sm border border-gray-100 flex-1 flex flex-col min-h-[300px] md:min-h-[400px]">
+                <div class="px-4 md:px-5 py-3 border-b border-gray-100 flex justify-between items-center bg-white rounded-t-md">
                     <h3 class="font-medium text-gray-800">数据明细</h3>
                     <div class="flex gap-2">
-                        <!-- 类似截图中的工具栏按钮 -->
                         <button class="p-1.5 text-gray-400 hover:text-brand hover:bg-brand-light rounded transition" title="刷新"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg></button>
                         <button class="p-1.5 text-gray-400 hover:text-brand hover:bg-brand-light rounded transition" title="设置"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg></button>
                     </div>
                 </div>
                 <div class="flex-1 overflow-auto">
-                    <table class="w-full text-left border-collapse whitespace-nowrap">
+                    <table class="w-full text-left border-collapse whitespace-nowrap min-w-[800px] md:min-w-0">
                         <thead class="bg-[#fafafa] text-gray-600 sticky top-0 z-10">
                             <tr>
-                                <th class="py-3 px-5 font-medium text-xs border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('fund_name')">基金名称 <span id="sort-icon-fund_name" class="inline-block w-3 text-center text-gray-400"></span></th>
-                                <th class="py-3 px-5 font-medium text-xs border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('fund_code')">基金代码 <span id="sort-icon-fund_code" class="inline-block w-3 text-center text-gray-400"></span></th>
-                                <th class="py-3 px-5 font-medium text-xs border-b border-gray-200 text-right cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('asset_value')">资产市值 (元) <span id="sort-icon-asset_value" class="inline-block w-3 text-center text-gray-400"></span></th>
-                                <th class="py-3 px-5 font-medium text-xs border-b border-gray-200 text-right cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('constant_profit')">持有收益 (元) <span id="sort-icon-constant_profit" class="inline-block w-3 text-center text-gray-400"></span></th>
-                                <th class="py-3 px-5 font-medium text-xs border-b border-gray-200 text-right cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('constant_profit_rate')">持有收益率 <span id="sort-icon-constant_profit_rate" class="inline-block w-3 text-center text-gray-400"></span></th>
-                                <th class="py-3 px-5 font-medium text-xs border-b border-gray-200 text-right cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('estimated_profit')">今日估算收益 (元) <span id="sort-icon-estimated_profit" class="inline-block w-3 text-center text-gray-400"></span></th>
-                                <th class="py-3 px-5 font-medium text-xs border-b border-gray-200 text-right cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('estimated_change')">今日估值增长率 <span id="sort-icon-estimated_change" class="inline-block w-3 text-center text-gray-400"></span></th>
-                                <th class="py-3 px-5 font-medium text-xs border-b border-gray-200 text-right cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('est_total_rate')">预估总收益率 <span id="sort-icon-est_total_rate" class="inline-block w-3 text-center text-gray-400"></span></th>
+                                <th class="py-3 px-4 md:px-5 font-medium text-xs border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('fund_name')">基金名称 <span id="sort-icon-fund_name" class="inline-block w-3 text-center text-gray-400"></span></th>
+                                <th class="py-3 px-4 md:px-5 font-medium text-xs border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('fund_code')">基金代码 <span id="sort-icon-fund_code" class="inline-block w-3 text-center text-gray-400"></span></th>
+                                <th class="py-3 px-4 md:px-5 font-medium text-xs border-b border-gray-200 text-right cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('asset_value')">资产市值 (元) <span id="sort-icon-asset_value" class="inline-block w-3 text-center text-gray-400"></span></th>
+                                <th class="py-3 px-4 md:px-5 font-medium text-xs border-b border-gray-200 text-right cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('constant_profit')">持有收益 (元) <span id="sort-icon-constant_profit" class="inline-block w-3 text-center text-gray-400"></span></th>
+                                <th class="py-3 px-4 md:px-5 font-medium text-xs border-b border-gray-200 text-right cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('constant_profit_rate')">持有收益率 <span id="sort-icon-constant_profit_rate" class="inline-block w-3 text-center text-gray-400"></span></th>
+                                <th class="py-3 px-4 md:px-5 font-medium text-xs border-b border-gray-200 text-right cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('estimated_profit')">今日估算收益 (元) <span id="sort-icon-estimated_profit" class="inline-block w-3 text-center text-gray-400"></span></th>
+                                <th class="py-3 px-4 md:px-5 font-medium text-xs border-b border-gray-200 text-right cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('estimated_change')">今日估值增长率 <span id="sort-icon-estimated_change" class="inline-block w-3 text-center text-gray-400"></span></th>
+                                <th class="py-3 px-4 md:px-5 font-medium text-xs border-b border-gray-200 text-right cursor-pointer hover:bg-gray-100 transition select-none" onclick="handleSort('est_total_rate')">预估总收益率 <span id="sort-icon-est_total_rate" class="inline-block w-3 text-center text-gray-400"></span></th>
                             </tr>
                         </thead>
                         <tbody id="portfolio-table-body" class="text-gray-600">
@@ -133,7 +140,7 @@
                     </table>
                 </div>
                 <!-- 底部状态栏 -->
-                <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-between items-center text-xs text-gray-500 rounded-b-md">
+                <div class="px-4 md:px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-between items-center text-xs text-gray-500 rounded-b-md">
                     <span id="table-footer-info">共 0 项数据</span>
                     <span></span>
                 </div>
@@ -142,6 +149,29 @@
     </div>
 
     <script>
+        // 侧边栏控制逻辑
+        const sidebar = document.getElementById('sidebar');
+        const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+        const closeSidebarBtn = document.getElementById('close-sidebar');
+        const mobileOverlay = document.getElementById('mobile-overlay');
+
+        function toggleSidebar() {
+            sidebar.classList.toggle('-translate-x-full');
+            mobileOverlay.classList.toggle('hidden');
+        }
+
+        mobileMenuBtn.addEventListener('click', toggleSidebar);
+        closeSidebarBtn.addEventListener('click', toggleSidebar);
+        mobileOverlay.addEventListener('click', toggleSidebar);
+
+        function handlePortfolioSelect(name) {
+            loadPortfolio(name);
+            // 如果是移动端，选择后自动关闭侧边栏
+            if (window.innerWidth < 768) {
+                toggleSidebar();
+            }
+        }
+
         const selectedPortfolioName = "{{ selected_portfolio_name }}";
         
         let portfolioData = [];
@@ -215,14 +245,14 @@
                 
                 return `
                     <tr class="hover:bg-brand-light/30 transition-colors border-b border-gray-50 last:border-0">
-                        <td class="py-3 px-5 text-gray-800">${item.fund_name || '-'}</td>
-                        <td class="py-3 px-5 text-gray-500">${item.fund_code || '-'}</td>
-                        <td class="py-3 px-5 text-right font-medium">${formatNumber(assetVal)}</td>
-                        <td class="py-3 px-5 text-right font-medium ${formatColorClass(holdProfit)}">${formatPrefix(holdProfit)}${formatNumber(holdProfit)}</td>
-                        <td class="py-3 px-5 text-right font-medium ${formatColorClass(holdProfitRate)}">${formatPrefix(holdProfitRate)}${formatNumber(holdProfitRate)}%</td>
-                        <td class="py-3 px-5 text-right font-medium ${formatColorClass(estProfit)}">${formatPrefix(estProfit)}${formatNumber(estProfit)}</td>
-                        <td class="py-3 px-5 text-right font-medium ${formatColorClass(estChange)}">${formatPrefix(estChange)}${formatNumber(estChange)}%</td>
-                        <td class="py-3 px-5 text-right font-medium ${formatColorClass(estTotalRate)}">${formatPrefix(estTotalRate)}${formatNumber(estTotalRate)}%</td>
+                        <td class="py-3 px-4 md:px-5 text-gray-800">${item.fund_name || '-'}</td>
+                        <td class="py-3 px-4 md:px-5 text-gray-500">${item.fund_code || '-'}</td>
+                        <td class="py-3 px-4 md:px-5 text-right font-medium">${formatNumber(assetVal)}</td>
+                        <td class="py-3 px-4 md:px-5 text-right font-medium ${formatColorClass(holdProfit)}">${formatPrefix(holdProfit)}${formatNumber(holdProfit)}</td>
+                        <td class="py-3 px-4 md:px-5 text-right font-medium ${formatColorClass(holdProfitRate)}">${formatPrefix(holdProfitRate)}${formatNumber(holdProfitRate)}%</td>
+                        <td class="py-3 px-4 md:px-5 text-right font-medium ${formatColorClass(estProfit)}">${formatPrefix(estProfit)}${formatNumber(estProfit)}</td>
+                        <td class="py-3 px-4 md:px-5 text-right font-medium ${formatColorClass(estChange)}">${formatPrefix(estChange)}${formatNumber(estChange)}%</td>
+                        <td class="py-3 px-4 md:px-5 text-right font-medium ${formatColorClass(estTotalRate)}">${formatPrefix(estTotalRate)}${formatNumber(estTotalRate)}%</td>
                     </tr>
                 `;
             }).join('');
@@ -257,7 +287,7 @@
             });
             
             document.getElementById('current-portfolio-name').textContent = name;
-            document.getElementById('summary-panel').innerHTML = '<div class="col-span-4 text-center text-gray-400 py-6"><div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-brand mb-2"></div><br>加载中...</div>';
+            document.getElementById('summary-panel').innerHTML = '<div class="col-span-full text-center text-gray-400 py-6"><div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-brand mb-2"></div><br>加载中...</div>';
             document.getElementById('portfolio-table-body').innerHTML = '<tr><td colspan="8" class="py-12 text-center text-gray-400"><div class="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-brand"></div></td></tr>';
             document.getElementById('table-footer-info').textContent = '加载中...';
 
@@ -266,7 +296,7 @@
                 .then(data => {
                     if (data.error) {
                         document.getElementById('portfolio-table-body').innerHTML = `<tr><td colspan="8" class="py-12 text-center text-red-500">加载失败: ${data.error}</td></tr>`;
-                        document.getElementById('summary-panel').innerHTML = '<div class="col-span-4 text-center text-red-500 py-6">数据加载失败</div>';
+                        document.getElementById('summary-panel').innerHTML = '<div class="col-span-full text-center text-red-500 py-6">数据加载失败</div>';
                         document.getElementById('table-footer-info').textContent = '加载失败';
                         return;
                     }
@@ -275,21 +305,21 @@
 
                     // 更新概览面板
                     const summaryHtml = `
-                        <div class="flex flex-col gap-1.5">
+                        <div class="flex flex-col gap-1.5 p-2 sm:p-0">
                             <span class="text-xs text-gray-500 font-medium">总资产 (元)</span>
-                            <span class="text-2xl font-bold text-gray-800">${formatNumber(data.total_assets)}</span>
+                            <span class="text-xl md:text-2xl font-bold text-gray-800">${formatNumber(data.total_assets)}</span>
                         </div>
-                        <div class="flex flex-col gap-1.5 pl-6 border-l border-gray-100">
+                        <div class="flex flex-col gap-1.5 p-2 sm:p-0 sm:pl-6 sm:border-l border-gray-100">
                             <span class="text-xs text-gray-500 font-medium">持有总收益 (元)</span>
-                            <span class="text-2xl font-bold ${formatColorClass(data.total_profit)}">${formatPrefix(data.total_profit)}${formatNumber(data.total_profit)}</span>
+                            <span class="text-xl md:text-2xl font-bold ${formatColorClass(data.total_profit)}">${formatPrefix(data.total_profit)}${formatNumber(data.total_profit)}</span>
                         </div>
-                        <div class="flex flex-col gap-1.5 pl-6 border-l border-gray-100">
+                        <div class="flex flex-col gap-1.5 p-2 sm:p-0 sm:pl-6 sm:border-l border-gray-100">
                             <span class="text-xs text-gray-500 font-medium">今日估算收益 (元)</span>
-                            <span class="text-2xl font-bold ${formatColorClass(estProfitValue)}">${formatPrefix(estProfitValue)}${formatNumber(estProfitValue)}</span>
+                            <span class="text-xl md:text-2xl font-bold ${formatColorClass(estProfitValue)}">${formatPrefix(estProfitValue)}${formatNumber(estProfitValue)}</span>
                         </div>
-                        <div class="flex flex-col gap-1.5 pl-6 border-l border-gray-100">
+                        <div class="flex flex-col gap-1.5 p-2 sm:p-0 sm:pl-6 sm:border-l border-gray-100">
                             <span class="text-xs text-gray-500 font-medium">整体估值增长率</span>
-                            <span class="text-2xl font-bold ${formatColorClass(data.estimated_portfolio_change_ratio)}">${formatPrefix(data.estimated_portfolio_change_ratio)}${formatNumber(data.estimated_portfolio_change_ratio)}%</span>
+                            <span class="text-xl md:text-2xl font-bold ${formatColorClass(data.estimated_portfolio_change_ratio)}">${formatPrefix(data.estimated_portfolio_change_ratio)}${formatNumber(data.estimated_portfolio_change_ratio)}%</span>
                         </div>
                     `;
                     document.getElementById('summary-panel').innerHTML = summaryHtml;

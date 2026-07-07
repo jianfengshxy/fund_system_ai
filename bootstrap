@@ -1,0 +1,33 @@
+#!/bin/bash
+set -e
+
+# 设置变量
+MIRROR_URL="https://mirrors.aliyun.com/pypi/simple/"
+TRUSTED_HOST="mirrors.aliyun.com"
+INSTALL_DIR="/tmp/python"
+
+echo "Step 1: Preparing installation directory..."
+mkdir -p $INSTALL_DIR
+
+echo "Step 2: Bootstrap pip (via get-pip.py)..."
+# custom.debian11 运行时的 Python 是最简版（3.9），无 pip 也无 ensurepip
+# 从官方源下载对应 Python 3.9 版本的 get-pip.py 来安装 pip
+GETPIP_PATH="/tmp/get-pip.py"
+curl -sSLo $GETPIP_PATH https://bootstrap.pypa.io/pip/3.9/get-pip.py
+python3 $GETPIP_PATH -i $MIRROR_URL --trusted-host $TRUSTED_HOST -q
+
+echo "Step 3: Installing dependencies..."
+# 安装核心依赖到 /tmp/python
+python3 -m pip install -r /code/requirements.txt -t $INSTALL_DIR \
+    -i $MIRROR_URL \
+    --trusted-host $TRUSTED_HOST \
+    --timeout 120 \
+    --no-cache-dir \
+    -q
+
+echo "Step 4: Starting Flask application..."
+# 设置 PYTHONPATH，包含依赖目录和代码目录
+export PYTHONPATH=$INSTALL_DIR:/code:/code/src:$PYTHONPATH
+
+# 启动 Flask 应用
+python3 /code/app.py

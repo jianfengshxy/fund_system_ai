@@ -112,7 +112,6 @@ Icon
 # IDE and Editor
 .idea/
 .vscode/
-.trae/
 
 # Cloud Drive Temp
 .tmp.drivedownload/

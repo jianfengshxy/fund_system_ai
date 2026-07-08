@@ -622,3 +622,13 @@ resources:
             payload: ${vars.common.props.triggerConfig.payload}
             cronExpression: "CRON_TZ=Asia/Shanghai 0 30 21 * * 1-5"
             enable: ${vars.common.props.triggerConfig.enable}
+
+#  frontend:
+#    component: oss
+#    props:
+#      bucket: fund-system-bucket
+#      region: cn-shanghai
+#      acl: public-read
+#      codeUri: ./frontend/dist
+#      index: index.html
+#      error: index.html

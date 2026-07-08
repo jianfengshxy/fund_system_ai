@@ -1,28 +1,10 @@
-# VCS / IDE
+frontend/
+templates/
 .git/
-.gitignore
 .vscode/
-.idea/
-.DS_Store
-
-# Python
-venv/
-.venv/
+node_modules/
 __pycache__/
 *.pyc
-.pytest_cache/
-.mypy_cache/
-.coverage
-
-# Node / Build
-node_modules/
+.env
+.env.production
 dist/
-build/
-.s/
-
-# Tests / Logs / Data
-test/
-tests/
-logs/
-*.log
-*.tmp

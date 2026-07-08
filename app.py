@@ -4,6 +4,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, jsonify
+from flask_cors import CORS
 
 # 将项目根目录和src目录添加到sys.path
 root_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,11 +17,13 @@ from src.API.组合管理.SubAccountMrg import getSubAccountList, getSubAssetMul
 from src.domain.sub_account.sub_account import SubAccount
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
 from src.API.基金信息.FundInfo import getFundInfo, updateFundEstimatedValue
+from src.API.基金信息.FundRank import get_fund_volatility, get_nav_rank
 from src.domain.fund.fund_info import FundInfo
 from src.API.登录接口.login import ensure_user_fresh
 
 # 初始化 Flask 应用
-app = Flask(__name__, template_folder='templates')
+app = Flask(__name__, static_folder='static', static_url_path='')
+CORS(app)  # 开启跨域支持，允许 Vue 前端访问 API
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -73,32 +76,12 @@ def _get_assets_cached(portfolio_name):
     return lst
 
 @app.route('/', methods=['GET'])
-def home():
-    try:
-        sub_accounts_response = _get_sub_accounts_cached()
-        portfolios = []
-        try:
-            data = getattr(sub_accounts_response, 'Data', None)
-            if isinstance(data, list):
-                portfolios = data
-        except Exception:
-            portfolios = []
+def index():
+    return app.send_static_file('index.html')
 
-        all_portfolios = sorted(portfolios, key=lambda x: getattr(x, 'asset_value', 0.0) or 0.0, reverse=True)
-        top_5_portfolios = all_portfolios[:10]
-
-        # 2. 确定默认选择的组合
-        selected_portfolio_name = ''
-        if top_5_portfolios:
-            selected_portfolio_name = top_5_portfolios[0].sub_account_name
-
-        return render_template('index.html',
-                               portfolios=top_5_portfolios,
-                               selected_portfolio_name=selected_portfolio_name)
-
-    except Exception as e:
-        logging.error(f"处理主页请求时发生错误: {e}", exc_info=True)
-        return render_template('index.html', portfolios=[], selected_portfolio_name='')
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'ok', 'message': 'Fund System Backend API is running'})
 
 @app.route('/api/portfolio/<portfolio_name>', methods=['GET'])
 def get_portfolio_details(portfolio_name):
@@ -162,6 +145,72 @@ def get_portfolio_details(portfolio_name):
         logging.error(f"获取组合详情时发生错误: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/portfolios', methods=['GET'])
+def get_portfolios_api():
+    try:
+        sub_accounts_response = _get_sub_accounts_cached()
+        portfolios = []
+        data = getattr(sub_accounts_response, 'Data', None)
+        if isinstance(data, list):
+            # 过滤掉资产为 0 的组合
+            active_data = [p for p in data if (getattr(p, 'asset_value', 0.0) or 0.0) > 0]
+            # 按资产价值降序排列
+            sorted_data = sorted(active_data, key=lambda x: getattr(x, 'asset_value', 0.0) or 0.0, reverse=True)
+            portfolios = [
+                {
+                    'sub_account_name': p.sub_account_name,
+                    'asset_value': getattr(p, 'asset_value', 0.0) or 0.0
+                } for p in sorted_data
+            ]
+        return jsonify({
+            'portfolios': portfolios,
+            'selected_portfolio_name': portfolios[0]['sub_account_name'] if portfolios else ''
+        })
+    except Exception as e:
+        logging.error(f"获取组合列表失败: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/fund/<fund_code>', methods=['GET'])
+def get_fund_detail_api(fund_code):
+    try:
+        user = ensure_user_fresh(DEFAULT_USER, 600)
+        fi = getFundInfo(user, fund_code)
+        if not fi:
+            return jsonify({'error': '未找到基金信息'}), 404
+        
+        # 获取实时估值信息
+        if not ((hasattr(fi, 'fund_type') and fi.fund_type == 'a') or \
+                (hasattr(fi, 'fund_name') and "QDII" in fi.fund_name.upper())):
+            updateFundEstimatedValue(fi)
+        
+        # 计算 5 日均值和波动率
+        # 使用最近 5 个交易日的历史数据
+        vol_data = get_fund_volatility(user, fi, 5)
+        if vol_data:
+            mean, variance, volatility = vol_data
+            fi.nav_5day_avg = mean
+            fi.volatility = volatility
+        
+        # 计算 30 日排名和 100 日排名
+        fi.rank_30day = get_nav_rank(user, fi, 30)
+        fi.rank_100day = get_nav_rank(user, fi, 100)
+        
+        # 将 FundInfo 对象转换为字典
+        detail = {}
+        for key in dir(fi):
+            if not key.startswith('_') and not callable(getattr(fi, key)):
+                value = getattr(fi, key)
+                # 处理一些特殊类型
+                if isinstance(value, (int, float, str, bool, list, dict)) or value is None:
+                    detail[key] = value
+                else:
+                    detail[key] = str(value)
+                    
+        return jsonify(detail)
+    except Exception as e:
+        logging.error(f"获取基金详情失败: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 # 函数计算的入口
 def handler(environ, start_response):
     return app(environ, start_response)
@@ -176,5 +225,5 @@ if __name__ == '__main__':
         with open('templates/index.html', 'w') as f:
             f.write('<html><body><h1>请填充模板内容</h1></body></html>')
             
-    # 生产环境绑定 0.0.0.0，函数计算自定义运行时要求监听所有网络接口
-    app.run(host='0.0.0.0', port=9000)
+    # 开启 debug=True 方便本地开发自动重载
+    app.run(host='0.0.0.0', port=9000, debug=True)

@@ -1,0 +1,8 @@
+# 开发/代码规范工具
+flake8==7.1.1
+flake8-docstrings==1.7.0
+isort==6.0.0
+pylint==3.3.4
+mypy==1.14.0
+coverage==7.6.0
+pytest==8.3.0

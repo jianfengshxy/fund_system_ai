@@ -1,0 +1,43 @@
+# Git 属性配置
+# 统一行结束符为 LF
+* text=auto eol=lf
+
+# Python 文件
+*.py text diff=python
+*.pyi text diff=python
+
+# 前端文件
+*.js text
+*.ts text diff=typescript
+*.vue text
+*.html text
+*.css text
+*.scss text
+
+# 配置文件
+*.json text
+*.yml text
+*.yaml text
+*.toml text
+*.ini text
+*.cfg text
+
+# Markdown
+*.md text
+
+# 二进制文件
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text
+*.woff binary
+*.woff2 binary
+*.eot binary
+*.ttf binary
+
+# 排除生成的文件
+*.py[cod] binary
+*.so binary
+__pycache__/ -text

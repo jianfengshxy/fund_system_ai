@@ -145,6 +145,11 @@ def get_portfolio_details(portfolio_name):
         logging.error(f"获取组合详情时发生错误: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/cache/clear', methods=['POST'])
+def clear_api_cache():
+    _cache.clear()
+    return jsonify({'success': True})
+
 @app.route('/api/portfolios', methods=['GET'])
 def get_portfolios_api():
     try:

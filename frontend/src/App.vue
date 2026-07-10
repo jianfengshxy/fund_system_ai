@@ -11,6 +11,8 @@ interface AssetDetail {
   fund_code: string
   asset_value: number
   hold_profit: number
+  hold_profit_rate: number
+  constant_profit: number
   constant_profit_rate: number
   estimated_change: number
   profit_value: number
@@ -98,6 +100,16 @@ const showFundDetail = async (fundCode: string) => {
   }
 }
 
+const refreshPortfolio = async () => {
+  if (!selectedPortfolioName.value) return
+  try {
+    await axios.post('/api/cache/clear')
+  } catch (error) {
+    console.error('Clear cache error:', error)
+  }
+  await loadPortfolio(selectedPortfolioName.value)
+}
+
 const estProfitValue = computed(() => {
   return (estimatedChangeRatio.value * totalAssets.value) / 100
 })
@@ -130,9 +142,15 @@ const loadPortfolio = async (name: string) => {
 
   try {
     const res = await axios.get(`/api/portfolio/${encodeURIComponent(name)}`)
-    portfolioDetails.value = res.data.portfolio_details
+    const rawDetails = Array.isArray(res.data?.portfolio_details) ? res.data.portfolio_details : []
+    const adaptedDetails = rawDetails.map((d: any) => ({
+      ...d,
+      hold_profit: typeof d?.constant_profit === 'number' ? d.constant_profit : d.hold_profit,
+      hold_profit_rate: typeof d?.constant_profit_rate === 'number' ? d.constant_profit_rate : d.hold_profit_rate
+    }))
+    portfolioDetails.value = adaptedDetails
     totalAssets.value = res.data.total_assets
-    totalProfit.value = res.data.total_profit
+    totalProfit.value = adaptedDetails.reduce((acc: number, cur: any) => acc + (typeof cur?.hold_profit === 'number' ? cur.hold_profit : 0), 0)
     totalProfitValue.value = res.data.total_profit_value
     estimatedChangeRatio.value = res.data.estimated_portfolio_change_ratio
     constantProfit.value = res.data.constant_profit
@@ -284,7 +302,7 @@ onMounted(async () => {
                 </el-tag>
               </div>
               <div class="flex gap-2">
-                <el-button :icon="Refresh" circle @click="loadPortfolio(selectedPortfolioName)" />
+                <el-button :icon="Refresh" circle @click="refreshPortfolio" />
                 <el-button :icon="Setting" circle />
               </div>
             </div>

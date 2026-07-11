@@ -536,55 +536,6 @@ resources:
           cronExpression: "CRON_TZ=Asia/Shanghai 0 53 14 * * 1-5"
           enable: ${vars.common.props.triggerConfig.enable}
   
-  fund_system_web_api:
-    component: ${vars.common.component}
-    actions: ${vars.common.actions}
-    props:
-      handler: "handler"
-      functionName: "fund_system_web_api"
-      logConfig: ${vars.common.props.logConfig}
-      diskSize: ${vars.common.props.diskSize}
-      code: ${vars.common.props.code}
-      memorySize: ${vars.common.props.memorySize}
-      cpu: ${vars.common.props.cpu}
-      runtime: "custom.debian11"
-      region: ${vars.common.props.region}
-      timeout: ${vars.common.props.timeout}
-      layers: []
-      internetAccess: true
-      instanceConcurrency: 5
-      customRuntimeConfig:
-        command:
-          - "/code/bootstrap"
-        port: 9000
-      environmentVariables:
-        DB_USER: ${vars.common.database.DB_USER}
-        DB_PASSWORD: ${vars.common.database.DB_PASSWORD}
-        DB_PORT: ${vars.common.database.DB_PORT}
-        DB_NAME: ${vars.common.database.DB_NAME}
-        EXTERNAL_HOST: ${vars.common.database.external_host}
-        VPC_ID: ${vars.common.database.vpc_id}
-        CIDR: ${vars.common.database.cidr}
-        PYTHONPATH: "/tmp/python:/code:/code/src"
-        PATH: "/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-        TZ: Asia/Shanghai
-      description: "基金系统Web前端 API 服务"
-      triggers:
-      - qualifier: LATEST
-        triggerType: http
-        triggerName: "http_trigger"
-        triggerConfig:
-          authType: anonymous
-          methods:
-            - GET
-            - POST
-            - PUT
-            - DELETE
-            - OPTIONS
-    provision:
-      - qualifier: LATEST
-        target: 1
-        alwaysAllocateCPU: false
 
   fund_system_api:
     component: ${vars.common.component}

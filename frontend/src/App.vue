@@ -2,9 +2,11 @@
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
 import { Menu, Refresh, Setting, UserFilled } from '@element-plus/icons-vue'
+import { getMockFundDetail, getMockPortfolioResponse, mockPortfoliosResponse } from './mock/data'
 
 // 配置生产环境 API 地址
 axios.defaults.baseURL = import.meta.env.VITE_API_BASE_URL || ''
+const useMock = import.meta.env.VITE_USE_MOCK === 'true'
 
 interface AssetDetail {
   fund_name: string
@@ -91,6 +93,10 @@ const showFundDetail = async (fundCode: string) => {
   detailDialogVisible.value = true
   detailLoading.value = true
   try {
+    if (useMock) {
+      selectedFundDetail.value = getMockFundDetail(fundCode)
+      return
+    }
     const res = await axios.get(`/api/fund/${fundCode}`)
     selectedFundDetail.value = res.data
   } catch (error) {
@@ -102,6 +108,10 @@ const showFundDetail = async (fundCode: string) => {
 
 const refreshPortfolio = async () => {
   if (!selectedPortfolioName.value) return
+  if (useMock) {
+    await loadPortfolio(selectedPortfolioName.value)
+    return
+  }
   try {
     await axios.post('/api/cache/clear')
   } catch (error) {
@@ -116,6 +126,13 @@ const estProfitValue = computed(() => {
 
 const fetchPortfolios = async () => {
   try {
+    if (useMock) {
+      portfolios.value = mockPortfoliosResponse.portfolios
+      if (mockPortfoliosResponse.selected_portfolio_name && !selectedPortfolioName.value) {
+        await loadPortfolio(mockPortfoliosResponse.selected_portfolio_name)
+      }
+      return
+    }
     const res = await axios.get('/api/portfolios')
     portfolios.value = res.data.portfolios
     if (res.data.selected_portfolio_name && !selectedPortfolioName.value) {
@@ -141,20 +158,23 @@ const loadPortfolio = async (name: string) => {
   portfolioDetails.value = []
 
   try {
-    const res = await axios.get(`/api/portfolio/${encodeURIComponent(name)}`)
-    const rawDetails = Array.isArray(res.data?.portfolio_details) ? res.data.portfolio_details : []
+    const data = useMock
+      ? getMockPortfolioResponse(name)
+      : (await axios.get(`/api/portfolio/${encodeURIComponent(name)}`)).data
+
+    const rawDetails = Array.isArray(data?.portfolio_details) ? data.portfolio_details : []
     const adaptedDetails = rawDetails.map((d: any) => ({
       ...d,
       hold_profit: typeof d?.constant_profit === 'number' ? d.constant_profit : d.hold_profit,
       hold_profit_rate: typeof d?.constant_profit_rate === 'number' ? d.constant_profit_rate : d.hold_profit_rate
     }))
     portfolioDetails.value = adaptedDetails
-    totalAssets.value = res.data.total_assets
+    totalAssets.value = data.total_assets
     totalProfit.value = adaptedDetails.reduce((acc: number, cur: any) => acc + (typeof cur?.hold_profit === 'number' ? cur.hold_profit : 0), 0)
-    totalProfitValue.value = res.data.total_profit_value
-    estimatedChangeRatio.value = res.data.estimated_portfolio_change_ratio
-    constantProfit.value = res.data.constant_profit
-    profitValue.value = res.data.profit_value
+    totalProfitValue.value = data.total_profit_value
+    estimatedChangeRatio.value = data.estimated_portfolio_change_ratio
+    constantProfit.value = data.constant_profit
+    profitValue.value = data.profit_value
   } catch (error) {
     console.error('Load portfolio error:', error)
   } finally {
@@ -200,7 +220,7 @@ onMounted(async () => {
         </div>
       </div>
       <div class="flex items-center gap-4">
-        <el-tag type="info" effect="dark" class="hidden xs:inline-flex">生产环境</el-tag>
+        <el-tag type="info" effect="dark" class="hidden xs:inline-flex">{{ useMock ? 'Mock 数据' : '生产环境' }}</el-tag>
         <div class="flex items-center gap-2 cursor-pointer hover:bg-white/10 px-2 py-1 rounded transition">
           <el-avatar :size="28"><UserFilled /></el-avatar>
           <span class="hidden sm:inline">管理员</span>

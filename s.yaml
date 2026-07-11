@@ -630,5 +630,6 @@ resources:
 #      region: cn-shanghai
 #      acl: public-read
 #      codeUri: ./frontend/dist
-#      index: index.html
-#      error: index.html
+#      website:
+#        index: index.html
+#        error: index.html

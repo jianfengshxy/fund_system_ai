@@ -133,6 +133,13 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             estimated_profit_rate = current_profit_rate + estimated_change
             safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
             times = safe_asset_value / float(fund_amount)
+            if times > 15:
+                logger.info(f"跳过 {fund_name}({fund_code}): 单个基金已加仓{times:.2f}次，超过了15次上限")
+                filter_checks.append(f"✗ 加仓次数上限拦截（{times:.2f} > 15）")
+                logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 未通过条件:")
+                for check in filter_checks:
+                    logger.info(f"  {check}")
+                continue
             if 0.0 < times < 0.95:
                 logger.info(f"组合{sub_account_no}，基金{fund_name}({fund_code})资产{safe_asset_value:.2f}，当前资产倍数{times:.4f},满足加仓条件。")
                 # 记录过滤条件检查通过

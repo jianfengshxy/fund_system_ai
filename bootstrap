@@ -18,12 +18,17 @@ python3 $GETPIP_PATH -i $MIRROR_URL --trusted-host $TRUSTED_HOST -q
 
 echo "Step 3: Installing dependencies..."
 # 安装核心依赖到 /tmp/python
-python3 -m pip install -r /code/requirements.txt -t $INSTALL_DIR \
-    -i $MIRROR_URL \
-    --trusted-host $TRUSTED_HOST \
-    --timeout 120 \
-    --no-cache-dir \
-    -q
+if [ -f "$INSTALL_DIR/.installed" ]; then
+  echo "Dependencies already installed, skip."
+else
+  python3 -m pip install -r /code/requirements.txt -t $INSTALL_DIR \
+      -i $MIRROR_URL \
+      --trusted-host $TRUSTED_HOST \
+      --timeout 120 \
+      --no-cache-dir \
+      -q
+  touch "$INSTALL_DIR/.installed"
+fi
 
 echo "Step 4: Starting Flask application..."
 # 设置 PYTHONPATH，包含依赖目录和代码目录

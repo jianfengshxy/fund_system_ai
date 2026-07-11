@@ -186,11 +186,15 @@ def _handle_fund_detail(fund_code: str):
     if not ((hasattr(fi, "fund_type") and fi.fund_type == "a") or (hasattr(fi, "fund_name") and "QDII" in fi.fund_name.upper())):
         updateFundEstimatedValue(fi)
 
-    vol_data = get_fund_volatility(user, fi, 5)
-    if vol_data:
-        mean, _variance, volatility = vol_data
+    vol_data_5 = get_fund_volatility(user, fi, 5)
+    if vol_data_5:
+        mean, _variance, _vol = vol_data_5
         fi.nav_5day_avg = mean
-        fi.volatility = volatility
+
+    vol_data_30 = get_fund_volatility(user, fi, 30)
+    if vol_data_30:
+        _mean, _variance, volatility = vol_data_30
+        fi.volatility = volatility * 100  # 净值标准差转为百分比
 
     fi.rank_30day = get_nav_rank(user, fi, 30)
     fi.rank_100day = get_nav_rank(user, fi, 100)

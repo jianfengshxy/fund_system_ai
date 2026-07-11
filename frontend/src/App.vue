@@ -419,7 +419,7 @@ onMounted(async () => {
                 'text-red-500': key.includes('change') && selectedFundDetail[key] > 0,
                 'text-green-500': key.includes('change') && selectedFundDetail[key] < 0
               }">
-                {{ formatNumber(selectedFundDetail[key]) }}{{ key.includes('change') || key.includes('return') ? '%' : '' }}
+                {{ formatNumber(selectedFundDetail[key]) }}{{ key.includes('change') || key.includes('return') || key === 'volatility' ? '%' : '' }}
               </span>
             </template>
             <template v-else-if="typeof selectedFundDetail[key] === 'boolean'">

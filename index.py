@@ -744,6 +744,7 @@ def redeem_gold_portfolio(event, context):
         account = payload.get('account')
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
+        stop_rate = payload.get('stop_rate')
         fund_list = payload.get('fund_list') or payload.get('funds')
         
         extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_redeem"}
@@ -758,7 +759,7 @@ def redeem_gold_portfolio(event, context):
             return
 
         logger.info(f"[黄金多利组合] 开始执行止盈检查...", extra=extra)
-        success = gold_redeem_biz(user, sub_account_name, fund_list)
+        success = gold_redeem_biz(user, sub_account_name, fund_list, stop_rate=stop_rate)
         if success:
             logger.info(f"[黄金多利组合] 止盈检查/执行成功", extra=extra)
         else:

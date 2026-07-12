@@ -5,9 +5,9 @@ from src.common.logger import get_logger
 
 logger = get_logger(__name__)
 
-def redeem(user: User, sub_account_name: str, fund_list=None) -> bool:
+def redeem(user: User, sub_account_name: str, fund_list=None, stop_rate=None) -> bool:
     """
     黄金多利组合止盈业务入口
     """
     logger.info(f"调用黄金多利组合止盈业务，用户: {user.customer_name}, 组合: {sub_account_name}")
-    return redeem_gold_funds(user, sub_account_name, fund_list)
+    return redeem_gold_funds(user, sub_account_name, fund_list, stop_rate=stop_rate)

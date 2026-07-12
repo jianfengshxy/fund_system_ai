@@ -19,7 +19,12 @@ from src.API.交易管理.trade import get_bank_shares
 
 logger = get_logger(__name__)
 
-def redeem_gold_funds(user: User, sub_account_name: str, fund_list: Optional[List[Dict]] = None) -> bool:
+def redeem_gold_funds(
+    user: User,
+    sub_account_name: str,
+    fund_list: Optional[List[Dict]] = None,
+    stop_rate: Optional[float] = None,
+) -> bool:
     """
     黄金多利止盈逻辑：
     收益率大于1.0% 就买出0费率份额
@@ -52,6 +57,13 @@ def redeem_gold_funds(user: User, sub_account_name: str, fund_list: Optional[Lis
         if fund_type == "000":
             return min(max(volatility, 5.0), 10.0)
         return min(max(volatility, 5.0), 15.0)
+
+    portfolio_stop_rate = None
+    if stop_rate is not None:
+        try:
+            portfolio_stop_rate = float(stop_rate)
+        except Exception:
+            portfolio_stop_rate = None
 
     fund_stop_rate = None
     if isinstance(fund_list, list) and fund_list:
@@ -90,8 +102,17 @@ def redeem_gold_funds(user: User, sub_account_name: str, fund_list: Optional[Lis
             
             default_stop_rate = _get_default_stop_rate(fund_info) if fund_info else 5.0
             configured_stop_rate = fund_stop_rate.get(fund_code_str) if fund_stop_rate is not None else None
-            stop_rate = configured_stop_rate if configured_stop_rate is not None else default_stop_rate
-            stop_rate_source = "自定义配置" if configured_stop_rate is not None else "默认动态计算"
+            resolved_stop_rate = None
+            stop_rate_source = None
+            if configured_stop_rate is not None:
+                resolved_stop_rate = configured_stop_rate
+                stop_rate_source = "基金级配置"
+            elif portfolio_stop_rate is not None:
+                resolved_stop_rate = portfolio_stop_rate
+                stop_rate_source = "组合级配置"
+            else:
+                resolved_stop_rate = default_stop_rate
+                stop_rate_source = "默认动态计算"
             
             # 计算预估收益率 = 当前收益率 + 估值涨跌幅
             estimated_profit_rate = current_profit_rate + estimated_change
@@ -99,10 +120,10 @@ def redeem_gold_funds(user: User, sub_account_name: str, fund_list: Optional[Lis
             logger.info(
                 f"基金 {fund_name}({fund_code}) 止盈指标 -> 类型: {fund_type}, 波动率: {volatility:.2f}%, "
                 f"当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, "
-                f"预估收益率: {estimated_profit_rate:.2f}%, 止盈点: {stop_rate:.2f}% ({stop_rate_source})"
+                f"预估收益率: {estimated_profit_rate:.2f}%, 止盈点: {resolved_stop_rate:.2f}% ({stop_rate_source})"
             )
 
-            if estimated_profit_rate > stop_rate or estimated_profit_rate > 10.0:
+            if estimated_profit_rate > resolved_stop_rate or estimated_profit_rate > 10.0:
                 # 获取可用份额
                 shares = get_bank_shares(user, sub_account_no, fund_code)
                 if not shares:
@@ -111,8 +132,8 @@ def redeem_gold_funds(user: User, sub_account_name: str, fund_list: Optional[Lis
 
                 redeemed = False
 
-                if estimated_profit_rate > stop_rate:
-                    logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% > 止盈点 {stop_rate:.2f}%，尝试赎回0费率份额")
+                if estimated_profit_rate > resolved_stop_rate:
+                    logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% > 止盈点 {resolved_stop_rate:.2f}%，尝试赎回0费率份额")
 
                     # 执行0费率赎回
                     # 注意：sell_0_fee_shares 内部会判断是否有0费率份额，如果有则赎回，没有则跳过
@@ -136,7 +157,7 @@ def redeem_gold_funds(user: User, sub_account_name: str, fund_list: Optional[Lis
             else:
                  logger.info(
                      f"基金 {fund_name}({fund_code}) 不满足止盈条件: "
-                     f"预估收益率 {estimated_profit_rate:.2f}% <= 止盈点 {stop_rate:.2f}%，"
+                     f"预估收益率 {estimated_profit_rate:.2f}% <= 止盈点 {resolved_stop_rate:.2f}%，"
                      f"且未达 10.0% 兜底线"
                  )
 

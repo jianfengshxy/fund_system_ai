@@ -758,6 +758,10 @@ def redeem_gold_portfolio(event, context):
             logger.error(f"获取用户 {account} 信息失败")
             return
 
+        logger.info(
+            f"[黄金多利组合] 入参检查: stop_rate={stop_rate}, fund_list_count={len(fund_list) if isinstance(fund_list, list) else 0}",
+            extra=extra,
+        )
         logger.info(f"[黄金多利组合] 开始执行止盈检查...", extra=extra)
         success = gold_redeem_biz(user, sub_account_name, fund_list, stop_rate=stop_rate)
         if success:

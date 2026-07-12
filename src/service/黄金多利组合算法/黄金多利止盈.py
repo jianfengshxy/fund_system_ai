@@ -76,10 +76,10 @@ def redeem_gold_funds(
                 continue
             raw_stop_rate = item.get("stop_rate")
             try:
-                stop_rate = float(raw_stop_rate) if raw_stop_rate is not None else None
+                item_stop_rate = float(raw_stop_rate) if raw_stop_rate is not None else None
             except Exception:
-                stop_rate = None
-            m[str(code)] = stop_rate
+                item_stop_rate = None
+            m[str(code)] = item_stop_rate
         if m:
             fund_stop_rate = m
 

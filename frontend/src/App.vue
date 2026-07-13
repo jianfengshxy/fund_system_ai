@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import {
   ArrowDown,
+  ArrowUp,
   CaretRight,
   Delete,
   Edit,
@@ -61,6 +62,29 @@ const activeView = ref<'portfolio' | 'scheduled-tasks'>('portfolio')
 const portfolios = ref<Portfolio[]>([])
 const selectedPortfolioName = ref('')
 const portfolioDetails = ref<AssetDetail[]>([])
+const sortField = ref<string>('constant_profit_rate')
+const sortOrder = ref<'asc' | 'desc'>('desc')
+const sortedPortfolioDetails = computed(() => {
+  const data = [...portfolioDetails.value]
+  const field = sortField.value as keyof AssetDetail
+  const order = sortOrder.value === 'asc' ? 1 : -1
+  data.sort((a, b) => {
+    const va = a[field] ?? 0
+    const vb = b[field] ?? 0
+    if (typeof va === 'string' && typeof vb === 'string') {
+      return order * va.localeCompare(vb, 'zh-CN')
+    }
+    return order * (Number(va) - Number(vb))
+  })
+  return data
+})
+const sortOptions = [
+  { label: '资产市值', value: 'asset_value' },
+  { label: '持有收益', value: 'hold_profit' },
+  { label: '收益率', value: 'constant_profit_rate' },
+  { label: '今日估值', value: 'estimated_change' },
+  { label: '基金名称', value: 'fund_name' }
+]
 const totalAssets = ref(0)
 const totalProfit = ref(0)
 const totalProfitValue = ref(0)
@@ -720,14 +744,36 @@ onMounted(async () => {
                   </el-select>
                   <el-tag v-if="selectedPortfolioName" type="primary" effect="plain">当前选中</el-tag>
                 </div>
-                <el-button :icon="Refresh" @click="refreshPortfolio">刷新组合</el-button>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <el-select
+                    v-model="sortField"
+                    class="!w-[130px]"
+                    size="small"
+                    placeholder="排序字段"
+                  >
+                    <el-option
+                      v-for="opt in sortOptions"
+                      :key="opt.value"
+                      :label="opt.label"
+                      :value="opt.value"
+                    />
+                  </el-select>
+                  <el-button
+                    size="small"
+                    :icon="sortOrder === 'asc' ? ArrowUp : ArrowDown"
+                    @click="sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'"
+                  >
+                    {{ sortOrder === 'asc' ? '升序' : '降序' }}
+                  </el-button>
+                  <el-button :icon="Refresh" @click="refreshPortfolio">刷新组合</el-button>
+                </div>
               </div>
             </template>
 
             <div class="hidden md:block overflow-x-auto">
               <el-table
                 v-loading="portfolioLoading"
-                :data="portfolioDetails"
+                :data="sortedPortfolioDetails"
                 style="width: 100%"
                 header-cell-class-name="bg-gray-50 text-xs text-gray-500 font-bold"
               >
@@ -769,7 +815,7 @@ onMounted(async () => {
             </div>
 
             <div class="grid grid-cols-1 gap-3 md:hidden" v-loading="portfolioLoading">
-              <el-card v-for="row in portfolioDetails" :key="row.fund_code" shadow="hover">
+              <el-card v-for="row in sortedPortfolioDetails" :key="row.fund_code" shadow="hover">
                 <div class="flex items-start justify-between gap-3">
                   <div>
                     <el-link type="primary" :underline="false" @click="showFundDetail(row.fund_code)">

@@ -71,16 +71,51 @@ from src.service.数据同步.sync_total_account_fund_asset import sync_total_ac
 from src.common.logger import get_logger
 logger = get_logger(__name__)
 
+
+def _detect_invoke_source(evt):
+    """
+    识别当前入口的调用来源。
+
+    - 老的 FC timer 触发器：通常是 `payload` 包裹的事件
+    - 新的 Python 定时任务：会额外带 `__invoke_source=python_scheduler`
+    - 本地调试：可能直接传纯 payload dict
+    """
+    if not isinstance(evt, dict):
+        return "unknown"
+    if evt.get("__invoke_source"):
+        return str(evt.get("__invoke_source"))
+    if evt.get("httpMethod") or evt.get("rawPath") or evt.get("path"):
+        return "fc_http"
+    if "payload" in evt:
+        return "fc_timer"
+    return "plain_payload"
+
+
+def _parse_strategy_event(event, action):
+    """
+    为策略入口统一解析事件并保留调用来源信息。
+
+    这样 `index.py` 中的老 FC 函数入口无需废弃，
+    就能同时兼容 FC 定时触发和新的 Python 内部调度执行方式。
+    """
+    evt, payload = parse_fc_event(event)
+    invoke_source = _detect_invoke_source(evt)
+    logger.info(
+        f"[{action}] 入口调用来源: {invoke_source}",
+        extra={"action": action, "invoke_source": invoke_source},
+    )
+    return evt, payload, invoke_source
+
 def redeem(event, context):
     try:
-        evt, payload = parse_fc_event(event)
+        _evt, payload, invoke_source = _parse_strategy_event(event, "redeem")
 
         # 提取参数（与 add_new/increase 的风格保持一致）
         account = payload.get('account')
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
         total_budget = payload.get('total_budget')
-        extra = {"account": account, "sub_account_name": sub_account_name, "action": "redeem"}
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "redeem", "invoke_source": invoke_source}
 
         # 校验
         if not all([account, password, sub_account_name]):
@@ -114,7 +149,7 @@ def redeem(event, context):
 
 def increase(event, context):
     try:
-        evt, payload = parse_fc_event(event)
+        _evt, payload, invoke_source = _parse_strategy_event(event, "increase")
 
         # 提取参数（与 add_new 一致的方式）
         account = payload.get('account')
@@ -123,7 +158,7 @@ def increase(event, context):
         total_budget = payload.get('total_budget')  
         amount = payload.get('amount')              # Optional
         fund_type = payload.get('fund_type', 'all')
-        extra = {"account": account, "sub_account_name": sub_account_name, "action": "increase"}
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "increase", "invoke_source": invoke_source}
 
         # 校验
         if not all([account, password, sub_account_name,total_budget]):
@@ -157,8 +192,7 @@ def increase(event, context):
 #加仓风向标的新增基金调用
 def add_new(event, context):
     try:
-
-        evt, payload = parse_fc_event(event)
+        _evt, payload, invoke_source = _parse_strategy_event(event, "add_new")
 
         # 提取参数
         account = payload.get('account')
@@ -167,7 +201,7 @@ def add_new(event, context):
         total_budget = payload.get('total_budget')
         amount = payload.get('amount')  # Optional
         fund_type = payload.get('fund_type', 'all')
-        extra = {"account": account, "sub_account_name": sub_account_name, "action": "add_new"}
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "add_new", "invoke_source": invoke_source}
 
         # 校验
         if not all([account, password, sub_account_name, total_budget]):
@@ -197,7 +231,7 @@ def add_new(event, context):
 
 def add_new_jianlong(event, context):
     try:
-        evt, payload = parse_fc_event(event)
+        _evt, payload, invoke_source = _parse_strategy_event(event, "jianlong_add_new")
 
         # 提取参数
         account = payload.get('account')
@@ -208,7 +242,7 @@ def add_new_jianlong(event, context):
         fund_type = payload.get('fund_type', 'all')
         fund_num = payload.get('fund_num', 1)
         spread_days = payload.get('spread_days', 5)
-        extra = {"account": account, "sub_account_name": sub_account_name, "action": "jianlong_add_new"}
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "jianlong_add_new", "invoke_source": invoke_source}
 
         # 校验
         if not all([account, password, sub_account_name, total_budget]):
@@ -244,7 +278,7 @@ def add_new_jianlong(event, context):
 # 新增：见龙在田加仓入口（参考 add_new_jianlong）
 def increase_jianlong(event, context):
     try:
-        evt, payload = parse_fc_event(event)
+        _evt, payload, invoke_source = _parse_strategy_event(event, "jianlong_increase")
 
         # 提取参数（与 add_new_jianlong 对齐）
         account = payload.get('account')
@@ -255,7 +289,7 @@ def increase_jianlong(event, context):
         fund_type = payload.get('fund_type', 'all')
         fund_num = payload.get('fund_num', 5)
         spread_days = payload.get('spread_days', 5)
-        extra = {"account": account, "sub_account_name": sub_account_name, "action": "jianlong_increase"}
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "jianlong_increase", "invoke_source": invoke_source}
 
         # 校验
         if not all([account, password, sub_account_name, total_budget]):
@@ -330,11 +364,11 @@ def dissolve_period_index_investment(event, context):
 
 def fixed_ratio_redeem(event, context):
     try:
-        evt, payload = parse_fc_event(event)
+        _evt, payload, invoke_source = _parse_strategy_event(event, "fixed_ratio_redeem")
         
         account = payload.get('account')
         password = payload.get('password')
-        extra = {"account": account, "action": "fixed_ratio_redeem"}
+        extra = {"account": account, "action": "fixed_ratio_redeem", "invoke_source": invoke_source}
         
         if not all([account, password]):
             logger.error("Payload缺少必填参数: account, password")
@@ -357,12 +391,12 @@ def fixed_ratio_redeem(event, context):
 
 def redeem_jianlong(event, context):
     try:
-        evt, payload = parse_fc_event(event)
+        _evt, payload, invoke_source = _parse_strategy_event(event, "jianlong_redeem")
         account = payload.get('account')
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
         total_budget = payload.get('total_budget')
-        extra = {"account": account, "sub_account_name": sub_account_name, "action": "jianlong_redeem"}
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "jianlong_redeem", "invoke_source": invoke_source}
         
         if not all([account, password, sub_account_name]):
              logger.error("Payload缺少必填参数")
@@ -385,7 +419,7 @@ def redeem_jianlong(event, context):
 
 def add_new_custom(event, context):
     try:
-        evt, payload = parse_fc_event(event)
+        _evt, payload, invoke_source = _parse_strategy_event(event, "custom_add_new")
         account = payload.get('account')
         password = payload.get('password')
         
@@ -425,7 +459,7 @@ def add_new_custom(event, context):
 
         for group in sub_asset_response.Data.list_group:
             sub_account_name = group.group_name
-            extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_add_new"}
+            extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_add_new", "invoke_source": invoke_source}
             if not sub_account_name:
                 continue
             # 只在自选组合名集合里才继续
@@ -487,7 +521,7 @@ def add_new_custom(event, context):
 
 def increase_custom(event, context):
     try:
-        evt, payload = parse_fc_event(event)
+        _evt, payload, invoke_source = _parse_strategy_event(event, "custom_increase")
         account = payload.get('account')
         password = payload.get('password')
         if not all([account, password]):
@@ -523,7 +557,7 @@ def increase_custom(event, context):
 
         for group in sub_asset_response.Data.list_group:
             sub_account_name = group.group_name
-            extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_increase"}
+            extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_increase", "invoke_source": invoke_source}
             if not sub_account_name:
                 continue
             if sub_account_name not in favorite_set:
@@ -587,7 +621,7 @@ def increase_custom(event, context):
 
 def redeem_custom(event, context):
     try:
-        evt, payload = parse_fc_event(event)
+        _evt, payload, invoke_source = _parse_strategy_event(event, "custom_redeem")
         account = payload.get('account')
         password = payload.get('password')
         if not all([account, password]):
@@ -624,7 +658,7 @@ def redeem_custom(event, context):
 
         for group in sub_asset_response.Data.list_group:
             sub_account_name = group.group_name
-            extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_redeem"}
+            extra = {"account": account, "sub_account_name": sub_account_name, "action": "custom_redeem", "invoke_source": invoke_source}
             if not sub_account_name:
                 continue
             if sub_account_name not in favorite_set:
@@ -675,7 +709,7 @@ def redeem_custom(event, context):
 
 def increase_gold_portfolio(event, context):
     try:
-        evt, payload = parse_fc_event(event)
+        _evt, payload, invoke_source = _parse_strategy_event(event, "gold_increase")
         account = payload.get('account')
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
@@ -683,7 +717,7 @@ def increase_gold_portfolio(event, context):
         total_limit = payload.get('total_limit')
         fund_list = payload.get('fund_list') or payload.get('funds')
         
-        extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_increase"}
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_increase", "invoke_source": invoke_source}
         
         if not all([account, password, sub_account_name]):
             logger.error("Payload缺少必填参数")
@@ -740,14 +774,14 @@ def increase_gold_portfolio(event, context):
 
 def redeem_gold_portfolio(event, context):
     try:
-        evt, payload = parse_fc_event(event)
+        _evt, payload, invoke_source = _parse_strategy_event(event, "gold_redeem")
         account = payload.get('account')
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
         stop_rate = payload.get('stop_rate')
         fund_list = payload.get('fund_list') or payload.get('funds')
         
-        extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_redeem"}
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_redeem", "invoke_source": invoke_source}
         
         if not all([account, password, sub_account_name]):
             logger.error("Payload缺少必填参数")
@@ -774,13 +808,13 @@ def redeem_gold_portfolio(event, context):
 
 def increase_gold_dimension_portfolio(event, context):
     try:
-        evt, payload = parse_fc_event(event)
+        _evt, payload, invoke_source = _parse_strategy_event(event, "gold_dimension_increase")
         account = payload.get('account')
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
         amount = payload.get('amount', 50000.0) # Default 50000.0 if not specified
         
-        extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_dimension_increase"}
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_dimension_increase", "invoke_source": invoke_source}
         
         if not all([account, password, sub_account_name]):
             logger.error("Payload缺少必填参数")
@@ -803,12 +837,12 @@ def increase_gold_dimension_portfolio(event, context):
 
 def redeem_gold_dimension_portfolio(event, context):
     try:
-        evt, payload = parse_fc_event(event)
+        _evt, payload, invoke_source = _parse_strategy_event(event, "gold_dimension_redeem")
         account = payload.get('account')
         password = payload.get('password')
         sub_account_name = payload.get('sub_account_name')
         
-        extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_dimension_redeem"}
+        extra = {"account": account, "sub_account_name": sub_account_name, "action": "gold_dimension_redeem", "invoke_source": invoke_source}
         
         if not all([account, password, sub_account_name]):
             logger.error("Payload缺少必填参数")
@@ -833,7 +867,13 @@ if __name__ == "__main__":
     def invoke(func, payload_str, name):
         print(f"\n--- Invoking {name} ---")
         try:
-            event = {"payload": payload_str}
+            # 本地调试时默认模拟“新 Python 调度器”事件格式；
+            # 老的 FC timer 事件同样兼容，因为业务入口最终统一走 parse_fc_event。
+            event = {
+                "payload": payload_str,
+                "__invoke_source": "local_debug",
+                "__invoke_mode": "internal_scheduled_task",
+            }
             func(event, None)
         except Exception as e:
             print(f"Error invoking {name}: {e}")

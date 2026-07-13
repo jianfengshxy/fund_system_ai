@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import {
   ArrowDown,
   CaretRight,
@@ -81,6 +82,7 @@ const taskDialogVisible = ref(false)
 const taskDialogTitle = ref('新增定时任务')
 const taskSubmitting = ref(false)
 const editingTaskId = ref<number | null>(null)
+const taskFormRef = ref<FormInstance>()
 const taskForm = reactive({
   task_name: '',
   cron_expression: '',
@@ -149,6 +151,73 @@ const estProfitValue = computed(() => (estimatedChangeRatio.value * totalAssets.
 const currentViewLabel = computed(() =>
   activeView.value === 'portfolio' ? '组合看板' : '定时任务管理'
 )
+
+const cronFieldTokenPattern = /^[A-Za-z0-9_*?,/\-L]+$/
+
+const validateCronExpression = (value: string) => {
+  const expr = value.trim()
+  if (!expr) {
+    return '请输入 Cron 表达式'
+  }
+
+  let normalizedExpr = expr
+  if (normalizedExpr.startsWith('CRON_TZ=')) {
+    const parts = normalizedExpr.split(/\s+/, 2)
+    if (parts.length < 2 || !parts[0].includes('=')) {
+      return 'CRON_TZ 格式不正确'
+    }
+    normalizedExpr = normalizedExpr.slice(parts[0].length).trim()
+  }
+
+  if (normalizedExpr.startsWith('@every')) {
+    if (!/^@every\s+\d+(?:\.\d+)?(ns|us|µs|ms|s|m|h)$/i.test(normalizedExpr)) {
+      return 'Cron 表达式格式不正确'
+    }
+    return ''
+  }
+
+  const fields = normalizedExpr.split(/\s+/).filter(Boolean)
+  if (![5, 6, 7].includes(fields.length)) {
+    return 'Cron 表达式必须为 5、6 或 7 段'
+  }
+  if (!fields.every((field) => cronFieldTokenPattern.test(field))) {
+    return 'Cron 表达式包含非法字符'
+  }
+  return ''
+}
+
+const taskFormRules: FormRules = {
+  task_name: [{ required: true, message: '请输入任务名', trigger: ['blur', 'change'] }],
+  policy: [{ required: true, message: '请输入函数名', trigger: ['blur', 'change'] }],
+  handler: [{ required: true, message: '请输入处理器', trigger: ['blur', 'change'] }],
+  cron_expression: [
+    {
+      validator: (_rule, value, callback) => {
+        const errorMessage = validateCronExpression(String(value ?? ''))
+        callback(errorMessage ? new Error(errorMessage) : undefined)
+      },
+      trigger: ['blur', 'change']
+    }
+  ],
+  payload: [
+    {
+      validator: (_rule, value, callback) => {
+        const payloadText = String(value ?? '').trim()
+        if (!payloadText) {
+          callback(new Error('请输入 Payload JSON'))
+          return
+        }
+        try {
+          JSON.parse(payloadText)
+          callback()
+        } catch (_error) {
+          callback(new Error('Payload JSON 格式不正确'))
+        }
+      },
+      trigger: ['blur', 'change']
+    }
+  ]
+}
 
 const formatNumber = (num: number) =>
   Number(num || 0).toLocaleString('zh-CN', {
@@ -307,11 +376,13 @@ const resetTaskForm = () => {
   taskForm.payload = '{}'
   taskForm.description = ''
   taskForm.is_enabled = true
+  nextTick(() => taskFormRef.value?.clearValidate())
 }
 
 const openCreateTaskDialog = () => {
   resetTaskForm()
   taskDialogVisible.value = true
+  nextTick(() => taskFormRef.value?.clearValidate())
 }
 
 const openEditTaskDialog = (task: ScheduledTask) => {
@@ -327,6 +398,7 @@ const openEditTaskDialog = (task: ScheduledTask) => {
   taskForm.description = task.description || ''
   taskForm.is_enabled = task.is_enabled
   taskDialogVisible.value = true
+  nextTick(() => taskFormRef.value?.clearValidate())
 }
 
 const buildTaskRequestPayload = () => {
@@ -348,6 +420,11 @@ const buildTaskRequestPayload = () => {
 
 const submitTask = async () => {
   try {
+    const isValid = await taskFormRef.value?.validate().catch(() => false)
+    if (!isValid) {
+      ElMessage.error('请先修正表单校验错误')
+      return
+    }
     taskSubmitting.value = true
     const payload = buildTaskRequestPayload()
     if (editingTaskId.value) {
@@ -732,23 +809,23 @@ onMounted(async () => {
     </el-main>
 
     <el-dialog v-model="taskDialogVisible" :title="taskDialogTitle" width="min(720px, 92vw)" destroy-on-close>
-      <el-form label-width="120px">
-        <el-form-item label="任务名">
+      <el-form ref="taskFormRef" :model="taskForm" :rules="taskFormRules" label-width="120px" status-icon>
+        <el-form-item label="任务名" prop="task_name">
           <el-input v-model="taskForm.task_name" placeholder="例如 redeem_gold_portfolio_13918199137" />
         </el-form-item>
-        <el-form-item label="函数名">
+        <el-form-item label="函数名" prop="policy">
           <el-input v-model="taskForm.policy" placeholder="例如 redeem_gold_portfolio" />
         </el-form-item>
-        <el-form-item label="处理器">
+        <el-form-item label="处理器" prop="handler">
           <el-input v-model="taskForm.handler" placeholder="例如 index.redeem_gold_portfolio" />
         </el-form-item>
-        <el-form-item label="Cron 表达式">
+        <el-form-item label="Cron 表达式" prop="cron_expression">
           <el-input v-model="taskForm.cron_expression" placeholder="例如 CRON_TZ=Asia/Shanghai 0 55 14 * * 1-5" />
         </el-form-item>
         <el-form-item label="启用">
           <el-switch v-model="taskForm.is_enabled" />
         </el-form-item>
-        <el-form-item label="Payload JSON">
+        <el-form-item label="Payload JSON" prop="payload">
           <el-input
             v-model="taskForm.payload"
             type="textarea"

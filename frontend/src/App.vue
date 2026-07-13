@@ -286,6 +286,8 @@ const fetchPortfolios = async () => {
       portfolios.value = mockPortfoliosResponse.portfolios
       if (mockPortfoliosResponse.selected_portfolio_name && !selectedPortfolioName.value) {
         await loadPortfolio(mockPortfoliosResponse.selected_portfolio_name)
+      } else if (!selectedPortfolioName.value && portfolios.value.length > 0) {
+        await loadPortfolio(portfolios.value[0].sub_account_name)
       }
       return
     }
@@ -293,6 +295,8 @@ const fetchPortfolios = async () => {
     portfolios.value = res.data.portfolios || []
     if (res.data.selected_portfolio_name && !selectedPortfolioName.value) {
       await loadPortfolio(res.data.selected_portfolio_name)
+    } else if (!selectedPortfolioName.value && portfolios.value.length > 0) {
+      await loadPortfolio(portfolios.value[0].sub_account_name)
     }
   } catch (error) {
     console.error('Fetch portfolios error:', error)
@@ -566,19 +570,9 @@ onMounted(async () => {
               </div>
             </template>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-              <el-card shadow="hover">
-                <div class="text-sm text-gray-500">当前任务数</div>
-                <div class="text-2xl font-bold">{{ tasks.length }}</div>
-              </el-card>
-              <el-card shadow="hover">
-                <div class="text-sm text-gray-500">调度器载入数</div>
-                <div class="text-2xl font-bold">{{ schedulerState.loaded_count || 0 }}</div>
-              </el-card>
-              <el-card shadow="hover">
-                <div class="text-sm text-gray-500">最近 reload 时间</div>
-                <div class="text-sm font-medium break-all">{{ formatDateTime(schedulerState.last_reloaded_at || null) }}</div>
-              </el-card>
+            <div class="mb-4">
+              <span class="text-sm text-gray-500 mr-2">当前任务数</span>
+              <span class="text-lg font-bold">{{ tasks.length }}</span>
             </div>
 
             <div class="hidden lg:block overflow-x-auto">
@@ -695,7 +689,7 @@ onMounted(async () => {
           <el-row :gutter="20" class="mb-6" v-loading="portfolioLoading">
             <el-col :xs="24" :sm="12" :lg="6" class="mb-4 lg:mb-0">
               <el-card shadow="never" class="border-none">
-                <div class="text-xs text-gray-500 mb-1">总资产 (元)</div>
+                <div class="text-xs text-gray-500 mb-1">{{ selectedPortfolioName || '当前组合' }} · 总资产 (元)</div>
                 <div class="text-2xl font-bold text-gray-800">{{ formatNumber(totalAssets) }}</div>
               </el-card>
             </el-col>
@@ -728,21 +722,25 @@ onMounted(async () => {
           <el-card shadow="never" class="border-none">
             <template #header>
               <div class="flex flex-wrap gap-3 items-center justify-between">
-                <div class="flex items-center gap-3 flex-wrap">
-                  <el-select
-                    v-model="selectedPortfolioName"
-                    placeholder="选择组合"
-                    class="!w-full sm:!w-[260px]"
-                    @change="loadPortfolio"
-                  >
-                    <el-option
-                      v-for="portfolio in portfolios"
-                      :key="portfolio.sub_account_name"
-                      :label="portfolio.sub_account_name"
-                      :value="portfolio.sub_account_name"
-                    />
-                  </el-select>
-                  <el-tag v-if="selectedPortfolioName" type="primary" effect="plain">当前选中</el-tag>
+                <div class="flex flex-col gap-2 min-w-0">
+                  <div class="text-sm font-medium text-gray-700 break-all">
+                    当前组合：{{ selectedPortfolioName || '-' }}
+                  </div>
+                  <div class="flex items-center gap-3 flex-wrap">
+                    <el-select
+                      v-model="selectedPortfolioName"
+                      placeholder="选择组合"
+                      class="!w-full sm:!w-[260px]"
+                      @change="loadPortfolio"
+                    >
+                      <el-option
+                        v-for="portfolio in portfolios"
+                        :key="portfolio.sub_account_name"
+                        :label="portfolio.sub_account_name"
+                        :value="portfolio.sub_account_name"
+                      />
+                    </el-select>
+                  </div>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
                   <el-select

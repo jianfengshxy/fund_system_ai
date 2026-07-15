@@ -78,10 +78,10 @@ def _normalize_payload_for_storage(payload: Any) -> str | None:
             return None
         try:
             parsed = json.loads(stripped)
-            return json.dumps(parsed, ensure_ascii=False, sort_keys=True)
+            return json.dumps(parsed, ensure_ascii=False)
         except Exception:
             return stripped
-    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def _parse_payload(payload: Any) -> Any:

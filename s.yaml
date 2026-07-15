@@ -57,6 +57,8 @@ vars:
         BANK_BALANCE_THRESHOLD: "1000000"
         PROFIT_THRESHOLD_FOR_LOW_BALANCE: "1.0"
         HQB_RATIO_THRESHOLD: "20.0"
+        ALIYUN_ACCESS_KEY_ID: ${env.ALIYUN_ACCESS_KEY_ID}
+        ALIYUN_ACCESS_KEY_SECRET: ${env.ALIYUN_ACCESS_KEY_SECRET}
   # 自定义组合共享 payload（避免三处重复维护）
   custom_portfolio_redeem_payload: '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 10000.0},{"sub_account_name": "快速止盈", "amount": 30000.0}]}'
   custom_portfolio_add_payload: '{"account": "13918199137", "password": "sWX15706", "sub_account_list": [{"sub_account_name": "海外基金组合", "amount": 10000.0, "total_budget": 200000.0},{"sub_account_name": "快速止盈", "amount": 20000.0, "total_budget": 1000000.0}]}'
@@ -562,6 +564,8 @@ resources:
         EXTERNAL_HOST: ${vars.common.database.external_host}
         VPC_ID: ${vars.common.database.vpc_id}
         CIDR: ${vars.common.database.cidr}
+        ALIYUN_ACCESS_KEY_ID: ${vars.common.props.environmentVariables.ALIYUN_ACCESS_KEY_ID}
+        ALIYUN_ACCESS_KEY_SECRET: ${vars.common.props.environmentVariables.ALIYUN_ACCESS_KEY_SECRET}
         TZ: Asia/Shanghai
       description: "基金系统前端 API 服务（Python HTTP Handler）"
       triggers:

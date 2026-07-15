@@ -5,6 +5,7 @@ import OSS from 'ali-oss'
 
 const projectRoot = path.resolve(import.meta.dirname, '..')
 const distDir = path.join(projectRoot, 'frontend', 'dist')
+const sYamlPath = path.join(projectRoot, 's.yaml')
 
 const region = process.env.OSS_REGION || 'oss-cn-shanghai'
 const bucket = process.env.OSS_BUCKET || 'fund-system-bucket'
@@ -61,6 +62,17 @@ const parseSAccessYaml = (yamlText, alias) => {
   return { accessKeyId, accessKeySecret, securityToken, accountId }
 }
 
+const looksEncryptedByServerlessDevs = (value) => typeof value === 'string' && value.startsWith('U2FsdGVkX1')
+
+const extractAccessKeyFromSYaml = () => {
+  if (!fs.existsSync(sYamlPath)) return null
+  const text = fs.readFileSync(sYamlPath, 'utf8')
+  const idMatch = text.match(/^\s*ALIYUN_ACCESS_KEY_ID:\s*["']?([^"'\r\n]+)["']?\s*$/m)
+  const secretMatch = text.match(/^\s*ALIYUN_ACCESS_KEY_SECRET:\s*["']?([^"'\r\n]+)["']?\s*$/m)
+  if (!idMatch || !secretMatch) return null
+  return { accessKeyId: idMatch[1].trim(), accessKeySecret: secretMatch[1].trim() }
+}
+
 const guessContentType = (key) => {
   const k = key.endsWith('.gz') ? key.slice(0, -3) : key
   if (k.endsWith('.html')) return 'text/html; charset=utf-8'
@@ -89,13 +101,30 @@ const main = async () => {
   let securityToken = process.env.ALIBABA_CLOUD_SECURITY_TOKEN || ''
 
   if (!accessKeyId || !accessKeySecret) {
+    accessKeyId = process.env.ALIYUN_ACCESS_KEY_ID || ''
+    accessKeySecret = process.env.ALIYUN_ACCESS_KEY_SECRET || ''
+  }
+
+  if (!accessKeyId || !accessKeySecret) {
+    const fromSYaml = extractAccessKeyFromSYaml()
+    if (fromSYaml) {
+      accessKeyId = fromSYaml.accessKeyId
+      accessKeySecret = fromSYaml.accessKeySecret
+    }
+  }
+
+  if (!accessKeyId || !accessKeySecret) {
     const sAccessPath = path.join(os.homedir(), '.s', 'access.yaml')
     const yamlText = fs.readFileSync(sAccessPath, 'utf8')
     const parsed = parseSAccessYaml(yamlText, accessAlias)
-    accessKeyId = parsed.accessKeyId
-    accessKeySecret = parsed.accessKeySecret
-    securityToken = parsed.securityToken || ''
+    if (!looksEncryptedByServerlessDevs(parsed.accessKeyId) && !looksEncryptedByServerlessDevs(parsed.accessKeySecret)) {
+      accessKeyId = parsed.accessKeyId
+      accessKeySecret = parsed.accessKeySecret
+      securityToken = parsed.securityToken || ''
+    }
   }
+
+  if (!accessKeyId || !accessKeySecret) throw new Error('missing OSS access key (set ALIBABA_CLOUD_ACCESS_KEY_ID/SECRET)')
 
   const client = new OSS({
     region,

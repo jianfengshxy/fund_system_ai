@@ -8,6 +8,7 @@ import {
   ArrowUp,
   CaretRight,
   Delete,
+  Document,
   Edit,
   Plus,
   Refresh,
@@ -47,6 +48,7 @@ interface ScheduledTask {
   payload_object?: Record<string, any> | any[]
   description: string | null
   is_enabled: boolean
+  display_priority?: number | null
   is_deleted: boolean
   last_executed_at: string | null
   last_executed_status: string | null
@@ -55,6 +57,15 @@ interface ScheduledTask {
   cron_error: string | null
   created_at: string | null
   updated_at: string | null
+  fc_account_id?: string | null
+  fc_region?: string | null
+  fc_function_name?: string | null
+  fc_trigger_name?: string | null
+  fc_trigger_type?: string | null
+  fc_qualifier?: string | null
+  sync_status?: string | null
+  sync_error_message?: string | null
+  last_synced_at?: string | null
 }
 
 const activeView = ref<'portfolio' | 'scheduled-tasks'>('portfolio')
@@ -102,6 +113,9 @@ const schedulerState = ref<Record<string, any>>({})
 const executingTaskIds = ref<number[]>([])
 const executionDialogVisible = ref(false)
 const latestExecutionResult = ref<Record<string, any> | null>(null)
+const logDialogVisible = ref(false)
+const latestTaskLog = ref<Record<string, any> | null>(null)
+const logLoading = ref(false)
 const taskDialogVisible = ref(false)
 const taskDialogTitle = ref('新增定时任务')
 const taskSubmitting = ref(false)
@@ -114,7 +128,8 @@ const taskForm = reactive({
   handler: '',
   payload: '{}',
   description: '',
-  is_enabled: true
+  is_enabled: true,
+  display_priority: 100
 })
 
 const fundFieldMap: Record<string, string> = {
@@ -214,6 +229,23 @@ const taskFormRules: FormRules = {
   task_name: [{ required: true, message: '请输入任务名', trigger: ['blur', 'change'] }],
   policy: [{ required: true, message: '请输入函数名', trigger: ['blur', 'change'] }],
   handler: [{ required: true, message: '请输入处理器', trigger: ['blur', 'change'] }],
+  display_priority: [
+    {
+      validator: (_rule, value, callback) => {
+        const num = Number(value)
+        if (!Number.isFinite(num) || Number.isNaN(num)) {
+          callback(new Error('优先级必须为数字'))
+          return
+        }
+        if (!Number.isInteger(num)) {
+          callback(new Error('优先级必须为整数'))
+          return
+        }
+        callback()
+      },
+      trigger: ['blur', 'change']
+    }
+  ],
   cron_expression: [
     {
       validator: (_rule, value, callback) => {
@@ -371,15 +403,44 @@ const fetchTasks = async () => {
 
 const reloadTasks = async (showMessage = false) => {
   try {
-    const res = await axios.post('/api/scheduled-tasks/reload')
-    schedulerState.value = res.data.result || {}
     await fetchTasks()
     if (showMessage) {
-      ElMessage.success('定时任务已刷新并生效')
+      ElMessage.success('任务列表已刷新')
     }
   } catch (error) {
     console.error('Reload tasks error:', error)
-    ElMessage.error('刷新定时任务失败')
+    ElMessage.error('刷新任务列表失败')
+  }
+}
+
+const syncFromFc = async () => {
+  try {
+    await ElMessageBox.confirm('将从 FC 同步所有 timer 触发器到本地，已存在的任务将更新 FC 相关字段（cron、payload 等），本地定义的字段（如优先级）将保留不变。确认继续吗？', '从 FC 同步', {
+      type: 'warning',
+      confirmButtonText: '确认同步',
+      cancelButtonText: '取消'
+    })
+  } catch (_e) {
+    return
+  }
+  try {
+    taskLoading.value = true
+    const res = await axios.post('/api/scheduled-tasks/fc/sync-from-fc', { confirm: true })
+    await fetchTasks()
+    if (res.data?.success) {
+      const result = res.data.result || {}
+      const synced = result.synced || []
+      const created = result.created || []
+      const errors = result.errors || []
+      ElMessage.success(`同步完成：更新 ${synced.length} 个，新建 ${created.length} 个${errors.length ? `，${errors.length} 个失败` : ''}`)
+    } else {
+      ElMessage.error('同步失败')
+    }
+  } catch (error) {
+    console.error('Sync from FC error:', error)
+    ElMessage.error('从 FC 同步失败')
+  } finally {
+    taskLoading.value = false
   }
 }
 
@@ -404,6 +465,7 @@ const resetTaskForm = () => {
   taskForm.payload = '{}'
   taskForm.description = ''
   taskForm.is_enabled = true
+  taskForm.display_priority = 100
   nextTick(() => taskFormRef.value?.clearValidate())
 }
 
@@ -425,6 +487,7 @@ const openEditTaskDialog = (task: ScheduledTask) => {
     : '{}'
   taskForm.description = task.description || ''
   taskForm.is_enabled = task.is_enabled
+  taskForm.display_priority = Number(task.display_priority ?? 100)
   taskDialogVisible.value = true
   nextTick(() => taskFormRef.value?.clearValidate())
 }
@@ -442,7 +505,8 @@ const buildTaskRequestPayload = () => {
     handler: taskForm.handler.trim(),
     payload: parsedPayload,
     description: taskForm.description.trim(),
-    is_enabled: taskForm.is_enabled
+    is_enabled: taskForm.is_enabled,
+    display_priority: Number(taskForm.display_priority ?? 100)
   }
 }
 
@@ -477,7 +541,7 @@ const updateTaskEnabled = async (task: ScheduledTask) => {
       is_enabled: task.is_enabled
     })
     await reloadTasks()
-    ElMessage.success('启用状态已更新并生效')
+    ElMessage.success('启用状态已更新')
   } catch (error) {
     console.error('Update task enabled error:', error)
     task.is_enabled = !task.is_enabled
@@ -494,7 +558,7 @@ const deleteTask = async (task: ScheduledTask) => {
   try {
     await axios.delete(`/api/scheduled-tasks/${task.task_id}`)
     await reloadTasks()
-    ElMessage.success('任务已删除并生效')
+    ElMessage.success('任务已删除')
   } catch (error) {
     console.error('Delete task error:', error)
     ElMessage.error('删除任务失败')
@@ -522,6 +586,26 @@ const runTaskNow = async (task: ScheduledTask) => {
     ElMessage.error('立即执行失败')
   } finally {
     executingTaskIds.value = executingTaskIds.value.filter((id) => id !== task.task_id)
+  }
+}
+
+const showTaskLog = async (task: ScheduledTask) => {
+  if (logLoading.value) {
+    return
+  }
+  try {
+    logLoading.value = true
+    const res = await axios.get(`/api/scheduled-tasks/${task.task_id}/log`)
+    latestTaskLog.value = res.data?.result || null
+    logDialogVisible.value = true
+    if (!latestTaskLog.value) {
+      ElMessage.info('暂无执行日志')
+    }
+  } catch (error) {
+    console.error('Fetch task log error:', error)
+    ElMessage.error('获取日志失败')
+  } finally {
+    logLoading.value = false
   }
 }
 
@@ -565,6 +649,7 @@ onMounted(async () => {
               <div class="flex flex-wrap gap-3 items-center justify-between">
                 <div class="text-lg font-semibold">定时任务管理</div>
                 <div class="flex flex-wrap gap-2">
+                  <el-button type="warning" @click="syncFromFc">从FC同步</el-button>
                   <el-button type="primary" :icon="Plus" @click="openCreateTaskDialog">新增任务</el-button>
                 </div>
               </div>
@@ -590,6 +675,11 @@ onMounted(async () => {
                 <el-table-column label="启用" width="90" align="center">
                   <template #default="{ row }">
                     <el-switch v-model="row.is_enabled" @change="updateTaskEnabled(row)" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="优先级" width="100">
+                  <template #default="{ row }">
+                    {{ row.display_priority ?? 100 }}
                   </template>
                 </el-table-column>
                 <el-table-column label="下次执行" min-width="180">
@@ -627,6 +717,7 @@ onMounted(async () => {
                       >
                         立即执行
                       </el-button>
+                      <el-button type="info" link :icon="Document" :loading="logLoading" @click="showTaskLog(row)">日志</el-button>
                       <el-button type="primary" link :icon="Edit" @click="openEditTaskDialog(row)">编辑</el-button>
                       <el-button type="danger" link :icon="Delete" @click="deleteTask(row)">删除</el-button>
                     </div>
@@ -647,6 +738,7 @@ onMounted(async () => {
                 <div class="mt-3 text-sm text-gray-600 space-y-2">
                   <div><span class="text-gray-400">处理器</span> {{ task.handler }}</div>
                   <div class="break-all"><span class="text-gray-400">Cron</span> {{ task.cron_expression }}</div>
+                  <div><span class="text-gray-400">优先级</span> {{ task.display_priority ?? 100 }}</div>
                   <div><span class="text-gray-400">下次执行</span> {{ formatDateTime(task.next_run_at) }}</div>
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="text-gray-400">最后执行</span>
@@ -672,6 +764,9 @@ onMounted(async () => {
                     @click="runTaskNow(task)"
                   >
                     立即执行
+                  </el-button>
+                  <el-button type="info" plain size="small" :icon="Document" :loading="logLoading" @click="showTaskLog(task)">
+                    日志
                   </el-button>
                   <el-button type="primary" plain size="small" :icon="Edit" @click="openEditTaskDialog(task)">
                     编辑
@@ -869,6 +964,9 @@ onMounted(async () => {
         <el-form-item label="启用">
           <el-switch v-model="taskForm.is_enabled" />
         </el-form-item>
+        <el-form-item label="优先级" prop="display_priority">
+          <el-input-number v-model="taskForm.display_priority" :min="0" :step="1" controls-position="right" />
+        </el-form-item>
         <el-form-item label="Payload JSON" prop="payload">
           <el-input
             v-model="taskForm.payload"
@@ -954,6 +1052,29 @@ onMounted(async () => {
       </el-descriptions>
       <template #footer>
         <el-button type="primary" @click="executionDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="logDialogVisible" title="最近一次执行日志" width="min(820px, 94vw)" destroy-on-close>
+      <el-descriptions v-if="latestTaskLog" :column="1" border>
+        <el-descriptions-item label="任务名称">{{ latestTaskLog.task_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="执行状态">
+          <el-tag :type="latestTaskLog.status === 'SUCCESS' ? 'success' : 'danger'">
+            {{ latestTaskLog.status || '-' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="开始时间">{{ formatDateTime(latestTaskLog.start_time || null) }}</el-descriptions-item>
+        <el-descriptions-item label="结束时间">{{ formatDateTime(latestTaskLog.end_time || null) }}</el-descriptions-item>
+        <el-descriptions-item label="耗时(秒)">{{ latestTaskLog.duration ?? '-' }}</el-descriptions-item>
+        <el-descriptions-item label="错误摘要">
+          <pre class="whitespace-pre-wrap break-words text-sm m-0">{{ latestTaskLog.error_message || '-' }}</pre>
+        </el-descriptions-item>
+        <el-descriptions-item label="执行详情">
+          <pre class="whitespace-pre-wrap break-words text-sm m-0 overflow-auto max-h-[60vh]">{{ latestTaskLog.result || '-' }}</pre>
+        </el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button type="primary" @click="logDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
   </el-container>

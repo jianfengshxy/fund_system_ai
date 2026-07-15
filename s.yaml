@@ -564,8 +564,8 @@ resources:
         EXTERNAL_HOST: ${vars.common.database.external_host}
         VPC_ID: ${vars.common.database.vpc_id}
         CIDR: ${vars.common.database.cidr}
-        ALIYUN_ACCESS_KEY_ID: ${vars.common.props.environmentVariables.ALIYUN_ACCESS_KEY_ID}
-        ALIYUN_ACCESS_KEY_SECRET: ${vars.common.props.environmentVariables.ALIYUN_ACCESS_KEY_SECRET}
+        ALIYUN_ACCESS_KEY_ID: ${env.ALIYUN_ACCESS_KEY_ID}
+        ALIYUN_ACCESS_KEY_SECRET: ${env.ALIYUN_ACCESS_KEY_SECRET}
         TZ: Asia/Shanghai
       description: "基金系统前端 API 服务（Python HTTP Handler）"
       triggers:

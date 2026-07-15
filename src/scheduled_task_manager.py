@@ -825,12 +825,9 @@ class ScheduledTaskScheduler:
         if not function_name:
             raise ValueError("policy（FC 函数名）为空")
 
-        # 构建调用 payload：注入元数据，模拟 timer trigger 行为
-        raw_payload = _parse_payload(task.get("payload"))
-        invoke_payload = dict(raw_payload) if isinstance(raw_payload, dict) else {}
-        invoke_payload["__scheduled_task_id"] = task_id
-        invoke_payload["__scheduled_task_name"] = str(task.get("task_name") or "")
-        invoke_payload["__trigger_source"] = "manual_fc_invoke"
+        invoke_payload = task.get("payload")
+        if invoke_payload is None:
+            invoke_payload = ""
 
         client = FcOpenApiClient()
         fc_result = client.invoke_function(

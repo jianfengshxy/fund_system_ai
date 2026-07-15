@@ -145,36 +145,6 @@ def _validate_scheduled_task_payload(data: Any, partial: bool = False) -> dict[s
     return normalized
 
 
-def _inject_task_meta(payload: Any, task_id: int | None, task_name: str | None) -> Any:
-    if payload is None:
-        return payload
-    if task_id is None and not task_name:
-        return payload
-    if isinstance(payload, dict):
-        result = dict(payload)
-        if task_id is not None:
-            result["__scheduled_task_id"] = task_id
-        if task_name:
-            result["__scheduled_task_name"] = task_name
-        return result
-    if isinstance(payload, str):
-        stripped = payload.strip()
-        if not stripped:
-            return payload
-        try:
-            parsed = json.loads(stripped)
-        except Exception:
-            return payload
-        if isinstance(parsed, dict):
-            if task_id is not None:
-                parsed["__scheduled_task_id"] = task_id
-            if task_name:
-                parsed["__scheduled_task_name"] = task_name
-            return parsed
-        return payload
-    return payload
-
-
 def _apply_fc_timer_trigger(task: dict[str, Any], *, old_task_name: str | None = None) -> FcOpenApiClient:
     function_name = str(task.get("policy") or "").strip()
     trigger_name = str(task.get("task_name") or "").strip()
@@ -185,7 +155,7 @@ def _apply_fc_timer_trigger(task: dict[str, Any], *, old_task_name: str | None =
         raise ValueError("无法同步 FC trigger：cron_expression 为空")
 
     enable = bool(task.get("is_enabled"))
-    payload = _inject_task_meta(task.get("payload"), int(task.get("task_id")) if task.get("task_id") is not None else None, trigger_name)
+    payload = task.get("payload")
     client = FcOpenApiClient()
     if old_task_name and old_task_name != trigger_name:
         client.create_timer_trigger(
@@ -555,7 +525,7 @@ def handler(event, _context):
             trigger_name = str(task_payload.get("task_name") or "").strip()
             cron_expression = str(task_payload.get("cron_expression") or "").strip()
             enable = bool(task_payload.get("is_enabled", True))
-            payload = _inject_task_meta(task_payload.get("payload"), None, trigger_name)
+            payload = task_payload.get("payload")
 
             client = FcOpenApiClient()
             try:
@@ -587,14 +557,6 @@ def handler(event, _context):
                         "sync_status": "OK",
                         "sync_error_message": None,
                     }
-                )
-                injected_payload = _inject_task_meta(task_payload.get("payload"), int(created["task_id"]), trigger_name)
-                client.update_timer_trigger(
-                    function_name=function_name,
-                    trigger_name=trigger_name,
-                    cron_expression=cron_expression,
-                    payload=injected_payload,
-                    enable=enable,
                 )
                 scheduler.repository.update_fc_sync(
                     int(created["task_id"]),

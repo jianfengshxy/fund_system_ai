@@ -84,6 +84,31 @@ def _normalize_payload_for_storage(payload: Any) -> str | None:
     return json.dumps(payload, ensure_ascii=False)
 
 
+def _strip_meta_from_payload(payload: Any) -> Any:
+    """从 FC trigger 的 payload 中剔除 __scheduled_task_id / __scheduled_task_name 元数据字段。"""
+    if payload is None:
+        return None
+    if isinstance(payload, str):
+        stripped = payload.strip()
+        if not stripped:
+            return payload
+        try:
+            parsed = json.loads(stripped)
+        except Exception:
+            return payload
+        if not isinstance(parsed, dict):
+            return payload
+        parsed.pop("__scheduled_task_id", None)
+        parsed.pop("__scheduled_task_name", None)
+        return json.dumps(parsed, ensure_ascii=False)
+    if isinstance(payload, dict):
+        result = dict(payload)
+        result.pop("__scheduled_task_id", None)
+        result.pop("__scheduled_task_name", None)
+        return result
+    return payload
+
+
 def _parse_payload(payload: Any) -> Any:
     if payload is None:
         return {}
@@ -671,11 +696,13 @@ class ScheduledTaskRepository:
         existing = self.get_task_by_name(entry["task_name"])
         if existing and not existing.get("is_deleted"):
             # 仅更新 FC 来源字段，不覆盖本地字段
+            # 剥离 FC trigger payload 中可能存在的 __scheduled_task_* 元数据
+            clean_payload = _strip_meta_from_payload(entry.get("payload"))
             update_data: dict[str, Any] = {
                 "cron_expression": entry["cron_expression"],
                 "policy": entry["policy"],
                 "handler": entry["handler"],
-                "payload": entry.get("payload"),
+                "payload": clean_payload,
                 "is_enabled": entry.get("is_enabled", True),
                 "fc_account_id": entry.get("fc_account_id"),
                 "fc_region": entry.get("fc_region"),

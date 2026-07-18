@@ -2,7 +2,6 @@ import logging
 import os
 import sys
 import logging
-from types import NoneType
 from typing import List, Optional, Set
 from concurrent.futures import ThreadPoolExecutor
 

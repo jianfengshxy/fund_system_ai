@@ -35,10 +35,22 @@ def _resolve_task_callable(task: dict[str, Any]):
     这里仍然桥接到 `index.py` 中原本给 FC 定时触发器使用的函数，
     这样后台调度器和“立即执行”按钮都会走同一个入口，避免两套调用链不一致。
     """
-    import index as index_module
-
     function_name = str(task.get("policy") or "").strip()
     handler_name = str(task.get("handler") or "").strip()
+
+    if handler_name and "." in handler_name:
+        module_path, attr_name = handler_name.rsplit(".", 1)
+        try:
+            import importlib
+
+            module = importlib.import_module(module_path)
+            target = getattr(module, attr_name, None)
+            if callable(target):
+                return target
+        except Exception:
+            pass
+
+    import index as index_module
 
     target = getattr(index_module, function_name, None)
     if target is None and handler_name:

@@ -123,6 +123,8 @@ const editingTaskId = ref<number | null>(null)
 const taskFormRef = ref<FormInstance>()
 const taskForm = reactive({
   task_name: '',
+  strategy_key: '',
+  strategy_action: '',
   cron_expression: '',
   policy: '',
   handler: '',
@@ -131,6 +133,107 @@ const taskForm = reactive({
   is_enabled: true,
   display_priority: 100
 })
+
+type StrategyActionConfig = {
+  key: string
+  label: string
+  actions: Record<
+    string,
+    {
+      label: string
+      policy: string
+      handler: string
+    }
+  >
+}
+
+const strategyActionConfigs: StrategyActionConfig[] = [
+  {
+    key: 'optimal_profit',
+    label: '最优止盈组合',
+    actions: {
+      add_new: { label: '新增', policy: 'add_new', handler: 'src.task.optimal_profit.add_new' },
+      increase: { label: '加仓', policy: 'increase', handler: 'src.task.optimal_profit.increase' },
+      redeem: { label: '止盈', policy: 'redeem', handler: 'src.task.optimal_profit.redeem' }
+    }
+  },
+  {
+    key: 'jianlong',
+    label: '见龙在田',
+    actions: {
+      add_new: { label: '新增', policy: 'add_new_jianlong', handler: 'src.task.jianlong.add_new' },
+      increase: { label: '加仓', policy: 'increase_jianlong', handler: 'src.task.jianlong.increase' },
+      redeem: { label: '止盈', policy: 'redeem_jianlong', handler: 'src.task.jianlong.redeem' }
+    }
+  },
+  {
+    key: 'custom_portfolio',
+    label: '自定义组合',
+    actions: {
+      add_new: { label: '新增', policy: 'add_new_custom', handler: 'src.task.custom_portfolio.add_new' },
+      increase: { label: '加仓', policy: 'increase_custom', handler: 'src.task.custom_portfolio.increase' },
+      redeem: { label: '止盈', policy: 'redeem_custom', handler: 'src.task.custom_portfolio.redeem' }
+    }
+  },
+  {
+    key: 'gold_duoli',
+    label: '黄金多利组合',
+    actions: {
+      increase: { label: '加仓', policy: 'increase_gold_portfolio', handler: 'src.task.gold_duoli.increase' },
+      redeem: { label: '止盈', policy: 'redeem_gold_portfolio', handler: 'src.task.gold_duoli.redeem' }
+    }
+  },
+  {
+    key: 'gold_dimension',
+    label: '黄金异次元组合',
+    actions: {
+      increase: {
+        label: '加仓',
+        policy: 'increase_gold_dimension_portfolio',
+        handler: 'src.task.gold_dimension.increase'
+      },
+      redeem: { label: '止盈', policy: 'redeem_gold_dimension_portfolio', handler: 'src.task.gold_dimension.redeem' }
+    }
+  }
+]
+
+const selectedStrategyConfig = computed(() =>
+  strategyActionConfigs.find((item) => item.key === String(taskForm.strategy_key || ''))
+)
+
+const selectedStrategyActions = computed(() => {
+  const config = selectedStrategyConfig.value
+  if (!config) return []
+  return Object.entries(config.actions).map(([key, value]) => ({
+    key,
+    label: value.label,
+    policy: value.policy,
+    handler: value.handler
+  }))
+})
+
+const applyStrategySelection = () => {
+  const config = selectedStrategyConfig.value
+  if (!config) return
+  const actionKey = String(taskForm.strategy_action || '')
+  const action = config.actions[actionKey]
+  if (!action) return
+  taskForm.policy = action.policy
+  taskForm.handler = action.handler
+}
+
+const inferStrategySelection = (policy: string) => {
+  const targetPolicy = String(policy || '').trim()
+  if (!targetPolicy) return null
+  for (const config of strategyActionConfigs) {
+    for (const [actionKey, action] of Object.entries(config.actions)) {
+      if (action.policy === targetPolicy) {
+        return { strategy_key: config.key, strategy_action: actionKey, handler: action.handler }
+      }
+    }
+  }
+  return null
+}
 
 const fundFieldMap: Record<string, string> = {
   fund_name: '基金名称',
@@ -459,6 +562,8 @@ const resetTaskForm = () => {
   editingTaskId.value = null
   taskDialogTitle.value = '新增定时任务'
   taskForm.task_name = ''
+  taskForm.strategy_key = ''
+  taskForm.strategy_action = ''
   taskForm.cron_expression = ''
   taskForm.policy = ''
   taskForm.handler = ''
@@ -479,9 +584,12 @@ const openEditTaskDialog = (task: ScheduledTask) => {
   editingTaskId.value = task.task_id
   taskDialogTitle.value = `编辑任务 - ${task.task_name}`
   taskForm.task_name = task.task_name
+  const inferred = inferStrategySelection(task.policy)
+  taskForm.strategy_key = inferred?.strategy_key ?? ''
+  taskForm.strategy_action = inferred?.strategy_action ?? ''
   taskForm.cron_expression = task.cron_expression
   taskForm.policy = task.policy
-  taskForm.handler = task.handler
+  taskForm.handler = inferred && String(task.handler || '').startsWith('index.') ? inferred.handler : task.handler
   taskForm.payload = task.payload
     ? JSON.stringify(task.payload_object ?? JSON.parse(task.payload), null, 2)
     : '{}'
@@ -951,6 +1059,27 @@ onMounted(async () => {
       <el-form ref="taskFormRef" :model="taskForm" :rules="taskFormRules" label-width="120px" status-icon>
         <el-form-item label="任务名" prop="task_name">
           <el-input v-model="taskForm.task_name" placeholder="例如 redeem_gold_portfolio_13918199137" />
+        </el-form-item>
+        <el-form-item label="交易策略">
+          <el-select v-model="taskForm.strategy_key" placeholder="可选：选择交易策略" clearable @change="applyStrategySelection">
+            <el-option v-for="item in strategyActionConfigs" :key="item.key" :label="item.label" :value="item.key" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="策略行为">
+          <el-select
+            v-model="taskForm.strategy_action"
+            placeholder="可选：选择新增/加仓/止盈"
+            clearable
+            :disabled="!taskForm.strategy_key"
+            @change="applyStrategySelection"
+          >
+            <el-option
+              v-for="item in selectedStrategyActions"
+              :key="item.key"
+              :label="item.label"
+              :value="item.key"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="函数名" prop="policy">
           <el-input v-model="taskForm.policy" placeholder="例如 redeem_gold_portfolio" />

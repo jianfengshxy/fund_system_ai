@@ -701,7 +701,6 @@ class ScheduledTaskRepository:
             update_data: dict[str, Any] = {
                 "cron_expression": entry["cron_expression"],
                 "policy": entry["policy"],
-                "handler": entry["handler"],
                 "payload": clean_payload,
                 "is_enabled": entry.get("is_enabled", True),
                 "fc_account_id": entry.get("fc_account_id"),

@@ -102,6 +102,20 @@ class FcOpenApiClient:
             body_obj=None,
         )
 
+    def update_function(self, function_name: str, update: dict[str, Any]) -> Any:
+        if not update:
+            raise ValueError("UpdateFunction 需要至少一个更新字段")
+        return self._request(
+            action="UpdateFunction",
+            method="PUT",
+            path=f"/2023-03-30/functions/{function_name}",
+            query=None,
+            body_obj=update,
+        )
+
+    def update_function_handler(self, function_name: str, handler: str) -> Any:
+        return self.update_function(function_name, {"handler": str(handler).strip()})
+
     def get_trigger(self, function_name: str, trigger_name: str) -> Any:
         return self._request(
             action="GetTrigger",

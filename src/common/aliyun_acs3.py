@@ -65,6 +65,10 @@ def load_acs3_credentials() -> Acs3Credentials:
     security_token = (os.getenv("ALIYUN_SECURITY_TOKEN") or os.getenv("ALIBABA_CLOUD_SECURITY_TOKEN") or "").strip()
     if not access_key_id or not access_key_secret:
         raise ValueError("缺少阿里云 OpenAPI 凭证：请配置 ALIYUN_ACCESS_KEY_ID / ALIYUN_ACCESS_KEY_SECRET")
+    if "," in access_key_id:
+        raise ValueError("ALIYUN_ACCESS_KEY_ID 格式非法：包含逗号，请确保只填写一个 AccessKeyId")
+    if "," in access_key_secret:
+        raise ValueError("ALIYUN_ACCESS_KEY_SECRET 格式非法：包含逗号，请确保只填写一个 AccessKeySecret")
     return Acs3Credentials(access_key_id=access_key_id, access_key_secret=access_key_secret, security_token=security_token or None)
 
 

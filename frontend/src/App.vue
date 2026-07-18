@@ -44,6 +44,7 @@ interface ScheduledTask {
   cron_expression: string
   policy: string
   handler: string
+  display_handler?: string | null
   payload: string | null
   payload_object?: Record<string, any> | any[]
   description: string | null
@@ -684,10 +685,11 @@ const runTaskNow = async (task: ScheduledTask) => {
     latestExecutionResult.value = execution || null
     executionDialogVisible.value = true
     await fetchTasks()
-    if (execution?.success) {
+    const ok = execution?.success === true || execution?.status === 'SUCCESS'
+    if (ok) {
       ElMessage.success(`任务「${task.task_name}」已立即执行`)
     } else {
-      ElMessage.error(`任务执行失败：${execution?.error_message || '未知错误'}`)
+      ElMessage.error(`任务执行失败：${execution?.error_message || execution?.error || '未知错误'}`)
     }
   } catch (error) {
     console.error('Run task now error:', error)
@@ -778,7 +780,11 @@ onMounted(async () => {
                 <el-table-column prop="task_id" label="ID" width="80" />
                 <el-table-column prop="task_name" label="任务名" min-width="220" />
                 <el-table-column prop="policy" label="函数名" min-width="170" />
-                <el-table-column prop="handler" label="处理器" min-width="180" />
+                <el-table-column label="处理器" min-width="180">
+                  <template #default="{ row }">
+                    {{ row.display_handler || row.handler || '-' }}
+                  </template>
+                </el-table-column>
                 <el-table-column prop="cron_expression" label="Cron" min-width="240" show-overflow-tooltip />
                 <el-table-column label="启用" width="90" align="center">
                   <template #default="{ row }">
@@ -844,7 +850,7 @@ onMounted(async () => {
                   <el-switch v-model="task.is_enabled" @change="updateTaskEnabled(task)" />
                 </div>
                 <div class="mt-3 text-sm text-gray-600 space-y-2">
-                  <div><span class="text-gray-400">处理器</span> {{ task.handler }}</div>
+                  <div><span class="text-gray-400">处理器</span> {{ task.display_handler || task.handler || '-' }}</div>
                   <div class="break-all"><span class="text-gray-400">Cron</span> {{ task.cron_expression }}</div>
                   <div><span class="text-gray-400">优先级</span> {{ task.display_priority ?? 100 }}</div>
                   <div><span class="text-gray-400">下次执行</span> {{ formatDateTime(task.next_run_at) }}</div>
@@ -1159,7 +1165,7 @@ onMounted(async () => {
     <el-dialog v-model="executionDialogVisible" title="任务执行结果" width="min(720px, 92vw)" destroy-on-close>
       <el-descriptions v-if="latestExecutionResult" :column="1" border>
         <el-descriptions-item label="执行状态">
-          <el-tag :type="latestExecutionResult.success ? 'success' : 'danger'">
+          <el-tag :type="latestExecutionResult.success === true || latestExecutionResult.status === 'SUCCESS' ? 'success' : 'danger'">
             {{ latestExecutionResult.status || '-' }}
           </el-tag>
         </el-descriptions-item>
@@ -1176,7 +1182,7 @@ onMounted(async () => {
           {{ latestExecutionResult.duration_seconds ?? '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="错误摘要">
-          <pre class="whitespace-pre-wrap break-words text-sm m-0">{{ latestExecutionResult.error_message || '-' }}</pre>
+          <pre class="whitespace-pre-wrap break-words text-sm m-0">{{ latestExecutionResult.error_message || latestExecutionResult.error || '-' }}</pre>
         </el-descriptions-item>
       </el-descriptions>
       <template #footer>

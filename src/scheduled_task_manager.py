@@ -48,7 +48,6 @@ DAY_ALIASES = {
     "SAT": 6,
 }
 
-
 def _now_local(tz_name: str = DEFAULT_TIMEZONE) -> datetime:
     return datetime.now(ZoneInfo(tz_name))
 
@@ -358,6 +357,7 @@ def build_task_response(task: dict[str, Any], next_run_at: datetime | None = Non
     result["payload_object"] = _parse_payload(result.get("payload"))
     result["next_run_at"] = next_run_at.isoformat() if next_run_at else None
     result["cron_error"] = cron_error
+    result["display_handler"] = str(result.get("handler") or "").strip() or None
     return result
 
 
@@ -864,15 +864,22 @@ class ScheduledTaskScheduler:
 
         finished_at = _now_local()
         duration = int((finished_at - started_at).total_seconds())
-        status = "SUCCESS" if fc_result["status_code"] < 400 else "FAILED"
-        error_message = None if status == "SUCCESS" else str(fc_result.get("raw_body", ""))
+        status = "SUCCESS"
+        error_message: str | None = None
+        output_body = fc_result.get("body")
+        if isinstance(output_body, dict) and (output_body.get("errorMessage") or output_body.get("errorType")):
+            status = "FAILED"
+            error_message = str(output_body.get("errorMessage") or output_body.get("errorType") or "未知错误")
+        success = status == "SUCCESS"
 
         execution = {
             "task_id": task_id,
             "task_name": task.get("task_name"),
             "policy": task.get("policy"),
             "handler": task.get("handler"),
+            "success": success,
             "status": status,
+            "error_message": error_message,
             "started_at": _ensure_datetime_string(started_at),
             "finished_at": _ensure_datetime_string(finished_at),
             "duration_seconds": duration,
@@ -927,13 +934,15 @@ class ScheduledTaskScheduler:
             return {"execution": execution, "task": refreshed_task, "log": latest_log}
         except Exception as exc:
             finished_at = _now_local()
-            started_at = _now_local()  # fallback
+            started_at = finished_at
             execution = {
                 "task_id": task_id,
                 "task_name": task.get("task_name"),
                 "policy": task.get("policy"),
                 "handler": task.get("handler"),
+                "success": False,
                 "status": "FAILED",
+                "error_message": str(exc),
                 "error": str(exc),
                 "trigger_source": "manual_fc_invoke",
                 "started_at": _ensure_datetime_string(started_at),

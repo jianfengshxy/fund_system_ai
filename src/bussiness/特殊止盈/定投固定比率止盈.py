@@ -4,11 +4,13 @@ import logging
 import yaml
 import json
 from typing import Dict
+from pathlib import Path
 
-# 获取项目根目录路径
-root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[3]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
 
 from src.domain.user.User import User
 from src.API.定投计划管理.SmartPlan import getFundPlanList, getPlanDetailPro

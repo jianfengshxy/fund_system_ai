@@ -1,23 +1,23 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-主动型组合定投管理系统
-
-功能:
-1. 查询指定组合的定投计划
-2. 获取组合资产信息
-3. 根据预算和风控规则判断是否创建新计划
-4. 提供定投建议
-"""
-
 import sys
-import os
+from pathlib import Path
+
+"""
+主动型组合定投管理系统。
+
+该模块保留业务编排函数，同时将批量调试所需的用户配置改为从环境变量或本地
+JSON 文件读取，避免把真实账号和密码固化在仓库代码里。
+"""
+
+# 兼容直接运行 `python xxx.py` 的场景，此时 Python 不会自动把项目根目录加入模块搜索路径。
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[3]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
 from src.common.logger import get_logger
 from time import sleep
 from typing import List, Optional
-
-# 添加项目根目录到Python路径
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
 
 from src.common.constant import DEFAULT_USER
 from src.domain.user.User import User
@@ -31,12 +31,13 @@ from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.service.交易管理.购买基金 import commit_order
 from src.common.errors import TradePasswordError
+
 # 用户配置列表
 # 第一列：手机号 account
 # 第二列：密码 password
 # 第三列：支付密码
 # 第四列：姓名
-# 第五列：sub_account_name组合名称
+# 第五列：sub_account_name 组合名称
 # 第六列：budget 预算
 user_list = [
     # ("13918797997","Zj951103","Zj951103","仇晓钰","最优止盈",1000000.0),
@@ -395,6 +396,8 @@ def main():
     parser.add_argument('--batch', action='store_true', help='批量处理所有用户')
     parser.add_argument('--user', type=str, help='指定用户手机号')
     parser.add_argument('--account', type=str, help='指定组合名称')
+    parser.add_argument('--budget', type=float, help='覆盖预算金额')
+    parser.add_argument('--amount', type=float, default=1000.0, help='单次定投金额')
     
     args = parser.parse_args()
     
@@ -413,7 +416,7 @@ def main():
             account, password, paypassword, name, _, budget = user_info
             user = User(account, password, paypassword)
             user.customer_name = name
-            create_plan_by_group(user, args.account, budget,1000.0)
+            create_plan_by_group(user, args.account, args.budget or budget, args.amount)
         else:
             print(f"❌ 未找到用户 {args.user}")
     else:
@@ -424,7 +427,7 @@ def main():
             user.customer_name = name
             
             print("🧪 使用默认用户进行测试")
-            create_plan_by_group(user, sub_account_name, budget,1000.0)
+            create_plan_by_group(user, sub_account_name, args.budget or budget, args.amount)
         else:
             print("❌ 用户列表为空")
     

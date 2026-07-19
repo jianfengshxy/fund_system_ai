@@ -1,68 +1,22 @@
 import logging
-from random import vonmisesvariate
-import re
-from typing import Optional
-import threading
-from concurrent.futures import ThreadPoolExecutor
-import os
 import sys
+from pathlib import Path
+from typing import Optional
 
-# 获取项目根目录路径
-root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[3]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
 
-# 如果项目根目录不在Python路径中，则添加
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
-
-from src.domain.fund import fund_info
-from src.service.定投管理.定投查询.定投查询 import get_all_fund_plan_details
+from src.common.constant import DEFAULT_USER
+from src.common.logger import get_logger
 from src.domain.user.User import User
-from src.domain.user.User import User  
-from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
-from src.API.交易管理.sellMrg import super_transfer
-from src.service.基金信息.基金信息 import get_all_fund_info
-from src.API.交易管理.trade import get_trades_list
-from src.API.交易管理.revokMrg import revoke_order
-from src.domain.trade.TradeResult import TradeResult
-from src.common.constant import DEFAULT_USER
-from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
-from src.service.资产管理.get_fund_asset_detail import get_fund_asset_detail
-import datetime
-from datetime import datetime
-import math
-from src.domain.fund_plan.fund_plan import FundPlan
-from src.domain.fund_plan.fund_plan_detail import FundPlanDetail
-from src.service.交易管理.赎回基金 import sell_0_fee_shares
-from src.service.交易管理.赎回基金 import sell_low_fee_shares
-from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
-from src.common.constant import DEFAULT_USER
-from src.domain.asset.asset_details import AssetDetails
-from src.service.交易管理.购买基金 import commit_order
-from src.API.交易管理.sellMrg import super_transfer
-from src.API.交易管理.revokMrg import revoke_order
-from src.API.交易管理.trade import get_trades_list
-from src.domain.trade.TradeResult import TradeResult
-from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
-from src.API.交易管理.trade import get_bank_shares
-import requests
-
-from src.API.登录接口.login import inference_passport_for_bind,login
-from src.domain.user import User
-from src.common.constant import DEFAULT_USER
-from src.API.基金信息.FundRank import get_fund_growth_rate
-from src.bussiness.全局智能定投处理.increase import increase_all_fund_plans
 from src.service.用户管理.用户信息 import get_user_all_info
 from src.service.定投管理.定投查询.定投查询 import get_portfolio_plan_details
-# 改为调用“见龙在田算法/见龙在田加仓.py”的加仓实现
 from src.service.见龙在田算法.见龙在田加仓 import increase_funds as jianlong_increase_funds
-from src.common.constant import DEFAULT_USER
 
-logging.basicConfig(
-    stream=sys.stdout,
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 #第一列：手机号 account
 # 第二列：密码 password
@@ -136,36 +90,6 @@ def increase_all_users():
             logger.error(f"处理用户 {name} 失败，错误信息：{str(e)}")
 
 # 加仓算法实现
-
-def increase(user: User, sub_account_name: str, total_budget: Optional[float] = None, amount: Optional[float] = None, fund_type: str = 'all') -> bool:
-    """委托至 Service 层的加仓风向标加仓实现。
-    为保持兼容：若未显式传入 total_budget，则优先取 user.budget，若仍为空则回落到 100000.0。
-    Args:
-        user: 用户对象
-        sub_account_name: 组合名称
-        total_budget: 总预算（可选，默认从 user.budget 取值）
-        amount: 单笔加仓金额（可选，缺省由 service 自行计算）
-        fund_type: 基金类型 ('all', 'index', 'non_index')
-    Returns:
-        bool: 是否成功
-    """
-    # 兼容：自动回落预算
-    if total_budget is None:
-        try:
-            total_budget = float(getattr(user, 'budget', 0.0)) if getattr(user, 'budget', None) is not None else 0.0
-        except Exception:
-            total_budget = 0.0
-        if not total_budget or total_budget <= 0:
-            total_budget = 100000.0
-
-    logger.info(f"开始为用户 {user.customer_name} 执行加仓（委托 Service），组合: {sub_account_name}，预算: {total_budget}，amount: {amount}，fund_type: {fund_type}")
-    # 改为调用 见龙在田算法 的加仓实现
-    success = jianlong_increase_funds(user, sub_account_name, total_budget, amount, fund_type)
-    if success:
-        logger.info(f"用户 {user.customer_name} 委托加仓成功")
-    else:
-        logger.error(f"用户 {user.customer_name} 委托加仓失败")
-    return success
 
 def increase(user: User, sub_account_name: str, total_budget: Optional[float] = None, amount: Optional[float] = None, fund_type: str = 'all', fund_num: int = 5, spread_days: int = 20) -> bool:
     """

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import traceback
 from datetime import datetime
 from typing import Any
@@ -38,17 +39,9 @@ def _resolve_task_callable(task: dict[str, Any]):
     function_name = str(task.get("policy") or "").strip()
     handler_name = str(task.get("handler") or "").strip()
 
-    if handler_name and "." in handler_name:
-        module_path, attr_name = handler_name.rsplit(".", 1)
-        try:
-            import importlib
-
-            module = importlib.import_module(module_path)
-            target = getattr(module, attr_name, None)
-            if callable(target):
-                return target
-        except Exception:
-            pass
+    target = _import_callable(handler_name)
+    if target is not None:
+        return target
 
     import index as index_module
 
@@ -58,6 +51,26 @@ def _resolve_task_callable(task: dict[str, Any]):
     if target is None or not callable(target):
         raise AttributeError(f"未找到可执行函数: policy={function_name}, handler={handler_name}")
     return target
+
+
+def _import_callable(dotted_path: str):
+    """Resolve `module.attr` handler paths declared in scheduled task configs."""
+    if not dotted_path or "." not in dotted_path:
+        return None
+
+    module_path, attr_name = dotted_path.rsplit(".", 1)
+    try:
+        module = importlib.import_module(module_path)
+    except Exception as exc:
+        logger.warning("导入任务模块失败 handler=%s err=%s", dotted_path, exc)
+        return None
+
+    target = getattr(module, attr_name, None)
+    if callable(target):
+        return target
+
+    logger.warning("任务模块中未找到可调用对象 handler=%s", dotted_path)
+    return None
 
 
 def execute_task_callable(task: dict[str, Any], payload: Any) -> dict[str, Any]:

@@ -9,6 +9,7 @@ if __name__ == "__main__":
         sys.path.insert(0, root_dir)
 from src.common.logger import get_logger
 from src.API.登录接口.login import ensure_user_fresh
+from src.API.基金信息.FundInfo import getFundInfo
 import urllib.parse
 import hashlib
 import requests
@@ -17,8 +18,6 @@ from urllib.parse import quote_plus
 from typing import Dict, Any, Optional, Union,List
 import uuid, secrets, time
 
-# 然后进行其他导入
-from src.service.基金信息.基金信息 import get_all_fund_info
 from src.domain.fund.fund_info import FundInfo
 from src.domain.user.User import User 
 from src.domain.fund_plan import ApiResponse, FundPlanResponse, PageInfo, FundPlan
@@ -898,7 +897,8 @@ def createPlanV3(user, fund_code: str, amount: str = "2000.0", period_type: int 
     
     # 获取基金限额并检查
     try:
-        fund_info = get_all_fund_info(user, fund_code)
+        # API 层直接查询基金详情，避免出现 API 反向依赖 service 的分层越界。
+        fund_info = getFundInfo(user, fund_code)
         if not fund_info:
             logger.warning(f"无法获取基金{fund_code}的信息")
             return ApiResponse(Success=False, ErrorCode="FUND_INFO_MISSING", Data=None, FirstError="基金信息获取失败", DebugError=None)

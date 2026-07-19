@@ -11,14 +11,20 @@
   - `payload` ⇢ `scheduled_tasks.payload`
   - `enable` ⇢ `scheduled_tasks.is_enabled`
 
-## Payload 注入约定
+## Payload 约定
 
-系统在创建/更新 trigger 时会往 payload 注入以下字段（不影响原业务参数）：
+- 当前实现会尽量保持业务 payload 原样，不再依赖注入内部元数据字段。
+- 任务执行状态回写优先通过以下信息识别任务：
+  - `scheduled_tasks.task_name`
+  - `scheduled_tasks.fc_trigger_name`
+  - `scheduled_tasks.policy`
+  - `scheduled_tasks.fc_function_name`
+- 仅在历史兼容场景下，若 payload 中仍带有下列字段，系统也会继续识别：
 
 - `__scheduled_task_id`: 对应 `scheduled_tasks.task_id`
 - `__scheduled_task_name`: 对应 `scheduled_tasks.task_name`
 
-业务入口统一解析事件时，会尝试根据上述字段回写 `scheduled_tasks.last_executed_at / last_executed_status`。
+业务入口统一解析事件时，会尝试根据上述标识回写 `scheduled_tasks.last_executed_at / last_executed_status`。
 
 ## 后端接口
 
@@ -27,7 +33,13 @@
 - 新增任务（同步创建 trigger）：`POST /api/scheduled-tasks`
 - 更新任务（同步更新 trigger）：`PUT /api/scheduled-tasks/{id}`
 - 删除任务（同步删除 trigger）：`DELETE /api/scheduled-tasks/{id}`
-- 清空并从 FC 初始化（FC → DB，然后再执行一次 DB → FC 注入）：`POST /api/scheduled-tasks/fc/init-from-fc`，body 必须包含 `{"confirm": true}`
+- 从 FC 同步任务配置：`POST /api/scheduled-tasks/fc/sync-from-fc`
+
+## 执行链路
+
+- 定时触发：FC timer trigger -> `src.task.*` -> `bussiness/service`
+- 立即执行：管理接口 -> FC OpenAPI `InvokeFunction` -> 云端函数执行
+- 本地兼容执行：`src/scheduled_tasks/executor.py` 仍保留对历史 `index.py` 入口的回退，供迁移期兼容使用
 
 ## 数据库字段（FC 扩展）
 

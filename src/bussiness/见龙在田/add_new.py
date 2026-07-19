@@ -1,13 +1,15 @@
 import logging
 import sys
 import os
+from pathlib import Path
 from typing import Optional
 
 # 获取项目根目录路径
-root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-# 如果项目根目录不在Python路径中，则添加
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[3]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
 
 from src.domain.user.User import User
 from src.service.见龙在田算法.见龙在田新增 import add_new_funds as service_add_new_funds

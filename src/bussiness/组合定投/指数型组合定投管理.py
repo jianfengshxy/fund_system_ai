@@ -1,19 +1,65 @@
+"""
+指数型组合定投管理（业务编排脚本）。
 
-import logging
+定位
+- 该文件属于 `src/bussiness/组合定投`，用于把多个 service/API 能力串起来，完成“指数型组合”的定投计划分析与批量创建/解散。
+- 这里的“指数型”指优先从“加仓风向标”中挑选指数基金（fund_type=000 等），并基于“跟踪指数是否重复”等规则做二次筛选。
+
+重要提醒（真实交易风险）
+- 本文件会调用天天基金相关接口，可能真实创建定投计划（createPlanV3），并在部分流程中尝试触发真实买入（commit_order）。
+- 直接运行脚本前请确认你使用的是可接受的账号/组合/金额配置；默认的 `user_list` 是为了本地调试方便。
+
+主要入口
+- `setup_logger_plan_for_index_funds(user, sub_account_name, budget, investment_amount)`：
+  面向“单个用户 + 单个组合”的完整分析与建议输出入口，按步骤打印过程信息。
+- `create_plan_by_group_for_index_funds(user, sub_account_name, budget, investment_amount)`：
+  在筛选出候选指数基金后，按规则创建定投计划；并尝试为新建计划补一笔买入（若能解析到子账户）。
+- `dissolve_plan_by_group_for_index_funds(user, sub_account_name, budget)`：
+  解散指定组合的相关定投计划（依赖智能定投/组合定投管理能力）。
+- `batch_process_users()`：遍历 `user_list` 批处理。
+- `main()`：本地 CLI 入口，支持 `--batch/--user/--account/--amount/--budget` 等参数。
+
+核心流程（对应脚本运行时的“步骤1~步骤5”输出）
+1) 查询组合现有定投计划
+   - 调用 `get_portfolio_plan_details(user)` 拉取定投计划列表
+   - 过滤出 `subAccountName == sub_account_name` 的计划，形成当前组合已跟踪的基金/指数集合
+2) 获取组合资产信息（用于预算/持仓判断）
+   - 调用 `get_sub_account_asset_by_name(user, sub_account_name)` 或相关资产接口
+3) 获取“加仓风向标”数据（用于候选基金池）
+   - 调用 `get_fund_investment_indicators(user)`，该逻辑依赖 MySQL 缓存/落库（因此需要可用的数据库配置）
+4) 过滤并生成“候选指数基金列表”
+   - 仅保留指数基金类型（脚本内会按 fund_type / 子类型做过滤）
+   - 再按“跟踪指数是否重复”等规则去重
+5) 创建定投计划并尝试补一笔买入
+   - 创建：`createPlanV3(...)`
+   - 买入：`commit_order(...)`（若 `sub_account_name` 无法映射到子账户号，会提示“未找到组合账号”并跳过）
+
+运行方式
+- 推荐在项目根目录执行：
+  - `venv/bin/python -m src.bussiness.组合定投.指数型组合定投管理`
+- 也支持直接运行脚本（已做路径兼容）：
+  - `venv/bin/python src/bussiness/组合定投/指数型组合定投管理.py`
+
+依赖与配置
+- 数据库：会通过 `src.db.DatabaseConnection -> src.common.app_config.load_database_config()` 获取连接信息
+  - 优先环境变量：`DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME`
+  - 其次读取项目根目录 `s.yaml` 的 `vars.common.database` 配置
+"""
+
 import sys
-import os
+from pathlib import Path
+import logging
 from time import sleep
 from typing import List, Optional
 
-# 初始化logger
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.StreamHandler(sys.stdout)
-handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-logger.addHandler(handler)
+# 兼容直接运行 `python xxx.py` 的场景，此时 Python 不会自动把项目根目录加入模块搜索路径。
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[3]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
 
-# 添加项目根目录到Python路径
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
+from src.common.logger import get_logger
 
 from src.common.constant import DEFAULT_USER
 from src.domain.user.User import User
@@ -28,14 +74,16 @@ from src.service.交易管理.购买基金 import commit_order
 from src.common.errors import TradePasswordError
 from src.API.组合管理.SubAccountMrg import getSubAssetMultList
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
-            
+
+logger = get_logger(__name__)
+
 # 用户配置列表
 # 第一列：手机号 account
 # 第二列：密码 password
 # 第三列：支付密码
 # 第四列：姓名
-# 第五列：sub_account_name组合名称
-# 第六列：预算 预算
+# 第五列：sub_account_name 组合名称
+# 第六列：budget 预算
 user_list = [
     # ("13918797997","Zj951103","Zj951103","仇晓钰","最优止盈",1000000.0),
     ("13918199137", "sWX15706", "sWX15706", "施小雨", "飞龙在天", 500000.0)
@@ -56,6 +104,10 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
     print(f"定投金额: {investment_amount:,.2f} 元")
     
     try:
+        sub_account_no = getSubAccountNoByName(user, sub_account_name)
+        if not sub_account_no:
+            raise ValueError(f"未找到组合 '{sub_account_name}' 的账号（组合不存在或名称不匹配）")
+
         # 1. 找到指定组合定投计划
         print("步骤1: 查询组合定投计划...")
         
@@ -109,6 +161,8 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
                 
                 # 获取详细的资产信息
                 asset_details = get_sub_account_asset_by_name(user, sub_account_name)
+                if not asset_details:
+                    asset_details = []
                 if asset_details:
                     print(f"组合包含 {len(asset_details)} 只基金")
                     for i, asset in enumerate(asset_details[:5]):  # 只显示前5只基金
@@ -307,6 +361,9 @@ def setup_logger_plan_for_index_funds(user: User, sub_account_name: str, budget:
         
         print(f"\n✅ 指数型组合 '{sub_account_name}' 定投管理分析完成")
         
+    except ValueError as e:
+        print(f"❌ {str(e)}")
+        return
     except Exception as e:
         print(f"❌ 处理指数型组合定投管理时发生错误: {str(e)}")
         import traceback
@@ -553,7 +610,7 @@ def batch_process_users():
             
             # 执行指数型组合定投管理
             investment_amount = 2000.0  # 默认定投金额
-            create_plan_by_group_for_index_funds(user, sub_account_name, investment_amount)
+            create_plan_by_group_for_index_funds(user, sub_account_name, budget, investment_amount)
             
         except Exception as e:
             print(f"❌ 处理用户 {user_info} 时发生错误: {str(e)}")
@@ -576,6 +633,7 @@ def main():
     parser.add_argument('--user', type=str, help='指定用户手机号')
     parser.add_argument('--account', type=str, help='指定组合名称')
     parser.add_argument('--amount', type=float, default=2000.0, help='定投金额')
+    parser.add_argument('--budget', type=float, help='覆盖预算金额')
     
     args = parser.parse_args()
     
@@ -594,7 +652,7 @@ def main():
             account, password, paypassword, name, _, budget = user_info
             user = User(account, password, paypassword)
             user.customer_name = name
-            create_plan_by_group_for_index_funds(user, args.account, args.amount)
+            create_plan_by_group_for_index_funds(user, args.account, args.budget or budget, args.amount)
         else:
             print(f"❌ 未找到用户 {args.user}")
     else:
@@ -605,8 +663,7 @@ def main():
             user.customer_name = name
             
             print("🧪 使用默认用户进行测试")
-            investment_amount = 2000.0  # 默认定投金额
-            create_plan_by_group_for_index_funds(user, sub_account_name, investment_amount)
+            create_plan_by_group_for_index_funds(user, sub_account_name, args.budget or budget, args.amount)
         else:
             print("❌ 用户列表为空")
     

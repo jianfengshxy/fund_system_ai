@@ -1,49 +1,40 @@
+from __future__ import annotations
+
 import os
-import mysql.connector
-from mysql.connector import pooling
-from mysql.connector import Error
+
+from mysql.connector import Error, pooling
+
+from src.common.app_config import ConfigError, load_database_config
+from src.common.logger import get_logger
+
+
+logger = get_logger(__name__)
+
 
 class DatabaseConnection:
-    def __init__(self, pool_size=10):
-        if 'FC_FUNCTION_NAME' in os.environ:
-            # 云端直接使用外网地址
-            self.dbconfig = {
-                'host': os.environ.get('EXTERNAL_HOST', 'rm-uf614tc8841ee6nwiwo.rwlb.rds.aliyuncs.com'),
-                'port': int(os.environ.get('DB_PORT', 3306)),
-                'user': os.environ.get('DB_USER', 'jianfengshxy'),
-                'password': os.environ.get('DB_PASSWORD', 'jianfeng1984Aa+'),
-                'database': os.environ.get('DB_NAME', 'kuafudb'),
-                'charset': 'utf8mb4'
-            }
-        else:
-            import yaml
-            config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 's.yaml')
-            with open(config_path, 'r') as file:
-                config = yaml.safe_load(file)
-            db_config = config['vars']['common']['database']
-            self.dbconfig = {
-                'host': db_config.get('EXTERNAL_HOST', 'rm-uf614tc8841ee6nwiwo.rwlb.rds.aliyuncs.com'),
-                'port': db_config.get('port', 3306),
-                'user': db_config.get('DB_USER', 'jianfengshxy'),
-                'password': db_config.get('DB_PASSWORD', 'jianfeng1984Aa+'),
-                'database': db_config.get('DB_NAME', 'kuafudb'),
-                'charset': 'utf8mb4'
-            }
-        self.connection_pool = None
+    """MySQL connection-pool wrapper used by repositories and scheduled task services."""
+
+    def __init__(self, pool_size: int = 10):
         self.pool_size = pool_size
+        self.dbconfig = load_database_config()
+        self.connection_pool = None
+        self.pool_name = f"fund_system_pool_{os.getpid()}_{id(self)}"
 
     def create_pool(self):
+        """Lazily create the connection pool so import-time side effects stay small."""
         if self.connection_pool is None:
             try:
                 self.connection_pool = pooling.MySQLConnectionPool(
-                    pool_name="mypool",
+                    pool_name=self.pool_name,
                     pool_size=self.pool_size,
                     pool_reset_session=True,
-                    **self.dbconfig
+                    **self.dbconfig,
                 )
-                print("数据库连接池创建成功")
-            except Error as e:
-                raise ConnectionError(f"创建连接池失败: {e}")
+                logger.info("数据库连接池创建成功", extra={"action": "db_pool_create"})
+            except ConfigError:
+                raise
+            except Error as exc:
+                raise ConnectionError(f"创建连接池失败: {exc}") from exc
         return self.connection_pool
 
     def get_connection(self):
@@ -59,58 +50,66 @@ class DatabaseConnection:
             conn = self.get_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT 1")
-            cursor.fetchone()  # 读取结果以避免Unread result found错误
+            cursor.fetchone()
             cursor.close()
             self.disconnect(conn)
-            print("数据库连接池测试成功")
+            logger.info("数据库连接池测试成功", extra={"action": "db_pool_test"})
             return True
-        except Error as e:
-            print(f"测试连接失败: {e}")
+        except Error as exc:
+            logger.error("测试连接失败: %s", exc, extra={"action": "db_pool_test"})
             return False
 
     def execute_query(self, sql, params=None):
         conn = self.get_connection()
+        cursor = None
         try:
             cursor = conn.cursor(dictionary=True)
             cursor.execute(sql, params or ())
-            result = cursor.fetchall()
+            result = cursor.fetchall() if cursor.with_rows else []
             conn.commit()
             return result
         finally:
-            cursor.close()
+            if cursor is not None:
+                cursor.close()
             self.disconnect(conn)
 
     def insert(self, sql, params=None):
         conn = self.get_connection()
+        cursor = None
         try:
             cursor = conn.cursor()
             cursor.execute(sql, params or ())
             conn.commit()
             return cursor.lastrowid
         finally:
-            cursor.close()
+            if cursor is not None:
+                cursor.close()
             self.disconnect(conn)
 
     def insert_many(self, sql, params_list=None):
         conn = self.get_connection()
+        cursor = None
         try:
             cursor = conn.cursor()
             cursor.executemany(sql, params_list or [])
             conn.commit()
             return cursor.rowcount
         finally:
-            cursor.close()
+            if cursor is not None:
+                cursor.close()
             self.disconnect(conn)
 
     def update(self, sql, params=None):
         conn = self.get_connection()
+        cursor = None
         try:
             cursor = conn.cursor()
             cursor.execute(sql, params or ())
             conn.commit()
             return cursor.rowcount
         finally:
-            cursor.close()
+            if cursor is not None:
+                cursor.close()
             self.disconnect(conn)
 
     def delete(self, sql, params=None):

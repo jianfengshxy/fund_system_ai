@@ -7,13 +7,13 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import os
 import sys
+from pathlib import Path
 
-# 获取项目根目录路径
-root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-# 如果项目根目录不在Python路径中，则添加
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[3]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
 
 from src.service.定投管理.定投查询.定投查询 import get_all_fund_plan_details
 from src.domain.user.User import User

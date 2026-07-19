@@ -50,6 +50,16 @@ def create_period_investment_by_group(user: User, sub_account_name: str, fund_co
     Returns:
         API响应结果
     """
+    sub_account_no = getSubAccountNoByName(user, sub_account_name)
+    if not sub_account_no:
+        return ApiResponse(
+            Success=False,
+            ErrorCode="SUB_ACCOUNT_NOT_FOUND",
+            Data=None,
+            FirstError=f"未找到组合 '{sub_account_name}' 的账号",
+            DebugError=None,
+        )
+
     # 检查该基金是否已有定投计划
     existing_plans = getFundPlanList(fund_code, user)
     

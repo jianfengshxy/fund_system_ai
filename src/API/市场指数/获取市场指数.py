@@ -76,7 +76,7 @@ def get_market_index(
     user: User,
     type_code: str = "0",
     page_index: int = 1,
-    page_size: int = 20,
+    page_size: int = 30,
     sort_type: str = "DESC",
     sort_name: str = "NEWCHG",
     sec_code: str = "",
@@ -91,7 +91,7 @@ def get_market_index(
         type_code:    指数类型代码，详见 MARKET_INDEX_TYPE_MAP
                       默认 "0"（全部指数），常用: 001001/001002/001003/001004/003
         page_index:   页码，从 1 开始
-        page_size:    每页数量，默认 20
+        page_size:    每页数量，默认 30，最大 30（超出自动截断）
         sort_type:    排序方向，"DESC"（降序）或 "ASC"（升序）
         sort_name:    排序字段，默认 "NEWCHG"（涨跌幅）
         sec_code:     行业/主题代码，空字符串表示不过滤
@@ -107,6 +107,9 @@ def get_market_index(
         f"page={page_index}, size={page_size}, "
         f"sort={sort_name} {sort_type}"
     )
+
+    # page_size 上限 30
+    page_size = min(max(page_size, 1), 30)
 
     url = "https://fundcomapi.eastmoney.com/mm/FundIndex/FundZSBIndexRankV2"
 

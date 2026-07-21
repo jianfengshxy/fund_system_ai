@@ -98,7 +98,7 @@ def _estimate_by_theme(fund_info: FundInfo, user: User) -> None:
     fund_info.estimated_time = str(date_str) if date_str else None
     logger.info(
         f"{fund_info.fund_name} 主题估值: [{theme_name}]({sec_code}), "
-        f"板块涨跌幅={chg}%, 估算净值={estimated_value}"
+        f"板块涨跌幅={chg}%"
     )
 
 
@@ -172,6 +172,9 @@ def _refresh_estimate(fund_info: FundInfo, user: User) -> None:
             fund_info.estimated_value = round(nav * (1 + chg_val / 100), 4) if nav > 0 else None
             fund_info.estimated_time = index_date
             fund_info._baseline_nav_date = getattr(fund_info, "nav_date", None)
+            # QDII 基金有跨市场时差，指数日期与净值日期天然不同步，不做清零判断
+            if not is_qdii:
+                _clear_if_nav_matches_estimated(fund_info)
             tag = "QDII" if is_qdii else "指数"
             logger.info(
                 f"{fund_info.fund_name} ({tag}) 指数估值: "
@@ -207,6 +210,23 @@ def _refresh_estimate(fund_info: FundInfo, user: User) -> None:
 
     # ── 其他基金（混合/股票等）：用关联主题板块涨跌幅 ──
     _estimate_by_theme(fund_info, user)
+
+    # ── 后处理：若净值日期与估算日期相同，说明该交易日净值已出，估算值清零 ──
+    _clear_if_nav_matches_estimated(fund_info)
+
+
+def _clear_if_nav_matches_estimated(fund_info: FundInfo) -> None:
+    """若净值日期与估算日期相同，说明该交易日净值已出，估算值清零。"""
+    if fund_info.nav_date and fund_info.estimated_time and fund_info.nav is not None:
+        nav_date_str = fund_info.nav_date[:10]
+        estimated_date = fund_info.estimated_time[:10]
+        if nav_date_str == estimated_date:
+            fund_info.estimated_change = 0.0
+            fund_info.estimated_value = fund_info.nav
+            fund_info.estimated_time = None
+            logger.debug(
+                f"{fund_info.fund_name} 净值日期[{nav_date_str}]与估算日期相同，估算值清零"
+            )
 
 
 def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:

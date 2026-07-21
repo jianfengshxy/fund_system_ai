@@ -211,21 +211,22 @@ def _refresh_estimate(fund_info: FundInfo, user: User) -> None:
     # ── 其他基金（混合/股票等）：用关联主题板块涨跌幅 ──
     _estimate_by_theme(fund_info, user)
 
-    # ── 后处理：若净值日期与估算日期相同，说明该交易日净值已出，估算值清零 ──
+    # ── 后处理：若净值日期已是今天（自然日），说明当日净值已发布，估算值清零 ──
     _clear_if_nav_matches_estimated(fund_info)
 
 
 def _clear_if_nav_matches_estimated(fund_info: FundInfo) -> None:
-    """若净值日期与估算日期相同，说明该交易日净值已出，估算值清零。"""
-    if fund_info.nav_date and fund_info.estimated_time and fund_info.nav is not None:
+    """若净值日期已是今天（自然日），说明当日净值已发布，估算值清零。"""
+    if fund_info.nav_date and fund_info.nav is not None:
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
         nav_date_str = fund_info.nav_date[:10]
-        estimated_date = fund_info.estimated_time[:10]
-        if nav_date_str == estimated_date:
+        if nav_date_str == today:
             fund_info.estimated_change = 0.0
             fund_info.estimated_value = fund_info.nav
             fund_info.estimated_time = None
             logger.debug(
-                f"{fund_info.fund_name} 净值日期[{nav_date_str}]与估算日期相同，估算值清零"
+                f"{fund_info.fund_name} 净值日期[{nav_date_str}]已是当日，估算值清零"
             )
 
 

@@ -287,6 +287,7 @@ def _handle_portfolio_details(portfolio_name: str):
     total_profit_value = 0.0
     portfolio_details = []
 
+    user = ensure_user_fresh(DEFAULT_USER, 600)
     sub_accounts_response = _get_sub_accounts_cached()
     selected_portfolio = None
     if getattr(sub_accounts_response, "Success", False) and getattr(sub_accounts_response, "Data", None):
@@ -299,17 +300,22 @@ def _handle_portfolio_details(portfolio_name: str):
     if asset_details_list:
 
         def _enrich(asset):
-            fund_info = getFundInfo(DEFAULT_USER, asset.fund_code)
-            if fund_info:
-                if (hasattr(fund_info, "fund_type") and fund_info.fund_type == "a") or (
-                    hasattr(fund_info, "fund_name") and "QDII" in fund_info.fund_name.upper()
-                ):
-                    asset.estimated_change = 0.0
-                else:
-                    updated_fund = updateFundEstimatedValue(fund_info)
-                    asset.estimated_change = updated_fund.estimated_change if updated_fund else 0.0
-            else:
+            from src.service.基金信息.基金信息 import get_all_fund_info
+
+            fund_info = get_all_fund_info(user, asset.fund_code)
+            if not fund_info:
                 asset.estimated_change = 0.0
+                asset.nav_change = None
+                asset.nav_date = getattr(asset, "nav_date", None)
+                return asset
+
+            asset.fund_name = getattr(fund_info, "fund_name", getattr(asset, "fund_name", None))
+            asset.fund_type = getattr(fund_info, "fund_type", getattr(asset, "fund_type", None))
+            asset.fund_nav = getattr(fund_info, "nav", getattr(asset, "fund_nav", None))
+            asset.nav_date = getattr(fund_info, "nav_date", getattr(asset, "nav_date", None))
+            asset.nav_change = getattr(fund_info, "nav_change", None)
+            asset.estimated_change = float(getattr(fund_info, "estimated_change", 0.0) or 0.0)
+            asset.estimated_time = getattr(fund_info, "estimated_time", None)
             return asset
 
         futures = [_executor.submit(_enrich, asset) for asset in asset_details_list]

@@ -130,7 +130,7 @@ if __name__ == "__main__":
     # 设置日志级别为DEBUG
     logging.getLogger().setLevel(logging.DEBUG)
     
-    fund_code = "004433"
+    fund_code = "021540"
     
     print(f"正在获取基金 {fund_code} 的基础信息...")
     fund_info = getFundInfo(DEFAULT_USER, fund_code)

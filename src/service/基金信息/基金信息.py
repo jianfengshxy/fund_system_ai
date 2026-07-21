@@ -12,61 +12,207 @@ if root_dir not in sys.path:
 
 from src.common.logger import get_logger
 from src.common.constant import DEFAULT_USER
-from src.API.基金信息.FundInfo import getFundInfo, updateFundEstimatedValue
+from src.API.基金信息.FundInfo import getFundInfo
 from src.API.基金信息.FundRank import get_nav_rank, get_fund_volatility as get_fund_volatility_api
+from src.API.基金信息.基金详情页 import get_fund_detail_page
+from src.API.市场指数.获取市场指数 import get_market_index
 from src.domain.fund.fund_info import FundInfo
+from src.domain.fund.fund_detail import (
+    FundDetailResponse,
+    FundRelateTheme,
+    FundRiskMetrics,
+    FundHolderStructure,
+    FundCompanyInfo,
+    FundManagerBrief,
+    FundPeriodIncrease,
+)
 from src.domain.user.User import User
 
-# 用于缓存基金信息的字典，避免重复请求
-fund_info_cache: Dict[str, FundInfo] = {}
-
 logger = get_logger(__name__)
+
+
+def _estimate_by_theme(fund_info: FundInfo, user: User) -> None:
+    """
+    通过基金详情页的关联主题，查询对应主题指数的涨跌幅作为估算涨跌幅。
+
+    策略：
+    1. 从 theme_infos 筛选展示（isshow=True）的主题，取第一个
+    2. 若无可展示主题，退而使用 relate_themes，按 1 年相关性（CORR_1Y）降序取最高
+    3. 将主题的 sec_code 作为查询条件，获取对应指数涨跌幅（NEWCHG）
+    4. 估算净值 = 上一个交易日净值 × (1 + 涨跌幅/100)
+
+    若找不到任何主题，则估算涨跌幅 = 0，估算净值 = 昨日净值。
+    """
+    # 优先从 theme_infos 筛选 isshow=True 的主题
+    sec_code = None
+    theme_name = None
+    show_themes = [ti for ti in fund_info.theme_infos if ti.isshow]
+    if show_themes:
+        sec_code = show_themes[0].sec_code
+        theme_name = show_themes[0].sec_name
+        logger.debug(
+            f"{fund_info.fund_name} 选取展示主题[{theme_name}]({sec_code})"
+        )
+
+    # 退而使用 relate_themes 按相关性降序
+    if not sec_code and fund_info.relate_themes:
+        theme = max(fund_info.relate_themes, key=lambda t: t.corr_1y)
+        sec_code = theme.sec_code
+        theme_name = theme.sec_name
+        logger.debug(
+            f"{fund_info.fund_name} 选取关联主题[{theme_name}]({sec_code}), "
+            f"相关性={theme.corr_1y}%"
+        )
+
+    if not sec_code:
+        logger.debug(f"{fund_info.fund_name} 无关联主题数据，估算涨跌幅默认为 0%")
+        _set_estimate_zero(fund_info)
+        return
+
+    chg: Optional[float] = None
+    date_str: Optional[str] = None
+    if str(sec_code).upper().startswith("BK"):
+        from src.API.市场指数.基金主题详情 import get_fund_theme_detail
+        td = get_fund_theme_detail(user, sec_code)
+        if td.success and td.data and td.data.realTimeList:
+            rt = td.data.realTimeList[0]
+            chg = rt.CHGRT
+            date_str = rt.DEALTIME or rt.SCOREDATE
+    else:
+        resp = get_market_index(user, sec_code=sec_code, page_size=1, sort_name="NEWCHG")
+        if resp.success and resp.items:
+            it = resp.items[0]
+            chg = float(it.NEWCHG)
+            date_str = getattr(it, "DATE", None) or getattr(it, "PDATE", None) or getattr(it, "D", None)
+
+    if chg is None:
+        logger.debug(f"{fund_info.fund_name} 主题[{theme_name}]涨跌幅查询无结果，默认为 0%")
+        _set_estimate_zero(fund_info)
+        return
+
+    nav = fund_info.nav or 0.0
+    estimated_value = round(nav * (1 + chg / 100), 4) if nav > 0 else None
+
+    fund_info.estimated_change = chg
+    fund_info.estimated_value = estimated_value
+    fund_info.estimated_time = str(date_str) if date_str else None
+    logger.info(
+        f"{fund_info.fund_name} 主题估值: [{theme_name}]({sec_code}), "
+        f"板块涨跌幅={chg}%, 估算净值={estimated_value}"
+    )
+
+
+def _set_estimate_zero(fund_info: FundInfo) -> None:
+    """估算涨跌幅=0，估算净值=当日净值。"""
+    fund_info.estimated_change = 0.0
+    fund_info.estimated_value = fund_info.nav or 0.0
+    fund_info.estimated_time = None
+
+
+def _merge_fund_detail(fund_info: FundInfo, user: User) -> Optional[FundDetailResponse]:
+    """
+    获取基金详情页数据并合并到 FundInfo 对象中。
+
+    注入的字段：
+      relate_themes / theme_infos / period_increases / risk_metrics /
+      holder_structure / company_info / current_managers
+    """
+    try:
+        detail = get_fund_detail_page(user, fund_info.fund_code)
+        if not detail.success:
+            return None
+        fund_info.relate_themes = detail.relate_themes
+        fund_info.theme_infos = detail.theme_infos
+        fund_info.period_increases = detail.period_increases
+        fund_info.risk_metrics = detail.risk_metrics
+        fund_info.holder_structure = detail.holder_structure
+        fund_info.company_info = detail.company_info
+        fund_info.current_managers = detail.current_managers
+        return detail
+    except Exception as e:
+        logger.warning(f"{fund_info.fund_name} 合并详情页数据异常: {e}")
+        return None
+
+def _refresh_estimate(fund_info: FundInfo, user: User) -> None:
+    """
+    统一估值入口。
+
+    优先级：
+    1. type=000（指数型）：若有 index_code，用指数详情 NEWCHG（对齐天天基金指数涨幅）
+    2. QDII（type='a' 或含 "QDII"）：若有 index_code，用指数详情 NEWCHG；否则 0.0
+    3. 其他所有基金（混合/股票等）：用关联主题板块的实时涨跌幅（BK 代码 → fundThemeDetail）
+    """
+    fund_type = getattr(fund_info, 'fund_type', '')
+    is_qdii = fund_type == 'a' or ("QDII" in (fund_info.fund_name or '').upper())
+
+    # ── type=000 指数型 / QDII：优先用跟踪指数涨跌幅 ──
+    index_code = getattr(fund_info, 'index_code', None)
+    if (fund_type == '000' or is_qdii) and index_code:
+        chg_val = None
+        index_date = None
+        index_name = index_code
+        try:
+            from src.API.市场指数.指数详情 import get_index_detail
+            detail = get_index_detail(user, index_code)
+            index_name = detail.get('BKNAME') or detail.get('INDEXNAME', index_code) or index_code
+            index_date = detail.get('NEWPRICEDATE') or detail.get('PDATE', '')
+
+            # 优先 NEWCHG，若无则尝试 D 字段（黄金 AU9999 等特殊指数用 D 表示日涨跌）
+            chg = detail.get('NEWCHG')
+            if chg is None:
+                chg = detail.get('D')
+            if chg is not None:
+                chg_val = float(chg)
+        except Exception as e:
+            logger.warning(f"{fund_info.fund_name} 指数详情查询失败({index_code}): {e}")
+
+        if chg_val is not None:
+            nav = fund_info.nav or 0.0
+            fund_info.estimated_change = chg_val
+            fund_info.estimated_value = round(nav * (1 + chg_val / 100), 4) if nav > 0 else None
+            fund_info.estimated_time = index_date
+            fund_info._baseline_nav_date = getattr(fund_info, "nav_date", None)
+            tag = "QDII" if is_qdii else "指数"
+            logger.info(
+                f"{fund_info.fund_name} ({tag}) 指数估值: "
+                f"[{index_name}]({index_code}) 涨幅={chg_val}%, 净值={fund_info.estimated_value}"
+            )
+            return
+
+        # 回退：无数据则归零
+        if fund_type == '000':
+            # 非 QDII 的 type=000 指数型基金，指数查不到时归零
+            fund_info.estimated_change = 0.0
+            fund_info.estimated_value = fund_info.nav or 0.0
+            fund_info.estimated_time = None
+            fund_info._baseline_nav_date = getattr(fund_info, "nav_date", None)
+            logger.debug(f"{fund_info.fund_name} 指数无数据，默认涨跌幅 0%")
+            return
+        if is_qdii:
+            fund_info.estimated_change = 0.0
+            fund_info.estimated_value = fund_info.nav or 0.0
+            fund_info.estimated_time = None
+            fund_info._baseline_nav_date = getattr(fund_info, "nav_date", None)
+            logger.debug(f"{fund_info.fund_name} (QDII) 无指数代码，默认涨跌幅 0.0%")
+            return
+
+    # QDII 无 index_code → 归零
+    if is_qdii:
+        fund_info.estimated_change = 0.0
+        fund_info.estimated_value = fund_info.nav or 0.0
+        fund_info.estimated_time = None
+        fund_info._baseline_nav_date = getattr(fund_info, "nav_date", None)
+        logger.debug(f"{fund_info.fund_name} (QDII) 无指数代码，默认涨跌幅 0.0%")
+        return
+
+    # ── 其他基金（混合/股票等）：用关联主题板块涨跌幅 ──
+    _estimate_by_theme(fund_info, user)
+
 
 def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     """
     获取基金的完整信息，包括基础信息、估值信息、排名信息和波动率
     """
-    # 第0步：从缓存中查找基金信息
-    if fund_code in fund_info_cache:
-        fund_info = fund_info_cache[fund_code]
-        # 即便从缓存取，也要刷新估值信息
-        try:
-            if not hasattr(fund_info, "_baseline_nav_date"):
-                refreshed = getFundInfo(user, fund_code)
-                if refreshed:
-                    # 保留之前的扩展字段
-                    refreshed.rank_30day = getattr(fund_info, 'rank_30day', None)
-                    refreshed.rank_100day = getattr(fund_info, 'rank_100day', None)
-                    refreshed.volatility = getattr(fund_info, 'volatility', None)
-                    refreshed.nav_5day_avg = getattr(fund_info, 'nav_5day_avg', None)
-                    fund_info = refreshed
-            # QDII 基金 (type='a') 或 名字包含 "QDII" 估值不准，直接设为 0.0
-            if (hasattr(fund_info, 'fund_type') and fund_info.fund_type == 'a') or \
-               (hasattr(fund_info, 'fund_name') and "QDII" in fund_info.fund_name.upper()):
-                fund_info.estimated_change = 0.0
-                fund_info._baseline_nav_date = getattr(fund_info, "nav_date", None)
-                fund_info_cache[fund_code] = fund_info  # 更新缓存
-                logger.debug(f"{fund_info.fund_name} (QDII) 跳过估值查询，默认涨跌幅为 0.0%")
-            else:
-                updated_fund_info = updateFundEstimatedValue(fund_info, user)
-                if updated_fund_info:
-                    fund_info = updated_fund_info
-                    fund_info_cache[fund_code] = fund_info  # 更新缓存
-                    # logger.debug(f"{fund_info.fund_name}刷新基金估值信息: 估算净值={fund_info.estimated_value}, 估算涨跌={fund_info.estimated_change}%")
-                else:
-                    logger.warning(f"{fund_info.fund_name}刷新基金估值信息失败: {fund_code}")
-
-            nav5 = getattr(fund_info, "nav_5day_avg", None)
-            if nav5 is None:
-                nav5_result = get_fund_volatility_api(user, fund_info, 5)
-                if nav5_result is not None:
-                    mean_5d, _, _ = nav5_result
-                    fund_info.nav_5day_avg = mean_5d
-                    fund_info_cache[fund_code] = fund_info
-        except Exception as e:
-            logger.error(f"{fund_info.fund_name}刷新基金估值信息时发生异常: {str(e)}")
-        return fund_info
-    
     logger.debug(f"开始获取基金 {fund_code} 的完整信息")
     
     # 第1步：获取基金基础信息
@@ -79,21 +225,13 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
         f"{fund_info.fund_name}成功获取基金基础信息: {fund_info.fund_name}({fund_code})，"
         f"类型={getattr(fund_info, 'fund_type', '')}，子类型={getattr(fund_info, 'fund_sub_type', '')}"
     )
+
+    # 第1.5步：获取基金详情页综合数据（关联主题/风险指标/持有人结构等）
+    _merge_fund_detail(fund_info, user)
     
     # 第2步：获取基金估值信息
     try:
-        # QDII 基金 (type='a') 或 名字包含 "QDII" 估值不准，直接设为 0.0
-        if (hasattr(fund_info, 'fund_type') and fund_info.fund_type == 'a') or \
-           (hasattr(fund_info, 'fund_name') and "QDII" in fund_info.fund_name.upper()):
-            fund_info.estimated_change = 0.0
-            logger.debug(f"{fund_info.fund_name} (QDII) 跳过估值查询，默认涨跌幅为 0.0%")
-        else:
-            updated_fund_info = updateFundEstimatedValue(fund_info, user)
-            if updated_fund_info:
-                fund_info = updated_fund_info
-                logger.debug(f"{fund_info.fund_name}成功获取基金估值信息: 估算净值={fund_info.estimated_value}, 估算涨跌={fund_info.estimated_change}%")
-            else:
-                logger.warning(f"{fund_info.fund_name}获取基金估值信息失败: {fund_code}")
+        _refresh_estimate(fund_info, user)
     except Exception as e:
         logger.error(f"{fund_info.fund_name}获取基金估值信息时发生异常: {str(e)}")
     
@@ -149,15 +287,10 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     else:
         logger.debug(f"{fund_info.fund_name}未跟踪任何指数或指数代码为空")
     
-    # 第6步：将基金信息加入缓存
-    fund_info_cache[fund_code] = fund_info
-    logger.debug(f"基金 {fund_code} {fund_info.fund_name}的完整信息已加入缓存")
-    
-    # 第7步：返回基金信息对象
+    # 返回基金信息对象
     return fund_info
 
 if __name__ == '__main__':
-    # fund_info = get_all_fund_info(DEFAULT_USER, '021740')
-    fund_info = get_all_fund_info(DEFAULT_USER, '016453')
+    fund_info = get_all_fund_info(DEFAULT_USER, '021740')
     print(fund_info)
     pass

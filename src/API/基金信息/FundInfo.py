@@ -224,10 +224,13 @@ def updateFundEstimatedValue(fund_info: FundInfo, user=None) -> Optional[FundInf
     """
     获取并更新基金实时估值信息。
 
-    该函数访问东财估值脚本接口 `fundgz.1234567.com.cn`，
+    内部调用 FundValuationLast 接口（由 基金估值信息.py 提供），
     将最新估算净值、估算涨跌幅、估值时间回填到传入的 `FundInfo` 对象。
     同时会基于最新估算涨跌，联动修正近一周、近一月、近三月、近六月、
     近一年和今年以来等区间收益字段，便于策略层直接消费。
+
+    注意：旧的 fundgz.1234567.com.cn 接口已废弃（返回 404），
+    现统一走 fundcomapi.tiantianfunds.com 的 FundValuationLast 接口。
 
     Args:
         fund_info: 已包含基础净值和收益字段的基金对象。
@@ -238,115 +241,108 @@ def updateFundEstimatedValue(fund_info: FundInfo, user=None) -> Optional[FundInf
         `FundInfo`: 更新成功时返回原对象；
         连续重试失败时返回 `None`。
     """
-    url = f'https://fundgz.1234567.com.cn/js/{fund_info.fund_code}.js'
-    
-    headers = {
-        'Connection': 'keep-alive',
-        'Host': 'fundgz.1234567.com.cn',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://fund.eastmoney.com/'
-    }
-    
     logger = get_logger("FundInfo")
-    
-    # 估值脚本偶尔会返回空内容或临时失败，因此保留轻量重试。
     max_retries = 3
     retry_count = 0
-    retry_delay = 2  # 初始延迟2秒
-    
+    retry_delay = 2
+
     while retry_count < max_retries:
-        # 动态参数用于降低被服务端识别为重复请求的概率。
-        params = {
-            'rt': int(time.time() * 1000),      # 时间戳
-            '_': random.randint(100000, 999999) # 随机数
-        }
-        
         try:
             if retry_count > 0:
                 logger.debug(f"正在进行第 {retry_count} 次重试获取基金估值数据，基金代码: {fund_info.fund_code}")
-                # 指数退避：避免在接口抖动时持续高频重试。
                 time.sleep(retry_delay)
                 retry_delay *= 2
-                
-            # 使用全局session发送请求
-            response = session.get(url, params=params, headers=headers, verify=False, timeout=30)
-            response.raise_for_status()
-            
-            # 响应格式固定为 `jsonpgz({...});`，需要先抽取其中 JSON 片段。
-            content = response.text
-            if content.strip() == "jsonpgz();":
-                fund_info.estimated_change = 0.0
-                return fund_info
-            
-            json_str = content[content.find('{'): content.rfind('}')+1]
-            
-            try:
-                data = json.loads(json_str)
-                
-                # 如果估算时间对应日期的正式净值已经发布，则切回正式净值；
-                # 否则继续使用盘中估算净值和估算涨跌幅。
-                _apply_estimated_or_official_nav(fund_info, data, user=user)
-                
-                # 当基础净值日期变化时，刷新一次收益率基线，避免重复叠加估算值。
-                baseline_nav_date = getattr(fund_info, "_baseline_nav_date", None)
-                if baseline_nav_date != getattr(fund_info, "nav_date", None):
-                    fund_info._baseline_nav_date = getattr(fund_info, "nav_date", None)
-                    fund_info._baseline_week_return = fund_info.week_return
-                    fund_info._baseline_month_return = fund_info.month_return
-                    fund_info._baseline_three_month_return = fund_info.three_month_return
-                    fund_info._baseline_six_month_return = fund_info.six_month_return
-                    fund_info._baseline_year_return = fund_info.year_return
-                    fund_info._baseline_this_year_return = fund_info.this_year_return
 
-                # 在静态收益率基线之上叠加实时估算涨跌，得到更接近当前时刻的收益表现。
-                est = fund_info.estimated_change or 0.0
-                base_week = getattr(fund_info, "_baseline_week_return", None)
-                base_month = getattr(fund_info, "_baseline_month_return", None)
-                base_three = getattr(fund_info, "_baseline_three_month_return", None)
-                base_six = getattr(fund_info, "_baseline_six_month_return", None)
-                base_year = getattr(fund_info, "_baseline_year_return", None)
-                base_this_year = getattr(fund_info, "_baseline_this_year_return", None)
+            # 调用 FundValuationLast 接口
+            from src.API.基金信息.基金估值信息 import update_fund_estimated_value
+            from src.common.constant import DEFAULT_USER
+            local_user = user or DEFAULT_USER
+            update_fund_estimated_value(local_user, fund_info)
 
-                if base_week is not None:
-                    fund_info.week_return = base_week + est
-                if base_month is not None:
-                    fund_info.month_return = base_month + est
-                if base_three is not None:
-                    fund_info.three_month_return = base_three + est
-                if base_six is not None:
-                    fund_info.six_month_return = base_six + est
-                if base_year is not None:
-                    fund_info.year_return = base_year + est
-                if base_this_year is not None:
-                    fund_info.this_year_return = base_this_year + est
-                       
-                # 请求成功，返回更新后的基金信息
-                if retry_count > 0:
-                    logger.debug(f"重试成功，已获取基金 {fund_info.fund_code} 的估值数据")
-                return fund_info
-                
-            except (json.JSONDecodeError, ValueError) as e:
-                logger.error(f"解析估值数据失败: {str(e)}")
-                logger.error(f"原始响应数据: {content}")
-                retry_count += 1
-                continue
-                
-        except requests.exceptions.RequestException as e:
-            logger.error(f'获取估值数据失败: {str(e)}')
+            # ── 指数型（type=000）：用跟踪指数的实际涨跌幅替代重仓股估算 ──
+            #   type=000 包括 A 股指数基金和 QDII。对于此类基金，FundValuationLast
+            #   返回的是重仓股估算（可能不准），而指数详情返回的是指数真实涨跌幅。
+            is_index_fund = getattr(fund_info, 'fund_type', '') == '000'
+            if is_index_fund:
+                index_code = getattr(fund_info, 'index_code', None)
+                if index_code:
+                    try:
+                        from src.API.市场指数.指数详情 import get_index_detail
+                        detail = get_index_detail(local_user, index_code)
+                        index_chg = detail.get('NEWCHG')
+                        index_date = detail.get('NEWPRICEDATE') or detail.get('PDATE', '')
+                        if index_chg is not None:
+                            chg = float(index_chg)
+                            nav = fund_info.nav or 0.0
+                            fund_info.estimated_change = chg
+                            fund_info.estimated_value = round(nav * (1 + chg / 100), 4) if nav > 0 else None
+                            fund_info.estimated_time = index_date
+                            index_name = detail.get('BKNAME') or detail.get('INDEXNAME', index_code) or index_code
+                            logger.info(
+                                f"基金{fund_info.fund_code}指数估值: "
+                                f"[{index_name}]({index_code}) "
+                                f"涨幅={chg}%, 净值={fund_info.estimated_value}, 日期={index_date}"
+                            )
+                    except Exception as e:
+                        logger.warning(f"指数估值查询失败({index_code}): {e}")
+
+            # 将获取后的估值数据注入收益率基线修正逻辑
+            _apply_estimated_or_official_nav(
+                fund_info,
+                {
+                    "gsz": fund_info.estimated_value,
+                    "gszzl": fund_info.estimated_change,
+                    "gztime": fund_info.estimated_time,
+                    "fundcode": fund_info.fund_code,
+                },
+                user=local_user,
+            )
+
+            # 当基础净值日期变化时，刷新一次收益率基线，避免重复叠加估算值
+            baseline_nav_date = getattr(fund_info, "_baseline_nav_date", None)
+            if baseline_nav_date != getattr(fund_info, "nav_date", None):
+                fund_info._baseline_nav_date = getattr(fund_info, "nav_date", None)
+                fund_info._baseline_week_return = fund_info.week_return
+                fund_info._baseline_month_return = fund_info.month_return
+                fund_info._baseline_three_month_return = fund_info.three_month_return
+                fund_info._baseline_six_month_return = fund_info.six_month_return
+                fund_info._baseline_year_return = fund_info.year_return
+                fund_info._baseline_this_year_return = fund_info.this_year_return
+
+            # 在静态收益率基线之上叠加实时估算涨跌
+            est = fund_info.estimated_change or 0.0
+            base_week = getattr(fund_info, "_baseline_week_return", None)
+            base_month = getattr(fund_info, "_baseline_month_return", None)
+            base_three = getattr(fund_info, "_baseline_three_month_return", None)
+            base_six = getattr(fund_info, "_baseline_six_month_return", None)
+            base_year = getattr(fund_info, "_baseline_year_return", None)
+            base_this_year = getattr(fund_info, "_baseline_this_year_return", None)
+
+            if base_week is not None:
+                fund_info.week_return = base_week + est
+            if base_month is not None:
+                fund_info.month_return = base_month + est
+            if base_three is not None:
+                fund_info.three_month_return = base_three + est
+            if base_six is not None:
+                fund_info.six_month_return = base_six + est
+            if base_year is not None:
+                fund_info.year_return = base_year + est
+            if base_this_year is not None:
+                fund_info.this_year_return = base_this_year + est
+
+            if retry_count > 0:
+                logger.debug(f"重试成功，已获取基金 {fund_info.fund_code} 的估值数据")
+            return fund_info
+
+        except Exception as e:
+            logger.error(f"获取估值数据失败: {str(e)}")
             retry_count += 1
-            # 如果是最后一次重试仍然失败
             if retry_count >= max_retries:
                 logger.error(f"基金 {fund_info.fund_code} 估值数据获取失败，已重试 {max_retries} 次")
                 return None
             continue
-        except Exception as e:
-            logger.error(f'更新估值信息时发生异常: {str(e)}')
-            retry_count += 1
-            if retry_count >= max_retries:
-                return None
-            continue
-    
-    # 所有重试都失败
+
     return None
 
 
@@ -356,6 +352,8 @@ if __name__ == "__main__":
     from src.common.constant import DEFAULT_USER, FUND_CODE
     from src.API.基金信息.FundRank import get_fund_growth_rate, get_fund_volatility, get_nav_rank
     
+    logger = get_logger("FundInfo")
+    
     # 配置日志
     logging.basicConfig(
         level=logging.INFO,
@@ -364,7 +362,7 @@ if __name__ == "__main__":
     
     try:
         # 直接运行本文件时，使用默认用户与默认基金代码做一次只读调试调用。
-        fund_info = getFundInfo(DEFAULT_USER, FUND_CODE)
+        fund_info = getFundInfo(DEFAULT_USER, "024726")
         
         if fund_info:
             print(f"基础信息获取成功: {fund_info.fund_name}")
@@ -372,6 +370,34 @@ if __name__ == "__main__":
             # 在基础信息上继续拉取实时估值，观察字段是否正确回填。
             print("正在获取实时估值...")
             updateFundEstimatedValue(fund_info, DEFAULT_USER)
+
+            # 指数型基金：打印跟踪指数行情
+            if getattr(fund_info, 'fund_type', '') == '000':
+                index_code = getattr(fund_info, 'index_code', None)
+                if index_code:
+                    try:
+                        from src.API.市场指数.指数详情 import get_index_detail
+                        from src.API.市场指数.证券日线K线行情数据 import get_security_day_kline, guess_secid_from_code
+                        detail = get_index_detail(DEFAULT_USER, index_code)
+                        iname = detail.get('BKNAME') or detail.get('INDEXNAME', index_code)
+                        ichg = detail.get('NEWCHG', '?')
+                        iprice = detail.get('NEWPRICE', '?')
+                        idate = detail.get('NEWPRICEDATE') or detail.get('PDATE', '?')
+                        # 查K线拿开盘价
+                        secid = guess_secid_from_code(index_code)
+                        open_price = '?'
+                        if secid:
+                            kl = get_security_day_kline(DEFAULT_USER, secid=secid, lmt=1)
+                            if kl.success and kl.data and kl.data.items:
+                                open_price = kl.data.items[-1].OPEN
+                        print("\n── 跟踪指数行情 ──")
+                        print(f"  指数: {iname}({index_code})")
+                        print(f"  日期: {idate}")
+                        print(f"  开盘: {open_price}")
+                        print(f"  收盘: {iprice}")
+                        print(f"  涨幅: {ichg}%")
+                    except Exception as e:
+                        print(f"  (查询指数行情失败: {e})")
 
             print("正在获取历史净值衍生指标...")
             nav_rank_30 = get_nav_rank(DEFAULT_USER, fund_info, 30, fund_info.estimated_value or fund_info.nav)

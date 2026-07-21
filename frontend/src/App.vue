@@ -94,7 +94,7 @@ const sortOptions = [
   { label: '资产市值', value: 'asset_value' },
   { label: '持有收益', value: 'hold_profit' },
   { label: '收益率', value: 'constant_profit_rate' },
-  { label: '今日估值', value: 'estimated_change' },
+  { label: '今日涨跌', value: 'estimated_change' },
   { label: '基金名称', value: 'fund_name' }
 ]
 const totalAssets = ref(0)
@@ -398,6 +398,35 @@ const getStatusClass = (num: number) => {
 
 const getPrefix = (num: number) => (num > 0 ? '+' : '')
 
+const todayStr = new Date().toLocaleDateString('sv-SE')
+
+const normalizeDate = (value: any) => {
+  if (!value) return ''
+  const raw = String(value).trim()
+  if (/^\d{2}-\d{2}$/.test(raw)) {
+    return `${new Date().getFullYear()}-${raw}`
+  }
+  return raw.slice(0, 10)
+}
+
+/** 展示用涨跌幅：今日净值已出则用 nav_change，否则用 estimated_change */
+const displayChange = (row: AssetDetail) => {
+  const navDate = normalizeDate(row.nav_date)
+  if (navDate && navDate === todayStr && row.nav_change !== null && row.nav_change !== undefined) {
+    return Number(row.nav_change || 0)
+  }
+  return Number(row.estimated_change || 0)
+}
+
+const calcPortfolioChangeRatio = (details: AssetDetail[]) => {
+  const total = details.reduce((acc, item) => acc + (Number(item.asset_value) || 0), 0)
+  if (!total) return 0
+  return details.reduce((acc, item) => {
+    const weight = (Number(item.asset_value) || 0) / total
+    return acc + weight * displayChange(item)
+  }, 0)
+}
+
 const showFundDetail = async (fundCode: string) => {
   detailDialogVisible.value = true
   detailLoading.value = true
@@ -472,7 +501,7 @@ const loadPortfolio = async (name: string) => {
       0
     )
     totalProfitValue.value = data.total_profit_value || 0
-    estimatedChangeRatio.value = data.estimated_portfolio_change_ratio || 0
+    estimatedChangeRatio.value = calcPortfolioChangeRatio(adaptedDetails)
     constantProfit.value = data.constant_profit || 0
     profitValue.value = data.profit_value || 0
   } catch (error) {
@@ -912,7 +941,7 @@ onMounted(async () => {
             </el-col>
             <el-col :xs="24" :sm="12" :lg="6" class="mb-4 lg:mb-0">
               <el-card shadow="never" class="border-none">
-                <div class="text-xs text-gray-500 mb-1">今日估算收益 (元)</div>
+                <div class="text-xs text-gray-500 mb-1">今日收益 (元)</div>
                 <div class="text-2xl font-bold" :class="getStatusClass(estProfitValue)">
                   {{ getPrefix(estProfitValue) }}{{ formatNumber(estProfitValue) }}
                 </div>
@@ -920,7 +949,7 @@ onMounted(async () => {
             </el-col>
             <el-col :xs="24" :sm="12" :lg="6">
               <el-card shadow="never" class="border-none">
-                <div class="text-xs text-gray-500 mb-1">整体估值增长率</div>
+                <div class="text-xs text-gray-500 mb-1">整体今日涨跌</div>
                 <div class="text-2xl font-bold" :class="getStatusClass(estimatedChangeRatio)">
                   {{ getPrefix(estimatedChangeRatio) }}{{ formatNumber(estimatedChangeRatio) }}%
                 </div>
@@ -1011,10 +1040,10 @@ onMounted(async () => {
                     </span>
                   </template>
                 </el-table-column>
-                <el-table-column prop="estimated_change" label="今日估值" align="right" width="110" sortable>
+                <el-table-column label="今日涨跌" align="right" width="110" sortable>
                   <template #default="{ row }">
-                    <span :class="getStatusClass(row.estimated_change)">
-                      {{ getPrefix(row.estimated_change) }}{{ Number(row.estimated_change || 0).toFixed(2) }}%
+                    <span :class="getStatusClass(displayChange(row))">
+                      {{ getPrefix(displayChange(row)) }}{{ Number(displayChange(row)).toFixed(2) }}%
                     </span>
                   </template>
                 </el-table-column>
@@ -1049,9 +1078,9 @@ onMounted(async () => {
                     </div>
                   </div>
                   <div>
-                    <div class="text-gray-400">今日估值</div>
-                    <div :class="getStatusClass(row.estimated_change)">
-                      {{ getPrefix(row.estimated_change) }}{{ Number(row.estimated_change || 0).toFixed(2) }}%
+                    <div class="text-gray-400">今日涨跌</div>
+                    <div :class="getStatusClass(displayChange(row))">
+                      {{ getPrefix(displayChange(row)) }}{{ Number(displayChange(row)).toFixed(2) }}%
                     </div>
                   </div>
                 </div>

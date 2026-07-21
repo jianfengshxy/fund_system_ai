@@ -158,6 +158,9 @@ def guess_secid_from_code(code: str) -> str:
     if len(code) >= 2 and code[:2] == "00":
         return f"0.{code}"
 
+    if len(code) >= 2 and code[:2] == "97":
+        return f"0.{code}"
+
     if len(code) >= 3 and code[:3] == "399":
         return f"0.{code}"
 

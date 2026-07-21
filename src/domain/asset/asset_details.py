@@ -15,6 +15,7 @@ class AssetDetails:
         self.asset_rank = None
         self.fund_nav = None
         self.nav_date = None
+        self.nav_change = None      # 今日净值涨跌幅(%)
         
     def to_dict(self):
         return {
@@ -33,7 +34,8 @@ class AssetDetails:
             'asset_rank': self.asset_rank,
             'fund_nav': self.fund_nav,
             'nav_date': self.nav_date,
-            'estimated_change': getattr(self, 'estimated_change', 0.0) # 确保 estimated_change 存在
+            'estimated_change': getattr(self, 'estimated_change', 0.0), # 确保 estimated_change 存在
+            'nav_change': getattr(self, 'nav_change', None),             # 今日净值涨跌幅(%)
         }
 
     def __str__(self):

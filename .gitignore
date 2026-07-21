@@ -137,3 +137,4 @@ src/service/基金信息/基金信息.py
 
 # Deployment config (contains sensitive AK/SK, per-environment settings)
 /s.yaml
+.vercel

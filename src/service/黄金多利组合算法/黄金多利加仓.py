@@ -277,11 +277,25 @@ def increase_gold_funds(
                 logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，跌幅过大，暂停加仓等待反弹")
                 continue
             
-            # 新的加仓逻辑：小于-1.0%加仓1份，小于-4.0%加仓2倍
-            buy_multiplier = 2.0 if estimated_profit_rate < -4.0 else 1.0
-            buy_amount = base_amt * buy_multiplier
-
-            logger.info(f"满足加仓条件，准备买入 {f_name}({f_code}) 金额: {buy_amount}")
+            # 加仓金额计算：
+            # - 若 fund_list 明确指定了该基金的 amount，使用指定金额（不应用倍率）
+            # - 若使用组合级别的默认 amount，则根据跌幅加倍：
+            #   小于-1.0%加仓1份，小于-4.0%加仓2倍
+            if f_code in payload_amt_dict:
+                buy_amount = base_amt
+                logger.info(
+                    f"满足加仓条件，准备买入 {f_name}({f_code}) "
+                    f"金额: {buy_amount}（基金配置额={base_amt}，因预估收益率 {estimated_profit_rate:.2f}% < -4.0%，触发2倍加仓）"
+                    if estimated_profit_rate < -4.0 else
+                    f"金额: {buy_amount}（基金配置额={base_amt}，费率倍率1.0倍）"
+                )
+            else:
+                buy_multiplier = 2.0 if estimated_profit_rate < -4.0 else 1.0
+                buy_amount = base_amt * buy_multiplier
+                logger.info(
+                    f"满足加仓条件，准备买入 {f_name}({f_code}) "
+                    f"金额: {buy_amount}（组合默认额={base_amt}，倍率={buy_multiplier}，预估收益率 {estimated_profit_rate:.2f}%）"
+                )
 
             if not _can_submit_buy(f_code, f_name, buy_amount):
                 continue

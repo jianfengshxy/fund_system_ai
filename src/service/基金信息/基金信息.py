@@ -167,6 +167,14 @@ def _refresh_estimate(fund_info: FundInfo, user: User) -> None:
             logger.warning(f"{fund_info.fund_name} 指数详情查询失败({index_code}): {e}")
 
         if chg_val is not None:
+            # 如果 FundValuationLast 已返回有效估值，保留 API 结果，不做指数覆盖
+            existing_chg = getattr(fund_info, "estimated_change", None)
+            if existing_chg is not None and existing_chg != 0.0:
+                logger.debug(
+                    f"{fund_info.fund_name} 已有 API 估值({existing_chg}%)，跳过指数覆盖"
+                )
+                return
+
             nav = fund_info.nav or 0.0
             fund_info.estimated_change = chg_val
             fund_info.estimated_value = round(nav * (1 + chg_val / 100), 4) if nav > 0 else None
@@ -312,6 +320,6 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     return fund_info
 
 if __name__ == '__main__':
-    fund_info = get_all_fund_info(DEFAULT_USER, '021740')
+    fund_info = get_all_fund_info(DEFAULT_USER, '020829')
     print(fund_info)
     pass

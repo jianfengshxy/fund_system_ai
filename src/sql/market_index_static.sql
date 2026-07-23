@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS market_index_static (
     is_quot         VARCHAR(5)   NOT NULL DEFAULT '0' COMMENT '是否有实时行情(1=有,0=无)',
     is_use_pbp      VARCHAR(5)   NOT NULL DEFAULT '0' COMMENT '是否有PBP(1=有,0=无)',
     rea_profile     TEXT         COMMENT '指数描述文本',
+    track_fund_code VARCHAR(20)  NOT NULL DEFAULT '' COMMENT '关联跟踪基金代码（最佳C类）',
+    track_fund_name VARCHAR(200) NOT NULL DEFAULT '' COMMENT '关联跟踪基金简称（最佳C类）',
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uk_index_code (index_code)

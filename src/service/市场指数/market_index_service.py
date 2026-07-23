@@ -334,3 +334,128 @@ class MarketIndexService:
             (index_code,),
         )
         return r[0]["cnt"] if r else 0
+
+    # ===================== 跟踪基金同步 =====================
+
+    def get_best_tracking_c_fund(self, user: User, index_code: str) -> Optional[Dict]:
+        """
+        获取指数的最佳 C 类跟踪基金。
+
+        调用 getTrackingFundV3 接口，从返回的基金列表中筛选：
+          - 场外基金 (ISEXCHG="0")
+          - 被动指数型 (DTZT="1")
+          - 可申购 (ISBUY="1")
+          - C 类份额 (ISCLASSC==1.0)
+        按基金规模 (ENDNAV) 降序取第一个。
+
+        Args:
+            user:       User 对象
+            index_code: 指数代码
+
+        Returns:
+            {"fund_code": str, "fund_name": str} 或 None（无匹配基金时）
+        """
+        from src.API.市场指数.获取追踪指数的基金 import get_tracking_funds
+
+        resp = get_tracking_funds(user, [index_code], page_size=50)
+        if not resp.success:
+            logger.warning(f"[{index_code}] 获取跟踪基金失败: {resp.first_error}")
+            return None
+
+        fund_list = resp.items.get(index_code, [])
+        if not fund_list:
+            logger.info(f"[{index_code}] 无跟踪基金数据")
+            return None
+
+        # 筛选：场外 + 被动指数型 + 可申购 + C 类
+        candidates = [
+            f for f in fund_list
+            if f.ISEXCHG == "0" and f.DTZT == "1"
+            and f.ISBUY == "1" and f.ISCLASSC == 1.0
+        ]
+        if not candidates:
+            logger.info(f"[{index_code}] 无符合条件的 C 类跟踪基金")
+            return None
+
+        # 按规模降序取第一个
+        best = max(candidates, key=lambda f: f.ENDNAV)
+        logger.info(
+            f"[{index_code}] 最佳 C 类跟踪基金: "
+            f"{best.FCODE} {best.SHORTNAME} (规模={best.ENDNAV:.1f}万)"
+        )
+        return {"fund_code": best.FCODE, "fund_name": best.SHORTNAME}
+
+    def update_index_tracking_fund(self, index_code: str,
+                                   fund_code: str, fund_name: str) -> bool:
+        """
+        更新 market_index_static 表中指数的关联跟踪基金信息。
+
+        Args:
+            index_code: 指数代码
+            fund_code:  基金代码
+            fund_name:  基金简称
+
+        Returns:
+            是否更新成功
+        """
+        rows = self._db.update(
+            "UPDATE market_index_static "
+            "SET track_fund_code = %s, track_fund_name = %s "
+            "WHERE index_code = %s",
+            (fund_code, fund_name, index_code),
+        )
+        if rows:
+            logger.info(f"[{index_code}] 跟踪基金已更新: {fund_code} {fund_name}")
+        else:
+            logger.warning(f"[{index_code}] 未找到对应记录，更新失败")
+        return rows > 0
+
+    def sync_all_tracking_funds(self, user: User) -> dict:
+        """
+        为 static 表中所有指数同步最佳 C 类跟踪基金。
+
+        逐指数调用 get_best_tracking_c_fund + update_index_tracking_fund，
+        将结果写入 market_index_static.track_fund_code / track_fund_name。
+
+        已有关联基金的指数会跳过（track_fund_code 非空）。
+
+        Returns:
+            {"total": int, "updated": int, "skipped": int, "no_match": int, "failed": int}
+        """
+        indices = self._db.execute_query(
+            "SELECT index_code, index_name, track_fund_code "
+            "FROM market_index_static "
+            "ORDER BY index_code"
+        )
+        result = {"total": len(indices), "updated": 0, "skipped": 0,
+                  "no_match": 0, "failed": 0}
+
+        for idx in indices:
+            code = idx["index_code"]
+            name = idx["index_name"]
+
+            # 跳过已有关联基金的
+            if idx.get("track_fund_code"):
+                result["skipped"] += 1
+                continue
+
+            try:
+                best = self.get_best_tracking_c_fund(user, code)
+                if best:
+                    self.update_index_tracking_fund(
+                        code, best["fund_code"], best["fund_name"]
+                    )
+                    result["updated"] += 1
+                else:
+                    result["no_match"] += 1
+                time.sleep(0.3)
+            except Exception as e:
+                result["failed"] += 1
+                logger.error(f"[{code}] {name} 同步失败: {e}")
+
+        logger.info(
+            f"跟踪基金同步完成: 总计 {result['total']}, "
+            f"更新 {result['updated']}, 跳过 {result['skipped']}, "
+            f"无匹配 {result['no_match']}, 失败 {result['failed']}"
+        )
+        return result

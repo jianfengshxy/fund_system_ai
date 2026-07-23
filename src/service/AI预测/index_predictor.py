@@ -219,9 +219,20 @@ class IndexPredictor:
 
             # 评估
             preds = model.predict(test_X)
-            ss_res = np.sum((test_y - preds) ** 2)
+            residuals = test_y - preds
+            ss_res = np.sum(residuals ** 2)
             ss_tot = np.sum((test_y - np.mean(test_y)) ** 2)
             r2 = 1 - ss_res / ss_tot if ss_tot != 0 else 0
+
+            # 保存模型质量指标
+            model.r2_ = float(r2)
+            model.residual_std_ = float(np.std(residuals)) if len(residuals) > 0 else 15.0
+            # 近期方向准确率：预测涨跌方向与实际的吻合度
+            actual_direction = np.sign(test_y)
+            pred_direction = np.sign(preds)
+            correct = np.sum(actual_direction == pred_direction)
+            total = len(actual_direction)
+            model.recent_accuracy_ = float(correct / total) if total > 0 else 0.5
 
             models[label] = model
             result["metrics"][label] = {
@@ -307,7 +318,15 @@ class IndexPredictor:
                 "predicted_return": round(pred, 2),
                 "signal": signal,
             }
-            confidences.append(abs(pred) / 15.0)  # 简单置信度
+
+            # 置信度：综合 R² + 残差标准差 + 信号强度 + 方向准确率
+            pred_abs = abs(pred)
+            r2_w = max(0, float(model.r2_)) * 0.4          # R²（权重 0.4）
+            mag_w = min(pred_abs / 15.0, 1.0) * 0.2        # 信号强度（权重 0.2）
+            rs = float(model.residual_std_)
+            res_w = max(0, 1.0 - rs / 30.0) * 0.3          # 残差（权重 0.3）
+            acc_w = float(model.recent_accuracy_) * 0.1    # 方向准确率（权重 0.1）
+            confidences.append(r2_w + mag_w + res_w + acc_w)
 
         result["confidence"] = round(min(sum(confidences) / len(confidences), 1.0), 2)
 
@@ -350,7 +369,8 @@ class IndexPredictor:
 class _RidgeModel:
     """L2-正则化线性回归，纯 numpy 实现（标准缩放 + Ridge 闭式解）。"""
 
-    __slots__ = ("coef_", "intercept_", "x_mean_", "x_std_", "y_mean_")
+    __slots__ = ("coef_", "intercept_", "x_mean_", "x_std_", "y_mean_",
+                 "r2_", "residual_std_", "recent_accuracy_")
 
     def __init__(self):
         self.coef_: Optional[np.ndarray] = None
@@ -358,6 +378,9 @@ class _RidgeModel:
         self.x_mean_: Optional[np.ndarray] = None
         self.x_std_: Optional[np.ndarray] = None
         self.y_mean_: float = 0.0
+        self.r2_: float = 0.0        # 测试集 R²（模型拟合质量）
+        self.residual_std_: float = 15.0  # 残差标准差（预测不确定性）
+        self.recent_accuracy_: float = 0.5  # 近期方向准确率
 
     @classmethod
     def fit(cls, X: np.ndarray, y: np.ndarray, alpha: float = 1.0) -> "_RidgeModel":
@@ -398,6 +421,9 @@ class _RidgeModel:
             "x_mean": self.x_mean_.tolist(),
             "x_std": self.x_std_.tolist(),
             "y_mean": self.y_mean_,
+            "r2": self.r2_,
+            "residual_std": self.residual_std_,
+            "recent_accuracy": self.recent_accuracy_,
         }
 
     @classmethod
@@ -408,4 +434,7 @@ class _RidgeModel:
         model.x_mean_ = np.array(d["x_mean"])
         model.x_std_ = np.array(d["x_std"])
         model.y_mean_ = d["y_mean"]
+        model.r2_ = d.get("r2", -0.5)
+        model.residual_std_ = d.get("residual_std", 15.0)
+        model.recent_accuracy_ = d.get("recent_accuracy", 0.5)
         return model

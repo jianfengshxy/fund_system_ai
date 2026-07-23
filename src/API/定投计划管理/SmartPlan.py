@@ -405,7 +405,8 @@ def getFundPlanList(fund_code, user) -> List[FundPlan]:
                     pauseType=None,
                     planExtendStatus=str(plan_data.get('planExtendStatus', '')),
                     planType=str(plan_data.get('planType', '')),
-                    # periodType: 0-日, 1-周, 2-双周, 3-月
+                    # periodType: 天天基金API编码: 1=周投, 2=双周投, 3=月投, 4=日投
+                    # 详见 FundPlan.period_type_label()
                     # API返回的字段可能是 periodType，也可能是其他
                     # 尝试从原始数据中获取更多可能的字段
                     periodType=parse_int(plan_data.get('periodType', 0)), 

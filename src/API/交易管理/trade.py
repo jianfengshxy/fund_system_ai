@@ -52,15 +52,50 @@ class HostResolveAdapter(HTTPAdapter):
 
 def get_one_fund_tran_infos(user, fund_code, start_date=None, end_date=None, page_index=1, page_size=100, date_type="3"):
     """
-    获取单个基金的全部交易历史（支持指定时间范围）
+    获取单个基金的历史交易记录（底层 API: GetOneFundTranInfos）。
+
+    与 get_trades_list 的区别：
+      - 本函数返回的交易记录字段更完整（包含 Colour 字段用于区分已确认/已撤单）。
+      - 推荐在只需要单只基金交易明细时使用本函数。
+
+    已知限制：
+      - date_type="" 和 start_date 参数均不支持，传值会返回 ErrorCode=304。
+      - date_type="3" 仅返回最近约 1 年的交易记录。
+      - 如需获取全量历史交易，请配合 get_fund_total_asset_detail（持仓API）反推总投资额。
+
     Args:
         user: User对象
         fund_code: 基金代码
-        start_date: 开始日期 (YYYY-MM-DD), 默认为2010-01-01
-        end_date: 结束日期 (YYYY-MM-DD), 默认为当前日期
+        start_date: 开始日期 (YYYY-MM-DD)。⚠️ 实测 API 不支持此参数，请勿使用。
+        end_date: 结束日期 (YYYY-MM-DD)。⚠️ 尚未验证 API 是否支持，慎用。
         page_index: 页码
         page_size: 每页数量
-        date_type: 时间范围类型，默认为""(全部)。
+        date_type: 时间范围类型，默认 "3"（近1年）。
+                   支持的取值：
+                     "5": 近1周
+                     "1": 近1月
+                     "2": 近3月
+                     "3": 近1年 (唯一推荐值，能获取较长历史记录)
+                   ⚠️ "": 全量 — 实测返回 ErrorCode=304，不要使用。
+
+    Returns:
+        List[TradeResult]: 交易结果列表。
+        每条 TradeResult.raw 包含原始 API 字段，关键字段说明：
+          - BusinessType: "买入" | "定投" | "卖基金回活期宝" 等
+          - APPStateText: "成功" | "已受理(支付完成)" | "已撤单(已支付)" | "已撤单"
+          - StatuIcon: "3"=已确认 | "1"=受理中  (⚠️ 已撤单交易的 StatuIcon 也是 "3"！)
+          - Colour:  "3"=已确认  | "4"=已撤单    (✅ 这才是区分撤单的可靠字段)
+          - ConfirmCount: 确认金额（格式如 "5,000.00元" 或 "--"）
+          - ApplyCount: 申请份额/金额
+          - StrikeStartDate: 交易发起时间 (YYYY-MM-DD HH:MM:SS)
+          - BusinessCode: 业务代码（22=买入, 39=定投, 890=卖出）
+
+    交易有效性判断规则（已验证）：
+      1. 排除撤单: APPStateText 包含 "撤单" 字样，或 Colour == "4"。
+      2. 买入有效: BusinessType in ("买入","定投") 且 非撤单 且 StatuIcon=="3"。
+      3. 卖出有效: "卖基金" in BusinessType 且 非撤单 且 StatuIcon=="3"。
+      4. ⚠️ StatuIcon=="3" 不代表交易一定成功（撤单交易的 StatuIcon 也是 "3"），
+         必须结合 APPStateText 或 Colour 判断。
     """
     u = ensure_user_fresh(user)
     host_header = f"tquerycoreapi{u.index}.1234567.com.cn"
@@ -204,7 +239,28 @@ def get_one_fund_tran_infos(user, fund_code, start_date=None, end_date=None, pag
 
 def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="", page_index=1, page_size=50, date_type: Optional[str] = "3"):
     """
-    获取交易列表
+    获取交易列表（底层 API: GetQueryInfosQuickUse）。
+
+    与 get_one_fund_tran_infos 的关键差异：
+      ⚠️ 字段名不同！本函数返回的 TradeResult.raw 中的字段含义如下：
+         - BusinessType: "活期宝转入基金"(买入) | "活期宝转入定投"(定投) | "卖出回活期宝"(卖出)
+           (不是 get_one_fund_tran_infos 的 "买入"/"定投"/"卖基金回活期宝"！)
+         - StatuIcon: "3"=已确认 | "1"=受理中
+         - Colour:   ⚠️ 始终为 None（与 get_one_fund_tran_infos 不同，无 Colour 字段区分撤单！）
+         - APPStateText: "成功" | "已受理(支付完成)" | "已撤单(已支付)" | "已撤单"
+           (✅ 唯一可靠的撤单判断依据)
+         - ConfirmCount / ApplyCount: 金额或份额字符串
+         - BusinessCode: 22=买入, 39=定投, 890=卖出 (一致)
+         - ProductCode / ProductName: 基金代码和名称（本函数有值，get_one_fund_tran_infos 的该字段可能为 None）
+
+      因此，调用方不可以直接复用 get_one_fund_tran_infos 的解析代码。
+      必须根据 BusinessType 的具体文本匹配或改用 BusinessCode 判断交易类型。
+
+    已知限制：
+      - date_type="" 的全量回溯逻辑依赖 DateType='0' + EndDate 参数，但实测发现
+        该组合在本次测试的基金（021540）上未返回更早数据。
+      - 不建议依赖本函数获取超过 1 年的全量历史。
+
     Args:
         user: User对象，包含用户认证信息
         sub_account_no: 子账户编号，默认为空
@@ -217,8 +273,9 @@ def get_trades_list(user, sub_account_no="", fund_code="", bus_type="", status="
                    "5": 近1周
                    "1": 近1月
                    "2": 近3月
-                   "3": 近1年 (推荐，能获取较长历史记录)
-                   "": 全量查询（通过循环 DateType='3' 和 '0' 并配合结束日期递推实现）
+                   "3": 近1年 (推荐)
+                   "": 尝试全量查询 — 先 DateType='3' 取近1年，再 DateType='0' 回溯更早。
+                       ⚠️ 回溯成功率取决于 API 版本，可能只返回和 "3" 相同的数据。
     Returns:
         List[TradeResult]: 交易结果列表
     """

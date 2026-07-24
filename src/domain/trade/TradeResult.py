@@ -1,40 +1,70 @@
 class TradeResult:
+    """
+    单条交易记录的领域模型。
+
+    该对象可由两个不同的 API 构造，注意字段值可能不同：
+
+      get_one_fund_tran_infos (GetOneFundTranInfos API):
+        - business_type: "买入" | "定投" | "卖基金回活期宝"
+        - colour: "3"=已确认 | "4"=已撤单  (✅ 最可靠的撤单判断)
+        - product_code / product_name: 可能为 None
+
+      get_trades_list (GetQueryInfosQuickUse API):
+        - business_type: "活期宝转入基金" | "活期宝转入定投" | "卖出回活期宝"
+        - colour: ⚠️ 始终为 None
+        - product_code / product_name: 有值
+
+    交易有效性判断（已验证）:
+      ⚠️ statu_icon == "3" 不代表交易成功！已撤单交易的 StatuIcon 也是 "3"。
+      正确做法: 检查 app_state_text 是否含 "撤单"，或 colour == "4"（仅 GetOneFundTranInfos 可用）。
+
+      business_code 含义（两个 API 一致）:
+        22  = 买入 (活期宝转入基金)
+        39  = 定投
+        890 = 卖出 (卖出回活期宝)
+
+    金额解析:
+      confirm_count: 格式如 "5,000.00元" 或 "--"（交易未确认）
+      apply_count:   格式如 "5,000.00元" 或 "942.77份"
+
+      ⚠️ 买入交易在 colour=="4"(已撤单) 时，ConfirmCount 可能已有金额值（已支付但未最终成功），
+         必须用 app_state_text 或 colour 过滤后再解析。
+    """
+
     def __init__(
         self,
         busin_serial_no=None,
-        business_type=None,
+        business_type=None,       # 交易类型字符串，值取决于调用方 API（见类文档）
         apply_workday=None,
         apply_amount=None,
-        status=None,
+        status=None,              # ⚠️ 派生自 StatuIcon，"3" 不区分已确认和已撤单
         show_com_prop=None,
         fund_code=None,
-        # 新增：responseObjects 中的全部字段（以下命名为下划线风格）
-        product_code=None,
+        product_code=None,        # 基金代码（product_code 的备用字段）
         org_fund_code=None,
         org_fund_name=None,
-        strike_start_date=None,
+        strike_start_date=None,  # 交易发起时间 "YYYY-MM-DD HH:MM:SS"
         cash_bag_app_time=None,
         product_name=None,
-        business_code=None,
+        business_code=None,      # 业务代码（22/39/890，两个 API 一致）
         display_business_code=None,
-        apply_count=None,
-        confirm_count=None,
+        apply_count=None,        # 申请金额/份额 (字符串，如 "5,000.00元")
+        confirm_count=None,      # 确认金额/份额 (字符串，如 "5,000.00元" 或 "--")
         business_icon=None,
-        statu_icon=None,
+        statu_icon=None,         # "1"=受理中 | "3"=处理完成(含撤单！)
         remark=None,
         remark_url=None,
-        colour=None,
+        colour=None,             # ⚠️ GetOneFundTranInfos: "3"=确认/"4"=撤单; GetQueryInfosQuickUse: None
         strategy_name=None,
         org_strategy_name=None,
         reference=None,
         busin_remark=None,
         id=None,
-        app_state_text=None,
+        app_state_text=None,     # "成功" | "已受理(支付完成)" | "已撤单(已支付)" | "已撤单" — 最可靠的撤单判断
         is_stay_on_way=None,
         sub_account_no=None,
         sub_account_name=None,
-        # 预留原始对象
-        raw=None,
+        raw=None,                 # 原始 API 响应 dict，含所有未映射字段
     ):
         # 兼容历史字段
         self.busin_serial_no = busin_serial_no
@@ -130,13 +160,17 @@ class TradeResult:
 
     def __str__(self):
         return (f"TradeResult("
-            f"busin_serial_no={self.busin_serial_no}, "
-            f"business_type={self.business_type}, "
-            f"apply_work_day={self.apply_work_day}, "
-            f"amount={self.amount}, "
+            f"id={self.id}, "
+            f"code={self.fund_code}, "
+            f"type={self.business_type}, "
+            f"biz_code={self.business_code}, "
+            f"date={self.strike_start_date}, "
             f"status={self.status}, "
-            f"show_com_prop={self.show_com_prop}, "
-            f"fund_code={self.fund_code})")
+            f"icon={self.statu_icon}, "
+            f"colour={self.colour}, "
+            f"state_text={self.app_state_text}, "
+            f"confirm={self.confirm_count}, "
+            f"apply={self.apply_count})")
 
 
 class TradeQueryResponse:

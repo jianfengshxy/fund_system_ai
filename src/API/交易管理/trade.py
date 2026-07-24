@@ -60,8 +60,10 @@ def get_one_fund_tran_infos(user, fund_code, start_date=None, end_date=None, pag
 
     已知限制：
       - date_type="" 和 start_date 参数均不支持，传值会返回 ErrorCode=304。
-      - date_type="3" 仅返回最近约 1 年的交易记录。
-      - 如需获取全量历史交易，请配合 get_fund_total_asset_detail（持仓API）反推总投资额。
+      - date_type="3" 仅返回最近约 1 年的交易记录。经探针测试，"0"~"12"、"30"、"365"、"9999"
+        等所有 DateType 取值均返回相同记录数，API 本身不支持全量历史查询。
+      - 如需获取全量历史交易，请使用 src.service.资产管理.get_all_fund_trades，
+        它会结合持仓 API 反推窗口前投入。
 
     Args:
         user: User对象

@@ -206,45 +206,154 @@ class MarketIndexService:
         logger.info(f"[{index_code}] 价格+热度入库: {count} 条")
         return count
 
-    def fill_all_pe_pb_percentiles(self) -> dict:
+    def fill_period_changes(self, index_code: Optional[str] = None) -> int:
         """
-        对所有指数，基于已有 PE-TTM / PB 数据计算经验分位数，填入 pe_pct / pb_pct。
+        基于已有 price 数据计算周期涨跌幅 (W/M/Q/HY/Y)，填入 change_w/m/q/hy/y。
 
-        使用 MySQL PERCENT_RANK() 窗口函数直接在数据库内计算，无需 Python 端
-        批量传输数据。
+        使用 MySQL LAG 窗口函数，以最近交易日收盘价为基准：
+          - W:  向前 5 个交易日
+          - M:  向前 22 个交易日（约一个月）
+          - Q:  向前 66 个交易日（约一个季度）
+          - HY: 向前 132 个交易日（约半年）
+          - Y:  向前 252 个交易日（约一年）
+
+        Args:
+            index_code: 指定指数代码，为 None 时处理全部指数
 
         Returns:
-            dict: {pe_updated_rows, pb_updated_rows}
+            更新的行数
         """
-        # PE 分位
-        pe_result = self._db.update(
-            "UPDATE market_index_daily d "
-            "JOIN ("
-            "  SELECT id, PERCENT_RANK() OVER (PARTITION BY index_code ORDER BY pe_ttm) * 100 AS pct "
-            "  FROM market_index_daily WHERE pe_ttm IS NOT NULL"
-            ") c ON d.id = c.id "
-            "SET d.pe_pct = ROUND(c.pct, 2)"
-        )
-        logger.info(f"PE 分位填充: {pe_result} 行")
+        where_clause = "WHERE index_code = %s" if index_code else ""
+        params = (index_code,) if index_code else ()
+        sql = f"""
+            UPDATE market_index_daily d
+            JOIN (
+                SELECT id,
+                    ROUND((price - LAG(price,   5) OVER w) / NULLIF(LAG(price,   5) OVER w, 0) * 100, 4) AS w_chg,
+                    ROUND((price - LAG(price,  22) OVER w) / NULLIF(LAG(price,  22) OVER w, 0) * 100, 4) AS m_chg,
+                    ROUND((price - LAG(price,  66) OVER w) / NULLIF(LAG(price,  66) OVER w, 0) * 100, 4) AS q_chg,
+                    ROUND((price - LAG(price, 132) OVER w) / NULLIF(LAG(price, 132) OVER w, 0) * 100, 4) AS hy_chg,
+                    ROUND((price - LAG(price, 252) OVER w) / NULLIF(LAG(price, 252) OVER w, 0) * 100, 4) AS y_chg
+                FROM market_index_daily
+                {where_clause}
+                WINDOW w AS (PARTITION BY index_code ORDER BY trade_date)
+            ) c ON d.id = c.id
+            SET d.change_w = c.w_chg,
+                d.change_m = c.m_chg,
+                d.change_q = c.q_chg,
+                d.change_hy = c.hy_chg,
+                d.change_y = c.y_chg
+        """
+        rows = self._db.update(sql, params)
+        label = index_code or "全量"
+        logger.info(f"[{label}] 周期涨跌幅填入: {rows} 行")
+        return rows
 
-        # PB 分位
-        pb_result = self._db.update(
-            "UPDATE market_index_daily d "
-            "JOIN ("
-            "  SELECT id, PERCENT_RANK() OVER (PARTITION BY index_code ORDER BY pb) * 100 AS pct "
-            "  FROM market_index_daily WHERE pb IS NOT NULL"
-            ") c ON d.id = c.id "
-            "SET d.pb_pct = ROUND(c.pct, 2)"
-        )
-        logger.info(f"PB 分位填充: {pb_result} 行")
+    # ===================== 阶段指标（正收益概率/平均收益率/PE百分位/PB百分位） =====================
 
-        return {"pe_updated": pe_result, "pb_updated": pb_result}
+    def sync_stage_performance(self, user: User, index_code: str) -> bool:
+        """
+        获取并写入指数的阶段涨跌幅指标到最新交易日记录。
+
+        API 返回字段 → DB 字段映射:
+          PROFIT_RATE_Q/HY/Y/TRY  → profit_rate_q/hy/y/try   (正收益概率 %)
+          AVGSYL_Q/HY/Y/TRY       → avg_return_q/hy/y/try    (平均收益率 %)
+          PEP100_Y/TRY/FY/TY      → pe_percentile_y/try/fy/ty (PE 阶段百分位)
+          PBP100_Y/TRY/FY/TY      → pb_percentile_y/try/fy/ty (PB 阶段百分位)
+
+        Returns:
+            是否更新成功
+        """
+        from src.API.市场指数.指数阶段指标 import get_fund_index_stage_performance
+
+        data = get_fund_index_stage_performance(user, index_code)
+        if not data:
+            logger.warning(f"[{index_code}] 阶段指标无返回数据")
+            return False
+
+        # 找到该指数最新的一条日频记录
+        latest = self._db.execute_query(
+            "SELECT id FROM market_index_daily WHERE index_code = %s "
+            "ORDER BY trade_date DESC LIMIT 1",
+            (index_code,),
+        )
+        if not latest:
+            logger.warning(f"[{index_code}] market_index_daily 中无历史数据，先同步日数据")
+            return False
+
+        record_id = latest[0]["id"]
+
+        def _val(key):
+            """将 API 返回值转为可存 DECIMAL 的类型（'--' / '' → None）"""
+            v = data.get(key)
+            if v is None:
+                return None
+            s = str(v).strip()
+            return float(s) if s and s != "--" else None
+
+        rows = self._db.update(
+            "UPDATE market_index_daily SET "
+            "profit_rate_q = %s, profit_rate_hy = %s, profit_rate_y = %s, profit_rate_try = %s, "
+            "avg_return_q = %s, avg_return_hy = %s, avg_return_y = %s, avg_return_try = %s, "
+            "pe_percentile_y = %s, pe_percentile_try = %s, pe_percentile_fy = %s, pe_percentile_ty = %s, "
+            "pb_percentile_y = %s, pb_percentile_try = %s, pb_percentile_fy = %s, pb_percentile_ty = %s "
+            "WHERE id = %s",
+            (
+                _val("PROFIT_RATE_Q"), _val("PROFIT_RATE_HY"),
+                _val("PROFIT_RATE_Y"), _val("PROFIT_RATE_TRY"),
+                _val("AVGSYL_Q"), _val("AVGSYL_HY"),
+                _val("AVGSYL_Y"), _val("AVGSYL_TRY"),
+                _val("PEP100_Y"), _val("PEP100_TRY"),
+                _val("PEP100_FY"), _val("PEP100_TY"),
+                _val("PBP100_Y"), _val("PBP100_TRY"),
+                _val("PBP100_FY"), _val("PBP100_TY"),
+                record_id,
+            ),
+        )
+        logger.info(f"[{index_code}] 阶段指标入库: {rows} 行")
+        return rows > 0
+
+    def sync_all_indices_stage_performance(self, user: User, limit: Optional[int] = None) -> dict:
+        """
+        为 static 表中所有指数同步阶段指标。
+
+        只处理 market_index_daily 中有日数据且在 target_types 中的指数。
+
+        Returns:
+            {"total": int, "synced": int, "failed": int, "no_daily_data": int}
+        """
+        static_indices = self._db.execute_query(
+            "SELECT index_code, index_name FROM market_index_static "
+            "WHERE type_name IN ('宽基','行业','主题','海外') ORDER BY index_code"
+        )
+        result = {"total": len(static_indices), "synced": 0,
+                  "failed": 0, "no_daily_data": 0}
+
+        for idx in static_indices:
+            if limit and result["synced"] + result["failed"] + result["no_daily_data"] >= limit:
+                break
+            code = idx["index_code"]
+            name = idx["index_name"]
+            try:
+                ok = self.sync_stage_performance(user, code)
+                if ok:
+                    result["synced"] += 1
+                else:
+                    result["no_daily_data"] += 1
+            except Exception as e:
+                result["failed"] += 1
+                logger.error(f"[{code}] {name} 阶段指标同步失败: {e}")
+            time.sleep(0.3)
+
+        logger.info(
+            f"阶段指标同步完成: 成功 {result['synced']}, "
+            f"无日数据 {result['no_daily_data']}, 失败 {result['failed']}"
+        )
+        return result
 
     def sync_all_history_for_index(self, user: User, index_code: str) -> dict:
         """
-        对单个指数执行全部历史数据同步（估值 → 价格/热度）。
-
-        PE/PB 分位数据（pe_pct / pb_pct）通过 fill_all_pe_pb_percentiles() 统一计算。
+        对单个指数执行全部历史数据同步（估值 → 价格/热度 → 阶段指标）。
         """
         logger.info(f"=== 开始同步 [{index_code}] 全部历史数据 ===")
         r = {}

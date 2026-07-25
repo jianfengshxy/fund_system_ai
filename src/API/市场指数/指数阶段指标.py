@@ -52,12 +52,12 @@ def get_fund_index_stage_performance(user: User, index_code: str) -> Dict[str, A
     #   Q    - Quarter     季度
     #   HY   - Half Year   半年度
     #   Y    - Year        年度
-    #   SY   - 近3年 (Short 3 Year)
-    #   TY   - 近5年 (3-5 Year)
-    #   TWY  - 近10年 (Ten Year)
-    #   TRY  - 全历史区间 (Total History)
-    #   FY   - 指数成立以来全部区间 (Full Year)
-    #   SE   - 近3年 (Short-period Estimation, 同 SY)
+    #   SY   - 今年以来 (Since Year)
+    #   TY   - 近10年 (Ten Year)
+    #   TWY  - 近2年 (Twice Year, TW=2)
+    #   TRY  - 近3年 (Triple Year, TR=3)
+    #   FY   - 近5年 (Five Year)
+    #   SE   - 近3年 (Short-period Estimation)
     #
     # 字段分类说明:
     # ------------------------------------------------------------
@@ -81,23 +81,23 @@ def get_fund_index_stage_performance(user: User, index_code: str) -> Dict[str, A
     fields = (
         # --- 一、涨跌天数 ---
         "UPDAYS_W,UPDAYS_M,UPDAYS_Q,UPDAYS_HY,UPDAYS_Y,"       # 近1周/1月/1季/半年/1年 上涨天数
-        "UPDAYS_TWY,UPDAYS_TRY,UPDAYS_FY,UPDAYS_SY,"            # 近10年/全历史/成立以来/近3年 上涨天数
+        "UPDAYS_TWY,UPDAYS_TRY,UPDAYS_FY,UPDAYS_SY,"            # 近2年/近3年/近5年/今年以来 上涨天数
         "DOWNDAYS_W,DOWNDAYS_M,DOWNDAYS_Q,DOWNDAYS_HY,"         # 近1周/1月/1季/半年 下跌天数
-        "DOWNDAYS_Y,DOWNDAYS_TWY,DOWNDAYS_TRY,DOWNDAYS_FY,"     # 近1年/近10年/全历史/成立以来 下跌天数
-        "DOWNDAYS_SY,"                                           # 近3年 下跌天数
+        "DOWNDAYS_Y,DOWNDAYS_TWY,DOWNDAYS_TRY,DOWNDAYS_FY,"     # 近1年/近2年/近3年/近5年 下跌天数
+        "DOWNDAYS_SY,"                                           # 今年以来 下跌天数
         # --- 五、基础标识 ---
         "INDEXOTYPE,ISUSEPBP,MAKERNAME,BASICDATE,BASICDATE,"     # 指数类型编码/是否优先PB估值/编制机构/基准日
         "XLFLOW_SCORE,"                                          # 资金流向综合得分(0~100)，越高资金流入越强
         # --- 四、上涨胜率 ---
-        "PROFIT_RATE_TRY,PROFIT_RATE_Y,PROFIT_RATE_HY,"         # 全历史/近1年/近半年 持有胜率(%)
+        "PROFIT_RATE_TRY,PROFIT_RATE_Y,PROFIT_RATE_HY,"         # 近3年/近1年/近半年 持有胜率(%)
         "PROFIT_RATE_Q,"                                         # 近1季度 持有胜率(%)
         # --- 三、平均涨跌幅 ---
-        "AVGSYL_TRY,AVGSYL_Y,AVGSYL_HY,AVGSYL_Q,"               # 全历史/近1年/近半年/近1季 平均涨跌幅(%)
+        "AVGSYL_TRY,AVGSYL_Y,AVGSYL_HY,AVGSYL_Q,"               # 近3年/近1年/近半年/近1季 平均涨跌幅(%)
         # --- 二、PE/PB 百分位 ---
         "PEP100_Y,PBP100_Y,"                                     # PE/PB 近1年百分位
-        "PEP100_TRY,PBP100_TRY,"                                 # PE/PB 全历史百分位
-        "PEP100_FY,PBP100_FY,"                                   # PE/PB 成立以来百分位
-        "PEP100_TY,PBP100_TY,"                                   # PE/PB 近5年百分位
+        "PEP100_TRY,PBP100_TRY,"                                 # PE/PB 近3年百分位
+        "PEP100_FY,PBP100_FY,"                                   # PE/PB 近5年百分位
+        "PEP100_TY,PBP100_TY,"                                   # PE/PB 近10年百分位
         "PEP100_SE,PBP100_SE"                                    # PE/PB 近3年百分位
     )
     

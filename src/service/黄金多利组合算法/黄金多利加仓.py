@@ -274,8 +274,13 @@ def increase_gold_funds(
             
             # 检查是否跌幅过大（小于-5.0%），如果是则跳过加仓，防止单边下跌
             if estimated_profit_rate < -5.0:
-                logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，跌幅过大，暂停加仓等待反弹")
-                continue
+                # 特殊豁免：如果基金被限购且限购金额 < 2000，说明持仓上不去，即使跌幅过大也继续加仓
+                _max_purchase = _safe_float(getattr(fund_info, 'max_purchase', 0.0) if fund_info else 0.0, 0.0)
+                if _max_purchase > 0 and _max_purchase < 2000:
+                    logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，但限购金额 {_max_purchase} < 2000，突破限购加仓")
+                else:
+                    logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，跌幅过大，暂停加仓等待反弹")
+                    continue
             
             # 加仓金额计算（统一处理）：
             #   预估收益率: [-1%, -4%) → 1倍 base_amt

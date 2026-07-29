@@ -26,6 +26,12 @@ from src.common.logger import get_logger
 
 logger = get_logger(__name__)
 
+# 黑名单基金代码列表 - 这些基金将被跳过不加仓
+BLACKLIST_FUND_CODES = [
+    # 示例："000001",  # 基金名称
+    "006105",  # 宏利印度股票
+]
+
 
 def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] = None) -> bool:
     """自定义组合算法加仓：仅针对组合中已持有的基金执行加仓。
@@ -74,6 +80,11 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             fund_name = getattr(asset, 'fund_name', fund_code)
             
             if not fund_code:
+                continue
+
+            # 黑名单检查：如果基金在黑名单中，跳过加仓
+            if fund_code in BLACKLIST_FUND_CODES:
+                logger.info(f"跳过 {fund_name}({fund_code}): 该基金在黑名单中，被禁止加仓")
                 continue
 
             # 确定加仓金额
@@ -344,13 +355,13 @@ if __name__ == "__main__":
         
         # 测试2：快速止盈组合（针对用户反馈的鹏华空天军工）
         # 用户反馈：资产5000多，fund_amount=10000，应触发加仓
-        increase_funds(
-            DEFAULT_USER,
-            "快速止盈",
-            fund_list=[
-                {"fund_code": "010364", "fund_name": "鹏华空天军工指数(LOF)C", "amount": 10000.0}
-            ]
-        )
+        # increase_funds(
+        #     DEFAULT_USER,
+        #     "快速止盈",
+        #     fund_list=[
+        #         {"fund_code": "010364", "fund_name": "鹏华空天军工指数(LOF)C", "amount": 10000.0}
+        #     ]
+        # )
         
         logger.info(f"用户 {DEFAULT_USER.customer_name} 加仓操作完成")
     except Exception as e:

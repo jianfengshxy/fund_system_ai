@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import logging
 from typing import List, Dict, Set, Tuple
 
@@ -17,6 +18,65 @@ logger = get_logger(__name__)
 
 # 目标指数类型
 TARGET_TYPES = ["宽基", "行业", "主题", "海外"]
+
+
+def _dedup_similar_indices(indices: List[Dict]) -> List[Dict]:
+    """
+    同类指数去重：通过中文汉字重叠识别同类指数（如有色金属 vs 国证有色），
+    每组只保留未来3个月平均收益率最高的一个。
+
+    匹配规则：两个指数名称含 >=2 个相同中文汉字，即视为同类。
+    例："有色金属" {有,色,金,属} vs "国证有色" {国,证,有,色} → 共享"有""色" → 同类
+    Example: "CSSW电子" {电,子} vs "CS电子" {电,子} → 共享"电""子" → 同类
+
+    Returns:
+        Deduped list, group-internal order follows original avg_return_q descending sort
+    """
+    if not indices:
+        return []
+
+    # Extract Chinese-only character set
+    indexed = []  # [(idx, set_of_chinese_chars), ...]
+    for idx in indices:
+        name = idx['index_name']
+        chars = set(''.join(re.findall(r'[\u4e00-\u9fff]+', name)))
+        indexed.append((idx, chars))
+
+    # Group by pairwise character overlap (>=2 shared chars)
+    groups = []
+    used = set()
+    for i, (idx_i, chars_i) in enumerate(indexed):
+        if i in used:
+            continue
+        group = [i]
+        used.add(i)
+        for j, (idx_j, chars_j) in enumerate(indexed):
+            if j in used:
+                continue
+            if len(chars_i & chars_j) >= 2:
+                group.append(j)
+                used.add(j)
+        groups.append([indexed[k][0] for k in group])
+
+    # Keep best per group
+    result = []
+    for group in groups:
+        best = max(group, key=lambda x: float(x['avg_return_q']))
+        if len(group) > 1:
+            removed_info = "; ".join(
+                f"{x['index_code']} {x['index_name']} (3M={x['avg_return_q']:.2f}%)"
+                for x in group if x != best
+            )
+            logger.info(
+                f"[去重] 同类指数: 保留 {best['index_code']} {best['index_name']} "
+                f"(3M={best['avg_return_q']:.2f}%), "
+                f"跳过 {removed_info}"
+            )
+        result.append(best)
+
+    # Sort by avg_return_q descending
+    result.sort(key=lambda x: float(x['avg_return_q']), reverse=True)
+    return result
 
 
 def get_qualified_indices() -> List[Dict]:
@@ -163,6 +223,13 @@ def add_qualified_funds_to_lln_group(user, group_name: str = "大数定律") -> 
     if not qualified_indices:
         logger.info("没有满足大数定律条件的指数。")
         return {'total_qualified': 0, 'added': 0, 'skipped': 0, 'no_track_fund': 0}
+
+    # 1b. 同类指数去重（如有色金属 vs 国证有色），每组保留3M收益率最高的
+    before_dedup = len(qualified_indices)
+    qualified_indices = _dedup_similar_indices(qualified_indices)
+    dedup_removed = before_dedup - len(qualified_indices)
+    if dedup_removed > 0:
+        logger.info(f"同类指数去重: 减少 {dedup_removed} 个，保留 {len(qualified_indices)} 个")
 
     # 2. 获取目标组合信息
     group_id, existing_funds = get_group_info(user, group_name)

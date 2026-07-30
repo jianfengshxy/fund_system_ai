@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import logging
 from typing import List, Dict, Set, Tuple
 
@@ -19,9 +20,59 @@ logger = get_logger(__name__)
 TARGET_TYPES = ["宽基", "行业", "主题", "海外"]
 
 
+def _dedup_similar_indices(indices: List[Dict]) -> List[Dict]:
+    """
+    同类指数去重：通过中文汉字重叠识别同类指数（如有色金属 vs 国证有色），
+    每组只保留未来3个月平均收益率最高的一个。
+
+    匹配规则：两个指数名称含 >=2 个相同中文汉字，即视为同类。
+    """
+    if not indices:
+        return []
+
+    indexed = []
+    for idx in indices:
+        name = idx['index_name']
+        chars = set(''.join(re.findall(r'[\u4e00-\u9fff]+', name)))
+        indexed.append((idx, chars))
+
+    groups = []
+    used = set()
+    for i, (idx_i, chars_i) in enumerate(indexed):
+        if i in used:
+            continue
+        group = [i]
+        used.add(i)
+        for j, (idx_j, chars_j) in enumerate(indexed):
+            if j in used:
+                continue
+            if len(chars_i & chars_j) >= 2:
+                group.append(j)
+                used.add(j)
+        groups.append([indexed[k][0] for k in group])
+
+    result = []
+    for group in groups:
+        best = max(group, key=lambda x: float(x['avg_return_q']))
+        if len(group) > 1:
+            removed_info = "; ".join(
+                f"{x['index_code']} {x['index_name']} (3M={x['avg_return_q']:.2f}%)"
+                for x in group if x != best
+            )
+            logger.info(
+                f"[去重] 同类指数: 保留 {best['index_code']} {best['index_name']} "
+                f"(3M={best['avg_return_q']:.2f}%), "
+                f"跳过 {removed_info}"
+            )
+        result.append(best)
+
+    result.sort(key=lambda x: float(x['avg_return_q']), reverse=True)
+    return result
+
+
 def get_qualified_fund_codes() -> Set[str]:
     """
-    查询满足"大数定律"条件的指数的跟踪基金代码集合。
+    查询满足"大数定律"条件的指数跟踪基金代码集合（已去重）。
 
     条件：
       - 未来持有3个月平均收益率 > 10%
@@ -29,11 +80,13 @@ def get_qualified_fund_codes() -> Set[str]:
       - 未来一年正收益概率 = 100%
 
     Returns:
-        Set of tracking fund codes
+        Set of tracking fund codes (同类指数去重后取3M收益率最高者)
     """
     db = DatabaseConnection()
     sql = """
-        SELECT DISTINCT s.track_fund_code
+        SELECT
+            s.index_code, s.index_name, s.track_fund_code, s.track_fund_name,
+            d.avg_return_q, d.avg_return_hy, d.profit_rate_y
         FROM market_index_static s
         INNER JOIN (
             SELECT d1.index_code, d1.avg_return_q, d1.avg_return_hy, d1.profit_rate_y
@@ -55,8 +108,11 @@ def get_qualified_fund_codes() -> Set[str]:
     """.format(placeholders=",".join(["%s"] * len(TARGET_TYPES)))
 
     rows = db.execute_query(sql, TARGET_TYPES)
-    codes = {str(r['track_fund_code']) for r in (rows or []) if r.get('track_fund_code')}
-    logger.info(f"大数定律条件查询: 满足条件的跟踪基金共 {len(codes)} 个")
+    logger.info(f"大数定律条件查询: 满足条件的指数共 {len(rows)} 个")
+    # 同类指数去重后取跟踪基金代码
+    deduped = _dedup_similar_indices(rows)
+    codes = {str(r['track_fund_code']) for r in deduped if r.get('track_fund_code')}
+    logger.info(f"去重后跟踪基金: {len(codes)} 个")
     return codes
 
 

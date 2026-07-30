@@ -63,16 +63,21 @@ def create_table_if_not_exists():
 
 def parse_nav_date(nav_date_str: str) -> datetime.date:
     """
-    Parse Navdate string like "02-27" to date object.
+    Parse Navdate string to date object.
+    Supports both "2026-07-30" (full) and "07-30" (MM-DD) formats.
     """
     if not nav_date_str:
         return datetime.date.today()
     
     try:
         today = datetime.date.today()
-        # Append current year
-        date_str = f"{today.year}-{nav_date_str}"
-        dt = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+        # If already contains year (YYYY-MM-DD), parse directly
+        if nav_date_str.count("-") == 2:
+            dt = datetime.datetime.strptime(nav_date_str, "%Y-%m-%d").date()
+        else:
+            # MM-DD format, prepend current year
+            date_str = f"{today.year}-{nav_date_str}"
+            dt = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
         
         if dt > today + datetime.timedelta(days=1):
              dt = dt.replace(year=dt.year - 1)

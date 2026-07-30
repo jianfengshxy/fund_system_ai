@@ -191,7 +191,7 @@ def _enrich_sub_account_info(trades, user: User):
 
 def sync_user_trades_daily(user: User):
     """
-    每日同步用户交易记录（最近 1 年）。
+    每日同步用户交易记录（最近 1 周）。
 
     使用 get_one_fund_tran_infos (GetOneFundTranInfos) 获取交易，
     通过 trade_classifier 精准区分 买入/卖出/撤单。
@@ -201,7 +201,7 @@ def sync_user_trades_daily(user: User):
 
         # 使用 get_one_fund_tran_infos，能获取完整的 APPStateText 和 Colour 字段
         # fund_code="" 获取所有基金的交易记录（不限定单只基金）
-        trades = get_one_fund_tran_infos(user, fund_code="", date_type="3")
+        trades = get_one_fund_tran_infos(user, fund_code="", date_type="5")
 
         if not trades:
             logger.info(f"无交易记录需要同步 (user={user.account})")

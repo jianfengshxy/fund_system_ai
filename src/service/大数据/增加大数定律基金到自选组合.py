@@ -20,61 +20,88 @@ logger = get_logger(__name__)
 TARGET_TYPES = ["宽基", "行业", "主题", "海外"]
 
 
-def _dedup_similar_indices(indices: List[Dict]) -> List[Dict]:
+def _get_all_index_names_for_grouping() -> List[Dict]:
     """
-    同类指数去重：通过中文汉字重叠识别同类指数（如有色金属 vs 国证有色），
-    每组只保留未来3个月平均收益率最高的一个。
+    获取市场全部指数的名称，用于构建相似度分组。
+    轻量查询，仅返回 index_code, index_name。
+    """
+    db = DatabaseConnection()
+    rows = db.execute_query(
+        f"SELECT index_code, index_name FROM market_index_static "
+        f"WHERE type_name IN ({','.join(['%s'] * len(TARGET_TYPES))})",
+        TARGET_TYPES,
+    )
+    return rows
+
+
+def _dedup_similar_indices(indices: List[Dict], all_index_names: List[Dict]) -> List[Dict]:
+    """
+    同类指数去重：基于全量指数名称构建相似度分组，每组只保留3M收益率最高的一个。
+
+    **为什么用全量而非仅过滤结果？**
+    同类关系是全局的（如"有色金属"与"国证有色"是同类），
+    如果仅对当前过滤出的子集做去重，当下一批指数不同时，同类关系仍应一致。
 
     匹配规则：两个指数名称含 >=2 个相同中文汉字，即视为同类。
     例："有色金属" {有,色,金,属} vs "国证有色" {国,证,有,色} → 共享"有""色" → 同类
-    Example: "CSSW电子" {电,子} vs "CS电子" {电,子} → 共享"电""子" → 同类
-
-    Returns:
-        Deduped list, group-internal order follows original avg_return_q descending sort
     """
     if not indices:
         return []
 
-    # Extract Chinese-only character set
-    indexed = []  # [(idx, set_of_chinese_chars), ...]
-    for idx in indices:
-        name = idx['index_name']
+    # 1. 从全量指数构建相似度分组  {group_id: [code1, code2, ...]}
+    groups: Dict[str, List[str]] = {}
+    indexed = []
+    for r in all_index_names:
+        name = r['index_name']
         chars = set(''.join(re.findall(r'[\u4e00-\u9fff]+', name)))
-        indexed.append((idx, chars))
+        indexed.append((r['index_code'], chars))
 
-    # Group by pairwise character overlap (>=2 shared chars)
-    groups = []
     used = set()
-    for i, (idx_i, chars_i) in enumerate(indexed):
-        if i in used:
+    gid = 0
+    for code_i, chars_i in indexed:
+        if code_i in used:
             continue
-        group = [i]
-        used.add(i)
-        for j, (idx_j, chars_j) in enumerate(indexed):
-            if j in used:
+        members = [code_i]
+        used.add(code_i)
+        for code_j, chars_j in indexed:
+            if code_j in used:
                 continue
             if len(chars_i & chars_j) >= 2:
-                group.append(j)
-                used.add(j)
-        groups.append([indexed[k][0] for k in group])
+                members.append(code_j)
+                used.add(code_j)
+        groups[f"g{gid}"] = members
+        gid += 1
 
-    # Keep best per group
+    # 2. 建立 code -> group_id 映射
+    code_to_gid: Dict[str, str] = {}
+    for gid_key, members in groups.items():
+        for code in members:
+            code_to_gid[code] = gid_key
+
+    # 3. 将过滤出的指数按分组归类
+    from collections import OrderedDict
+    qualified_groups: Dict[str, List[Dict]] = OrderedDict()
+    for idx in indices:
+        code = idx['index_code']
+        g = code_to_gid.get(code, code)  # 无同类时以自身code为组标识
+        qualified_groups.setdefault(g, []).append(idx)
+
+    # 4. 每组取 3M 收益率最高的
     result = []
-    for group in groups:
+    for g, group in qualified_groups.items():
         best = max(group, key=lambda x: float(x['avg_return_q']))
         if len(group) > 1:
-            removed_info = "; ".join(
+            removed = [
                 f"{x['index_code']} {x['index_name']} (3M={x['avg_return_q']:.2f}%)"
                 for x in group if x != best
-            )
+            ]
             logger.info(
                 f"[去重] 同类指数: 保留 {best['index_code']} {best['index_name']} "
                 f"(3M={best['avg_return_q']:.2f}%), "
-                f"跳过 {removed_info}"
+                f"跳过 {'; '.join(removed)}"
             )
         result.append(best)
 
-    # Sort by avg_return_q descending
     result.sort(key=lambda x: float(x['avg_return_q']), reverse=True)
     return result
 
@@ -224,9 +251,10 @@ def add_qualified_funds_to_lln_group(user, group_name: str = "大数定律") -> 
         logger.info("没有满足大数定律条件的指数。")
         return {'total_qualified': 0, 'added': 0, 'skipped': 0, 'no_track_fund': 0}
 
-    # 1b. 同类指数去重（如有色金属 vs 国证有色），每组保留3M收益率最高的
+    # 1b. 同类指数去重（基于全量指数构建分组，不依赖过滤子集）
+    all_index_names = _get_all_index_names_for_grouping()
     before_dedup = len(qualified_indices)
-    qualified_indices = _dedup_similar_indices(qualified_indices)
+    qualified_indices = _dedup_similar_indices(qualified_indices, all_index_names)
     dedup_removed = before_dedup - len(qualified_indices)
     if dedup_removed > 0:
         logger.info(f"同类指数去重: 减少 {dedup_removed} 个，保留 {len(qualified_indices)} 个")

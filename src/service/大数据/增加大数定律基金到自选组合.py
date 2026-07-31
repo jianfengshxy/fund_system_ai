@@ -1,6 +1,7 @@
 import os
 import sys
 import re
+import math
 import logging
 from typing import List, Dict, Set, Tuple
 
@@ -44,41 +45,60 @@ def _dedup_similar_indices(indices: List[Dict], all_index_names: List[Dict]) -> 
 
     匹配规则：两个指数名称含 >=2 个相同中文汉字，即视为同类。
     例："有色金属" {有,色,金,属} vs "国证有色" {国,证,有,色} → 共享"有""色" → 同类
+
+    **与旧版贪心算法的区别（修复跨家族漏去重）**：
+    旧版按数据库返回顺序"先到先得"，指数一旦被某组吸收即无法再归属其他组，
+    导致"中证有色"因共享{中,证}被中证家族抢先吸收，与同主题的"有色金属"(共享{有,色})失之交臂。
+    新版：
+      1. 按"主题特异性"(自身字符 IDF 加权和)降序处理，越具体的主题越先成组；
+      2. 每个指数加入与其共享汉字 IDF 加权分最高的组（最佳匹配归属）。
+    结果确定、与数据库返回顺序无关，桥接类指数(如"中证有色")会归入真正的主题组。
     """
     if not indices:
         return []
 
-    # 1. 从全量指数构建相似度分组  {group_id: [code1, code2, ...]}
-    groups: Dict[str, List[str]] = {}
-    indexed = []
+    # 1. 提取全量指数名称的汉字集合，并计算各汉字 IDF（出现越少越具主题区分度）
+    char_sets: Dict[str, Set[str]] = {}
+    char_count: Dict[str, int] = {}
     for r in all_index_names:
-        name = r['index_name']
-        chars = set(''.join(re.findall(r'[\u4e00-\u9fff]+', name)))
-        indexed.append((r['index_code'], chars))
+        chars = set(''.join(re.findall(r'[\u4e00-\u9fff]+', r['index_name'])))
+        char_sets[r['index_code']] = chars
+        for c in chars:
+            char_count[c] = char_count.get(c, 0) + 1
+    total = len(all_index_names)
+    idf = {c: math.log(total / cnt) for c, cnt in char_count.items()}
 
-    used = set()
-    gid = 0
-    for code_i, chars_i in indexed:
-        if code_i in used:
-            continue
-        members = [code_i]
-        used.add(code_i)
-        for code_j, chars_j in indexed:
-            if code_j in used:
+    # 2. 按主题特异性降序（同分按 code 升序保证确定性），贪心构建分组
+    def _specificity(code: str) -> float:
+        return sum(idf[c] for c in char_sets[code])
+
+    order = sorted(all_index_names, key=lambda r: (-_specificity(r['index_code']), r['index_code']))
+    seeds: List[Tuple[str, Set[str]]] = []
+    groups: Dict[str, List[str]] = {}
+    for r in order:
+        code = r['index_code']
+        chars = char_sets[code]
+        best_seed, best_score = None, 0.0
+        for seed_code, seed_chars in seeds:
+            shared = chars & seed_chars
+            if len(shared) < 2:
                 continue
-            if len(chars_i & chars_j) >= 2:
-                members.append(code_j)
-                used.add(code_j)
-        groups[f"g{gid}"] = members
-        gid += 1
+            score = sum(idf[c] for c in shared)
+            if score > best_score:
+                best_seed, best_score = seed_code, score
+        if best_seed is not None:
+            groups[best_seed].append(code)
+        else:
+            seeds.append((code, chars))
+            groups[code] = [code]
 
-    # 2. 建立 code -> group_id 映射
+    # 3. 建立 code -> 组标识 映射（组标识用种子 code）
     code_to_gid: Dict[str, str] = {}
-    for gid_key, members in groups.items():
+    for seed, members in groups.items():
         for code in members:
-            code_to_gid[code] = gid_key
+            code_to_gid[code] = seed
 
-    # 3. 将过滤出的指数按分组归类
+    # 4. 将过滤出的指数按分组归类
     from collections import OrderedDict
     qualified_groups: Dict[str, List[Dict]] = OrderedDict()
     for idx in indices:
@@ -86,7 +106,7 @@ def _dedup_similar_indices(indices: List[Dict], all_index_names: List[Dict]) -> 
         g = code_to_gid.get(code, code)  # 无同类时以自身code为组标识
         qualified_groups.setdefault(g, []).append(idx)
 
-    # 4. 每组取 3M 收益率最高的
+    # 5. 每组取 3M 收益率最高的
     result = []
     for g, group in qualified_groups.items():
         best = max(group, key=lambda x: float(x['avg_return_q']))

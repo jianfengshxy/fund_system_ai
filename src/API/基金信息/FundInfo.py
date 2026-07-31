@@ -266,6 +266,8 @@ def updateFundEstimatedValue(fund_info: FundInfo, user=None) -> Optional[FundInf
             if is_index_fund:
                 index_code = getattr(fund_info, 'index_code', None)
                 if index_code:
+                    index_chg = None
+                    index_date = ""
                     try:
                         from src.API.市场指数.指数详情 import get_index_detail
                         detail = get_index_detail(local_user, index_code)
@@ -285,6 +287,28 @@ def updateFundEstimatedValue(fund_info: FundInfo, user=None) -> Optional[FundInf
                             )
                     except Exception as e:
                         logger.warning(f"指数估值查询失败({index_code}): {e}")
+
+                    # ── 第三方数据源 fallback ──
+                    # 天天基金不支持的指数（如海外 S&P、MSCI 等）走第三方数据源。
+                    if index_chg is None:
+                        try:
+                            from src.common.third_party_index import is_third_party_index, fetch_valuation
+                            if is_third_party_index(index_code):
+                                tv = fetch_valuation(index_code)
+                                if tv.success:
+                                    chg = tv.change_pct
+                                    nav = fund_info.nav or 0.0
+                                    fund_info.estimated_change = chg
+                                    fund_info.estimated_value = round(nav * (1 + chg / 100), 4) if nav > 0 else None
+                                    fund_info.estimated_time = tv.update_time
+                                    logger.info(
+                                        f"基金{fund_info.fund_code}第三方估值: "
+                                        f"[{index_code}] 价格={tv.price}{tv.currency}, "
+                                        f"涨幅={chg:+.2f}%, 净值={fund_info.estimated_value}, "
+                                        f"时间={tv.update_time}"
+                                    )
+                        except Exception as e:
+                            logger.warning(f"第三方指数估值查询失败({index_code}): {e}")
 
             # 将获取后的估值数据注入收益率基线修正逻辑
             _apply_estimated_or_official_nav(

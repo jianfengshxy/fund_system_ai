@@ -190,6 +190,30 @@ def _refresh_estimate(fund_info: FundInfo, user: User) -> None:
             )
             return
 
+        # ── 第三方数据源 fallback ──
+        # 天天基金不支持的指数（如海外 S&P、MSCI 等）走第三方数据源查询涨幅。
+        try:
+            from src.common.third_party_index import is_third_party_index, fetch_valuation
+            if is_third_party_index(index_code):
+                tv = fetch_valuation(index_code)
+                if tv.success and tv.change_pct is not None:
+                    nav = fund_info.nav or 0.0
+                    fund_info.estimated_change = tv.change_pct
+                    fund_info.estimated_value = round(nav * (1 + tv.change_pct / 100), 4) if nav > 0 else None
+                    fund_info.estimated_time = tv.update_time
+                    fund_info._baseline_nav_date = getattr(fund_info, "nav_date", None)
+                    if not is_qdii:
+                        _clear_if_nav_matches_estimated(fund_info)
+                    logger.info(
+                        f"{fund_info.fund_name} 第三方指数估值: "
+                        f"[{index_code}] 价格={tv.price}{tv.currency}, "
+                        f"涨幅={tv.change_pct:+.2f}%, 净值={fund_info.estimated_value}, "
+                        f"时间={tv.update_time}"
+                    )
+                    return
+        except Exception as e:
+            logger.warning(f"{fund_info.fund_name} 第三方指数估值查询失败({index_code}): {e}")
+
         # 回退：无数据则归零
         if fund_type == '000':
             # 非 QDII 的 type=000 指数型基金，指数查不到时归零
@@ -320,6 +344,6 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     return fund_info
 
 if __name__ == '__main__':
-    fund_info = get_all_fund_info(DEFAULT_USER, '020829')
+    fund_info = get_all_fund_info(DEFAULT_USER, '009975')
     print(fund_info)
     pass

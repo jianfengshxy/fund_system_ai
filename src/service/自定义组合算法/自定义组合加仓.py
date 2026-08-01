@@ -347,13 +347,13 @@ if __name__ == "__main__":
         # 测试1：海外基金组合
         increase_funds(
             DEFAULT_USER,
-            "海外基金组合",
+            "快速止盈",
             fund_list=[
                 # {"fund_code": "016702", "fund_name": "银华海外数字经济量化选股混合发起式(QDII)C", "amount": 5000.0},
                 # {"fund_code": "006105", "fund_name": "宏利印度股票(QDII)", "amount": 5000.0},
                 # {"fund_code": "161226", "fund_name": "国投瑞银白银期货(LOF)A", "amount": 5000.0},
                 # {"fund_code": "017873", "fund_name": "汇添富香港优势精选混合(QDII)C", "amount": 5000.0},
-                {"fund_code": "100055", "fund_name": "富国全球科技互联网股票(QDII)A", "amount": 5000.0}
+                # {"fund_code": "100055", "fund_name": "富国全球科技互联网股票(QDII)A", "amount": 5000.0}
             ]
         )
         

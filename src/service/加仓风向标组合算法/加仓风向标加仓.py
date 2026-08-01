@@ -25,6 +25,7 @@ from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 # 新增导入 get_user_all_info
 from src.service.用户管理.用户信息 import get_user_all_info
 def _get_max_funds_threshold():
@@ -105,12 +106,12 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                 return default
 
         current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-        estimated_change = _safe_float(getattr(fi, "estimated_change", 0.0), 0.0)
+        estimated_change, label_est = calc_estimated_change(fi)
         estimated_profit_rate = current_profit_rate + estimated_change
 
         # 公共前置过滤：仅保留跌幅足够的标的
         if estimated_profit_rate >= -1.0:
-            logger.info(f"[跳过] {fi.fund_name}({fund_code}) | 原因: 回撤不达标 estimated_profit_rate={estimated_profit_rate:.2f}%（阈值<-1.00%，current={current_profit_rate:.2f}%, change={estimated_change:.2f}%）")
+            logger.info(f"[跳过] {fi.fund_name}({fund_code}) | 原因: 回撤不达标 estimated_profit_rate={estimated_profit_rate:.2f}%（阈值<-1.00%，current={current_profit_rate:.2f}%, change={estimated_change:.2f}%, {label_est}）")
             continue
 
         in_wind_vane = (fi.fund_type != '000' and fund_code in wind_vane_codes) or (fi.fund_type == '000' and fi.index_code in wind_vane_indices)

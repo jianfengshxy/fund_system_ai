@@ -39,6 +39,7 @@ from src.service.交易管理.交易查询 import count_success_trades_on_prev_n
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
@@ -186,7 +187,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         is_trend_strong = False
         try:
             ma5_ok = nav5_gate(fund_info, fund_name, fund_code, logger)
-            estimated_change = fund_info.estimated_change if fund_info.estimated_change is not None else 0.0
+            estimated_change, _ = calc_estimated_change(fund_info)
             
             # 豁免条件: 站上5日线 且 (今日大涨 > 1.5% 或 虽然长期弱但短期3个月已转正)
             season_positive = (season_val is not None and season_val > 0)
@@ -226,10 +227,10 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     
     # 获取当前收益率和估值增长率
     current_profit_rate = constant_profit_rate if constant_profit_rate is not None else 0.0
-    estimated_change = fund_info.estimated_change if fund_info.estimated_change is not None else 0.0
+    estimated_change, label_est = calc_estimated_change(fund_info)
     estimated_profit_rate = current_profit_rate + estimated_change
     
-    logger.info(f"[收益率预估] 预估收益率 = 当前({current_profit_rate}%) + 估值({estimated_change}%) = {estimated_profit_rate:.2f}%")
+    logger.info(f"[收益率预估] 预估收益率 = 当前({current_profit_rate}%) + 估值({estimated_change}%) = {estimated_profit_rate:.2f}%（{label_est}）")
 
       #判断是否是月定投延期交易
     if period_type == 3 and  period_value != day_of_month: 

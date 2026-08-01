@@ -28,6 +28,7 @@ from src.service.公共服务.nav_gate_service import nav5_gate, nav5_fall_gate
 logger = get_logger(__name__)
 
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 
 def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float] = None) -> bool:
     customer_name = user.customer_name
@@ -99,7 +100,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
         # 预估收益率
         current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-        estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
+        estimated_change, label_est = calc_estimated_change(fund_info)
         estimated_profit_rate = current_profit_rate + estimated_change
 
         # 波动率对齐

@@ -17,6 +17,7 @@ from src.service.交易管理.购买基金 import commit_order
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.common.constant import DEFAULT_USER
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
@@ -49,8 +50,8 @@ def increase(user: User, sub_account_name: str = "飞龙在天", amount: int = 1
         fund_info = get_all_fund_info(user, fund_code)
 
         # 计算预估收益率
-        estimated_profit_rate = asset_detail.constant_profit_rate + fund_info.estimated_change
-        logger.info(f"基金 {fund_name} ({fund_code}) 预估收益率: {estimated_profit_rate}")
+        estimated_profit_rate, estimated_change, label_est = calc_estimated_profit_rate(asset_detail.constant_profit_rate, fund_info)
+        logger.info(f"基金 {fund_name} ({fund_code}) 预估收益率: {estimated_profit_rate}（{label_est}）")
 
         # 如果预估收益率 > -1.0% 跳过
         if estimated_profit_rate > -1.0:

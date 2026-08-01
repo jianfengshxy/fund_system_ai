@@ -23,6 +23,7 @@ from src.service.交易管理.交易查询 import count_success_trades_on_prev_n
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.trade_time_service import is_trading_time
 from src.common.logger import get_logger
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 
 logger = get_logger(__name__)
 
@@ -143,7 +144,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             filter_checks = []
 
             current_profit_rate = _safe_float(getattr(asset, 'constant_profit_rate', None), 0.0)
-            estimated_change = _safe_float(getattr(fund_info, 'estimated_change', None), 0.0)
+            estimated_change, label_est = calc_estimated_change(fund_info)
             estimated_profit_rate = current_profit_rate + estimated_change
             safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
             times = safe_asset_value / float(fund_amount)

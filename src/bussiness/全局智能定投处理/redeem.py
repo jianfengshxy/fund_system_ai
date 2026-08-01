@@ -41,6 +41,7 @@ from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
 from src.service.大数据.加仓风向标服务 import get_fund_investment_indicators
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.service.公共服务.nav_gate_service import nav5_gate
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -175,11 +176,11 @@ def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Op
     
     # 获取当前收益率和估值增长率
     current_profit_rate = constant_profit_rate if constant_profit_rate is not None else 0.0
-    estimated_change = fund_info.estimated_change if fund_info.estimated_change is not None else 0.0
+    estimated_change, label_est = calc_estimated_change(fund_info)
     estimated_profit_rate = current_profit_rate + estimated_change
     rank_100 = fund_info.rank_100day
     
-    logger.info(f"{fund_name}收益率计算：当前收益率{current_profit_rate}%，估值变化{estimated_change}%，预估收益率{estimated_profit_rate}%")
+    logger.info(f"{fund_name}收益率计算：当前收益率{current_profit_rate}%，估值变化{estimated_change}%，预估收益率{estimated_profit_rate}%（{label_est}）")
     logger.info(f"{fund_name}其他指标：波动率{volatility}%，100日排名{rank_100}，投资次数{times}")
    
     if asset_detail.available_vol <= 0.01:

@@ -29,6 +29,7 @@ from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 from src.common.constant import DEFAULT_USER, HQB_RATIO_THRESHOLD, PROFIT_THRESHOLD_FOR_LOW_BALANCE
 from src.service.公共服务.nav_gate_service import nav5_fall_gate
 from src.common.logger import get_logger
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 
 logger = get_logger(__name__)
 
@@ -97,11 +98,11 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
 
             # 收益率计算（与业务层一致）
             current_profit_rate = constant_profit_rate if constant_profit_rate is not None else 0.0
-            estimated_change = fund_info.estimated_change if fund_info.estimated_change is not None else 0.0
+            estimated_change, label_est = calc_estimated_change(fund_info)
             estimated_profit_rate = current_profit_rate + estimated_change
             rank_100 = fund_info.rank_100day
 
-            logger.info(f"收益率计算：当前收益率{current_profit_rate}%，估值变化{estimated_change}%，预估收益率{estimated_profit_rate}%")
+            logger.info(f"收益率计算：当前收益率{current_profit_rate}%，估值变化{estimated_change}%，预估收益率{estimated_profit_rate}%（{label_est}）")
             logger.info(f"其他指标：波动率{volatility}%，100日排名{rank_100}，投资次数{times}")
 
             if shares == []:

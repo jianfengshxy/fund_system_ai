@@ -19,6 +19,7 @@ from src.domain.sub_account.sub_account import SubAccount
 from src.domain.user import ApiResponse
 from src.scheduled_task_manager import compute_next_run, get_scheduler
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
+from src.service.公共服务.estimated_profit_service import calc_estimated_change
 
 logger = get_logger(__name__)
 
@@ -314,7 +315,8 @@ def _handle_portfolio_details(portfolio_name: str):
             asset.fund_nav = getattr(fund_info, "nav", getattr(asset, "fund_nav", None))
             asset.nav_date = getattr(fund_info, "nav_date", getattr(asset, "nav_date", None))
             asset.nav_change = getattr(fund_info, "nav_change", None)
-            asset.estimated_change = float(getattr(fund_info, "estimated_change", 0.0) or 0.0)
+            eff_change, _ = calc_estimated_change(fund_info)
+            asset.estimated_change = eff_change
             asset.estimated_time = getattr(fund_info, "estimated_time", None)
             return asset
 

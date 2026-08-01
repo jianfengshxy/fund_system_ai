@@ -19,6 +19,7 @@ from src.service.资产管理.get_fund_asset_detail import get_fund_asset_detail
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.交易管理.trade import get_bank_shares
 from src.common.constant import DEFAULT_USER
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 
 # 配置日志
 logging.basicConfig(
@@ -142,10 +143,10 @@ def process_fixed_ratio_redeem(user: User, config: Dict):
 
                 # 计算预估收益率
                 current_profit_rate = asset_detail.constant_profit_rate if asset_detail.constant_profit_rate is not None else 0.0
-                estimated_change = fund_info.estimated_change if fund_info.estimated_change is not None else 0.0
+                estimated_change, label_est = calc_estimated_change(fund_info)
                 estimated_profit_rate = current_profit_rate + estimated_change
                 
-                logger.info(f"基金 {fund_name}({fund_code}) - 当前收益率: {current_profit_rate}%, 估值增长: {estimated_change}%, 预估总收益: {estimated_profit_rate:.2f}% (目标: {stop_rate}%)")
+                logger.info(f"基金 {fund_name}({fund_code}) - 当前收益率: {current_profit_rate}%, 估值增长: {estimated_change}%, 预估总收益: {estimated_profit_rate:.2f}% (目标: {stop_rate}%)（{label_est}）")
                 
                 # 判断是否满足止盈条件
                 if estimated_profit_rate >= stop_rate:

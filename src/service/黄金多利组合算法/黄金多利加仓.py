@@ -18,6 +18,7 @@ from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.service.交易管理.购买基金 import commit_order
 from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
 from src.service.基金信息.基金信息 import get_all_fund_info
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 
 logger = get_logger(__name__)
 
@@ -241,10 +242,10 @@ def increase_gold_funds(
         # 计算预估收益率
         current_profit_rate = float(getattr(asset, "constant_profit_rate", 0.0) or 0.0)
         fund_info = get_all_fund_info(user, f_code)
-        estimated_change = fund_info.estimated_change if fund_info and fund_info.estimated_change is not None else 0.0
+        estimated_change, label_est = calc_estimated_change(fund_info)
         estimated_profit_rate = current_profit_rate + estimated_change
         
-        logger.info(f"持仓基金 {f_name}({f_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%")
+        logger.info(f"持仓基金 {f_name}({f_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%（{label_est}）")
 
         # 获取当前资产值和该基金的买入金额
         current_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)

@@ -17,6 +17,7 @@ from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.service.交易管理.购买基金 import commit_order
 from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
 from src.service.公共服务.nav_gate_service import nav5_gate
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
 
@@ -102,10 +103,10 @@ def increase_gold_dimension_funds(user: User, sub_account_name: str, amount: flo
         current_profit_rate = float(getattr(target_asset, "constant_profit_rate", 0.0) or 0.0)
         
         # 计算预估收益率
-        estimated_change = fi.estimated_change if fi.estimated_change is not None else 0.0
+        estimated_change, label_est = calc_estimated_change(fi)
         estimated_profit_rate = current_profit_rate + estimated_change
         
-        logger.info(f"当前持仓收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%")
+        logger.info(f"当前持仓收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%（{label_est}）")
         
         if estimated_profit_rate >= -1.0:
             logger.info(f"预估收益率 ({estimated_profit_rate:.2f}%) >= -1.0%，不触发加仓")

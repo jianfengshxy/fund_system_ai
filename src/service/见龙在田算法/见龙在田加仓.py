@@ -25,6 +25,7 @@ from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
 from src.service.公共服务.nav_gate_service import nav5_gate
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 
 import datetime
 
@@ -102,12 +103,12 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                 return default
 
         current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-        estimated_change = _safe_float(getattr(fi, "estimated_change", 0.0), 0.0)
+        estimated_change, label_est = calc_estimated_change(fi)
         estimated_profit_rate = current_profit_rate + estimated_change
 
         # 公共前置过滤：跌幅不深直接跳过
         if estimated_profit_rate >= -1.0:
-            logger.info(f"跳过 {fi.fund_name}({fund_code}): 回撤不达标 estimated_profit_rate={estimated_profit_rate:.2f}% ，阈值<-1.00%（current={current_profit_rate:.2f}%, change={estimated_change:.2f}%）")
+            logger.info(f"跳过 {fi.fund_name}({fund_code}): 回撤不达标 estimated_profit_rate={estimated_profit_rate:.2f}% ，阈值<-1.00%（current={current_profit_rate:.2f}%, change={estimated_change:.2f}%, {label_est}）")
             continue
 
         # 使用“昨日净值日(nav_date)+今天”的守卫：任一天存在非撤的买入/定投则跳过

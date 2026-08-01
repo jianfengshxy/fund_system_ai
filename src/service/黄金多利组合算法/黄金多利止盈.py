@@ -16,6 +16,7 @@ from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.service.交易管理.赎回基金 import sell_0_fee_shares, sell_low_fee_shares
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.交易管理.trade import get_bank_shares
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 
 logger = get_logger(__name__)
 
@@ -94,7 +95,7 @@ def redeem_gold_funds(
 
             # 获取基金估值信息
             fund_info = get_all_fund_info(user, fund_code)
-            estimated_change = fund_info.estimated_change if fund_info and fund_info.estimated_change is not None else 0.0
+            estimated_change, label_est = calc_estimated_change(fund_info)
             
             # 获取波动率和基金类型以供日志输出
             volatility = _safe_float(getattr(fund_info, "volatility", None), 0.0) if fund_info else 0.0
@@ -120,7 +121,7 @@ def redeem_gold_funds(
             logger.info(
                 f"基金 {fund_name}({fund_code}) 止盈指标 -> 类型: {fund_type}, 波动率: {volatility:.2f}%, "
                 f"当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, "
-                f"预估收益率: {estimated_profit_rate:.2f}%, 止盈点: {resolved_stop_rate:.2f}% ({stop_rate_source})"
+                f"预估收益率: {estimated_profit_rate:.2f}%, 止盈点: {resolved_stop_rate:.2f}% ({stop_rate_source}), {label_est}"
             )
 
             if estimated_profit_rate > resolved_stop_rate or estimated_profit_rate > 10.0:

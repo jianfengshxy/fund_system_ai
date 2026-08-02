@@ -18,6 +18,7 @@ from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.service.交易管理.购买基金 import commit_order
 from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
 from src.service.基金信息.基金信息 import get_all_fund_info
+from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 
 logger = get_logger(__name__)
@@ -232,7 +233,7 @@ def increase_gold_funds(
         # 只在有配置limit时进行检查，没有配置就不限制
         fund_limit = payload_limit_dict.get(f_code)
         if fund_limit is not None and current_fund_metric >= fund_limit:
-            logger.info(f"持仓基金 {f_name}({fund_code}) 当前资产值 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过加仓")
+            logger.info(f"持仓基金 {f_name}({f_code}) 当前资产值 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过加仓")
             continue
 
         if _has_pending_trade(f_code):
@@ -244,6 +245,9 @@ def increase_gold_funds(
         fund_info = get_all_fund_info(user, f_code)
         estimated_change, label_est = calc_estimated_change(fund_info)
         estimated_profit_rate = current_profit_rate + estimated_change
+
+        week_growth_rate = _safe_float(getattr(fund_info, "week_return", None) if fund_info else None, 0.0)
+        month_growth_rate = _safe_float(getattr(fund_info, "month_return", None) if fund_info else None, 0.0)
         
         logger.info(f"持仓基金 {f_name}({f_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%（{label_est}）")
 
@@ -280,6 +284,29 @@ def increase_gold_funds(
                 if _max_purchase > 0 and _max_purchase < 2000:
                     logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，但限购金额 {_max_purchase} < 2000，突破限购加仓")
                 else:
+                    if (
+                        estimated_profit_rate < -10.0
+                        and week_growth_rate > 0.0
+                        and month_growth_rate > 0.0
+                        and current_asset_value > 0.0
+                        and nav5_gate(fund_info, f_name, f_code, logger)
+                    ):
+                        buy_amount = float(current_asset_value)
+                        logger.info(
+                            f"持仓基金 {f_name}({f_code}) 触发深度回撤反弹加倍加仓："
+                            f"estimated_profit_rate={estimated_profit_rate:.2f}%, week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%, buy_amount={buy_amount:.2f}"
+                        )
+                        if not _can_submit_buy(f_code, f_name, buy_amount):
+                            continue
+                        res = commit_order(user, sub_account_no, f_code, buy_amount)
+                        if res:
+                            actual_amount = getattr(res, "amount", buy_amount)
+                            logger.info(f"深度回撤反弹加倍加仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
+                            _mark_buy_metric(f_code, _safe_float(actual_amount, buy_amount))
+                            buy_triggered = True
+                        else:
+                            logger.info(f"深度回撤反弹加倍加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")
+                        continue
                     logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，跌幅过大，暂停加仓等待反弹")
                     continue
             

@@ -285,7 +285,7 @@ def increase_gold_funds(
                     logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，但限购金额 {_max_purchase} < 2000，突破限购加仓")
                 else:
                     if (
-                        estimated_profit_rate < -10.0
+                        estimated_profit_rate < -15.0
                         and week_growth_rate > 0.0
                         and month_growth_rate > 0.0
                         and current_asset_value > 0.0

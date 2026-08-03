@@ -44,30 +44,20 @@ def calc_estimated_change(fund_info: Any) -> Tuple[float, str]:
     """按净值日期 vs 估值日期的关系，返回真正的「有效估值涨跌幅」和「计算口径标签」。
 
     规则：
-      - 当估值日期 < 最近净值日：正式净值已经发布，持有收益率已同步，返回 0.0，
-        不再把估值收益率重复叠加到持有收益率上。
-      - 当估值日期 == 最近净值日：若估值时间在 A 股收盘后 10 分钟（15:10）之外，
-        视为当日定稿估值（如 QDII 海外指数收盘数据），仍返回估算涨跌幅；否则视为
-        与正式净值重复，返回 0.0。
-      - 其他情况（估值日期晚于净值日）：返回 fund_info.estimated_change。
+      - 当估值日期 <= 最近净值日：说明最新净值已发布/已覆盖该日期，不再把估值涨跌幅
+        叠加到持仓收益率，返回 0.0。
+      - 当估值日期 > 最近净值日：说明最新净值未出，估值涨跌幅作为有效增量返回。
     """
     nav_date = _extract_date_part(getattr(fund_info, "nav_date", None))
     est_time = getattr(fund_info, "estimated_time", None)
     est_date = _extract_date_part(est_time)
-    index_code = getattr(fund_info, "index_code", None)
-    is_overseas_index = bool(index_code) and any(ch.isalpha() for ch in str(index_code))
 
     try:
         est_change = float(getattr(fund_info, "estimated_change", None) or 0.0)
     except (ValueError, TypeError):
         est_change = 0.0
 
-    if is_overseas_index:
-        return est_change, f"海外指数估值(index={index_code}, nav={nav_date}, est={est_time})"
-
     if est_date and nav_date and est_date <= nav_date:
-        if est_date == nav_date and _estimate_time_passed_close(est_time):
-            return est_change, f"收盘后估值(nav={nav_date}, est={est_time})"
         return 0.0, f"净值已发布(nav={nav_date}, est={est_date})"
     return est_change, (f"盘中估值(nav={nav_date}, est={est_date})" if est_date else "估值日期缺失")
 

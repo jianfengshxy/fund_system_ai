@@ -331,8 +331,13 @@ def _handle_portfolio_details(portfolio_name: str):
             asset.fund_nav = getattr(fund_info, "nav", getattr(asset, "fund_nav", None))
             asset.nav_date = getattr(fund_info, "nav_date", getattr(asset, "nav_date", None))
             asset.nav_change = getattr(fund_info, "nav_change", None)
-            eff_change, _ = calc_estimated_change(fund_info)
-            asset.estimated_change = eff_change
+            nav_date = str(getattr(fund_info, "nav_date", "") or "")[:10]
+            est_date = str(getattr(fund_info, "estimated_time", "") or "")[:10]
+            nav_change = getattr(fund_info, "nav_change", None)
+            if nav_date and est_date and nav_date == est_date and nav_change is not None:
+                asset.estimated_change = float(nav_change or 0.0)
+            else:
+                asset.estimated_change = float(getattr(fund_info, "estimated_change", None) or 0.0)
             asset.estimated_time = getattr(fund_info, "estimated_time", None)
             return asset
 

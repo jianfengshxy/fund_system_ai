@@ -277,34 +277,47 @@ def updateFundEstimatedValue(fund_info: FundInfo, user=None) -> Optional[FundInf
             local_user = user or DEFAULT_USER
             update_fund_estimated_value(local_user, fund_info)
 
+            index_code = getattr(fund_info, 'index_code', None)
+            if index_code:
+                try:
+                    from datetime import datetime
+                    from src.common.third_party_index import is_third_party_index, fetch_valuation
+                    if is_third_party_index(index_code):
+                        tv = fetch_valuation(index_code)
+                        if tv.success and tv.change_pct is not None:
+                            chg = float(tv.change_pct)
+                            nav = fund_info.nav or 0.0
+                            fund_info.estimated_change = chg
+                            fund_info.estimated_value = round(nav * (1 + chg / 100), 4) if nav > 0 else None
+                            if tv.update_time:
+                                s = str(tv.update_time).strip()
+                                if len(s) >= 19 and ":" in s[11:]:
+                                    fund_info.estimated_time = s[:19]
+                                else:
+                                    fund_info.estimated_time = f"{s[:10]} {datetime.now().strftime('%H:%M:%S')}"
+                            else:
+                                fund_info.estimated_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            logger.info(
+                                f"基金{fund_info.fund_code}第三方指数估值: "
+                                f"[{tv.source}]({index_code}) "
+                                f"涨幅={chg}%, 净值={fund_info.estimated_value}, 时间={fund_info.estimated_time}"
+                            )
+                except Exception as e:
+                    logger.warning(f"第三方指数估值查询失败({index_code}): {e}")
+
             # ── 指数型（type=000）：用跟踪指数的实际涨跌幅替代重仓股估算 ──
             #   type=000 包括 A 股指数基金和 QDII。对于此类基金，FundValuationLast
             #   返回的是重仓股估算（可能不准），而指数详情返回的是指数真实涨跌幅。
             is_index_fund = getattr(fund_info, 'fund_type', '') == '000'
             if is_index_fund:
-                index_code = getattr(fund_info, 'index_code', None)
                 if index_code:
-                    # 第三方指数模块需显式导入；否则会在 FC 环境触发 NameError 并导致重试后返回 None
-                    from src.common.third_party_index import is_third_party_index, fetch_valuation
                     # 裸接口 update_fund_estimated_value 已回填有效估值（如第三方回退）时跳过，避免重复请求
                     already_estimated = (getattr(fund_info, 'estimated_change', None) or 0) != 0
                     index_chg = None
                     index_date = ""
                     index_name = index_code
 
-                    # 海外指数（QDII 追踪）优先走第三方数据源（天天基金支持不佳、数据滞后）
-                    if is_third_party_index(index_code):
-                        if not already_estimated:
-                            try:
-                                tv = fetch_valuation(index_code)
-                                if tv.success and tv.change_pct is not None:
-                                    index_chg = float(tv.change_pct)
-                                    index_date = tv.update_time
-                                    index_name = tv.source
-                            except Exception as e:
-                                logger.warning(f"第三方指数估值查询失败({index_code}): {e}")
-                    else:
-                        # A股指数基金等：用跟踪指数的真实涨跌幅替代重仓股估算（保持原行为）
+                    if not already_estimated:
                         try:
                             from src.API.市场指数.指数详情 import get_index_detail
                             detail = get_index_detail(local_user, index_code)
@@ -319,6 +332,16 @@ def updateFundEstimatedValue(fund_info: FundInfo, user=None) -> Optional[FundInf
                     if index_chg is not None:
                         chg = float(index_chg)
                         nav = fund_info.nav or 0.0
+                        from datetime import datetime
+                        now_time = datetime.now().strftime("%H:%M:%S")
+                        if index_date:
+                            index_date_str = str(index_date).strip()
+                            if len(index_date_str) >= 19 and ":" in index_date_str[11:]:
+                                index_date = index_date_str[:19]
+                            else:
+                                index_date = f"{index_date_str[:10]} {now_time}"
+                        else:
+                            index_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         fund_info.estimated_change = chg
                         fund_info.estimated_value = round(nav * (1 + chg / 100), 4) if nav > 0 else None
                         fund_info.estimated_time = index_date

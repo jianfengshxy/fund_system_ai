@@ -54,28 +54,36 @@ def _estimate_from_index(user, fund_info: FundInfo) -> bool:
     }
     nav = fund_info.nav or 0.0
 
-    # 海外指数（QDII 追踪）优先走第三方数据源（天天基金支持不佳、数据滞后）
     try:
+        from datetime import datetime
         from src.common.third_party_index import is_third_party_index, fetch_valuation
         if is_third_party_index(index_code):
             tv = fetch_valuation(index_code)
             if tv.success and tv.change_pct is not None:
-                fund_info.estimated_change = tv.change_pct
-                fund_info.estimated_value = round(nav * (1 + tv.change_pct / 100), 4) if nav > 0 else None
-                fund_info.estimated_time = tv.update_time
+                fund_info.estimated_change = float(tv.change_pct)
+                fund_info.estimated_value = round(nav * (1 + float(tv.change_pct) / 100), 4) if nav > 0 else None
+                if tv.update_time:
+                    s = str(tv.update_time).strip()
+                    if len(s) >= 19 and ":" in s[11:]:
+                        fund_info.estimated_time = s[:19]
+                    else:
+                        fund_info.estimated_time = f"{s[:10]} {datetime.now().strftime('%H:%M:%S')}"
+                else:
+                    fund_info.estimated_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 logger.info(
                     f"基金{fund_info.fund_code}第三方指数估值: [{index_code}] "
-                    f"价格={tv.price}{tv.currency}, 涨幅={tv.change_pct:+.2f}%, 净值={fund_info.estimated_value}, "
-                    f"时间={tv.update_time}",
+                    f"价格={tv.price}{tv.currency}, 涨幅={fund_info.estimated_change:+.2f}%, 净值={fund_info.estimated_value}, "
+                    f"时间={fund_info.estimated_time}",
                     extra=extra,
                 )
                 return True
     except Exception as e:
         logger.warning(f"第三方指数估值回退失败({index_code}): {e}", extra=extra)
 
-    # 天天基金指数详情（第三方不可用或未配置时使用，与 基金信息._refresh_estimate 口径一致）
+    # 天天基金指数详情（与 基金信息._refresh_estimate 口径一致）
     try:
         from src.API.市场指数.指数详情 import get_index_detail
+        from datetime import datetime
         detail = get_index_detail(user, index_code)
         chg = detail.get('NEWCHG')
         if chg is None:
@@ -83,13 +91,23 @@ def _estimate_from_index(user, fund_info: FundInfo) -> bool:
         if chg is not None:
             chg_val = float(chg)
             index_date = detail.get('NEWPRICEDATE') or detail.get('PDATE', '')
+            now_time = datetime.now().strftime("%H:%M:%S")
+            index_time = ""
+            if index_date:
+                index_date_str = str(index_date).strip()
+                if len(index_date_str) >= 19 and ":" in index_date_str[11:]:
+                    index_time = index_date_str[:19]
+                else:
+                    index_time = f"{index_date_str[:10]} {now_time}"
+            else:
+                index_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             index_name = detail.get('BKNAME') or detail.get('INDEXNAME', index_code) or index_code
             fund_info.estimated_change = chg_val
             fund_info.estimated_value = round(nav * (1 + chg_val / 100), 4) if nav > 0 else None
-            fund_info.estimated_time = index_date
+            fund_info.estimated_time = index_time
             logger.info(
                 f"基金{fund_info.fund_code}无重仓股估值，回退指数估值: "
-                f"[{index_name}]({index_code}) 涨幅={chg_val}%, 净值={fund_info.estimated_value}, 时间={index_date}",
+                f"[{index_name}]({index_code}) 涨幅={chg_val}%, 净值={fund_info.estimated_value}, 时间={index_time}",
                 extra=extra,
             )
             return True

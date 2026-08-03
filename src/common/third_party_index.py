@@ -91,45 +91,6 @@ THIRD_PARTY_INDEX_CONFIG: Dict[str, dict] = {
         "currency": "USD",
         "fallback_sources": ["sina_us", "yahoo_finance"],
     },
-    # ── QDII 基金跟踪的海外指数 ──
-    # 天天基金指数接口对海外指数支持不佳（数据滞后/缺失），统一走东方财富全球指数行情。
-    # `secid` 为东财行情代码（market.code），`symbol` 为 Yahoo Finance 指数代码（备用源）。
-    "GDAXI": {
-        "name": "德国DAX",
-        "source": "eastmoney",
-        "secid": "100.GDAXI",
-        "sina_code": "DAX",
-        "symbol": "^GDAXI",
-        "currency": "EUR",
-        "fallback_sources": ["sina_global", "yahoo_finance"],
-    },
-    "FCHI": {
-        "name": "法国CAC40",
-        "source": "eastmoney",
-        "secid": "100.FCHI",
-        "sina_code": "CAC",
-        "symbol": "^FCHI",
-        "currency": "EUR",
-        "fallback_sources": ["sina_global", "yahoo_finance"],
-    },
-    "FTSE": {
-        "name": "英国富时100",
-        "source": "eastmoney",
-        "secid": "100.FTSE",
-        "sina_code": "UKX",
-        "symbol": "^FTSE",
-        "currency": "GBP",
-        "fallback_sources": ["sina_global", "yahoo_finance"],
-    },
-    "NDX100": {
-        "name": "纳斯达克100",
-        "source": "eastmoney",
-        "secid": "100.NDX100",
-        "sina_code": "NDX",
-        "symbol": "^NDX",
-        "currency": "USD",
-        "fallback_sources": ["sina_global", "yahoo_finance"],
-    },
 }
 
 

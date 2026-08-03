@@ -99,12 +99,21 @@ def _apply_estimated_or_official_nav(
     estimated_date = _extract_date_part(estimated_time)
     official_nav_date = _extract_date_part(getattr(fund_info, "nav_date", None))
 
+    index_code = getattr(fund_info, "index_code", None)
+    is_overseas_index = bool(index_code) and any(ch.isalpha() for ch in str(index_code))
+
     # QDII 基金跨市场时差，指数估值日期与净值日期天然不同步，
     # 保留指数估算增量，不做"同日=正式净值已发布"的强制归零（与 _refresh_estimate 口径一致）。
     is_qdii = (getattr(fund_info, 'fund_type', '') == 'a'
                or ("QDII" in (getattr(fund_info, 'fund_name', '') or '').upper()))
     if is_qdii:
         fund_info.estimated_time = estimated_time
+        return
+
+    if is_overseas_index:
+        fund_info.estimated_time = estimated_time
+        fund_info.estimated_value = estimated_value
+        fund_info.estimated_change = estimated_change
         return
 
     fund_info.estimated_time = estimated_time

@@ -367,26 +367,10 @@ def _handle_portfolios():
 
 def _handle_fund_detail(fund_code: str):
     user = ensure_user_fresh(DEFAULT_USER, 600)
-    fund_info = getFundInfo(user, fund_code)
+    from src.service.基金信息.基金信息 import get_all_fund_info
+    fund_info = get_all_fund_info(user, fund_code)
     if not fund_info:
         return None
-
-    # 获取实时估值信息（场内基金 type='a' 估值不可靠，跳过；QDII/指数型走统一估值入口）
-    if not (hasattr(fund_info, "fund_type") and fund_info.fund_type == "a"):
-        updateFundEstimatedValue(fund_info)
-
-    vol_data_5 = get_fund_volatility(user, fund_info, 5)
-    if vol_data_5:
-        mean, _variance, _vol = vol_data_5
-        fund_info.nav_5day_avg = mean
-
-    vol_data_30 = get_fund_volatility(user, fund_info, 30)
-    if vol_data_30:
-        _mean, _variance, volatility = vol_data_30
-        fund_info.volatility = volatility * 100
-
-    fund_info.rank_30day = get_nav_rank(user, fund_info, 30)
-    fund_info.rank_100day = get_nav_rank(user, fund_info, 100)
 
     detail = {}
     for key in dir(fund_info):

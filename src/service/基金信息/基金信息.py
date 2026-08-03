@@ -271,6 +271,9 @@ def _clear_if_nav_matches_estimated(fund_info: FundInfo) -> None:
         from datetime import datetime
         today = datetime.now().strftime("%Y-%m-%d")
         nav_date_str = fund_info.nav_date[:10]
+        index_code = getattr(fund_info, "index_code", None)
+        if index_code and any(ch.isalpha() for ch in str(index_code)):
+            return
         if nav_date_str == today:
             fund_info.estimated_change = 0.0
             fund_info.estimated_value = fund_info.nav

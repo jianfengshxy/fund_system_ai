@@ -14,7 +14,6 @@ from src.API.交易管理.feeMrg import getFee
 from src.common.logger import get_logger
 from src.service.公共服务.redeem_fee_filter_service import is_high_frequency_index_fee_ok
 from src.service.大数据.高频加仓基金查询 import query_frequent_index_funds
-from src.service.基金信息.基金信息 import get_all_fund_info
 
 logger = get_logger(__name__)
 
@@ -116,29 +115,6 @@ def add_frequent_funds_to_fast_profit_group(user, days: int = 180, min_appear: i
     if not frequent_funds:
         logger.info("No funds matched the criteria.")
         return {'total': 0, 'added': 0, 'skipped': 0}
-
-    deduped_by_index: Dict[str, Dict] = {}
-    for fund in frequent_funds:
-        fund_code = str(fund.get('fund_code') or '')
-        if not fund_code:
-            continue
-        index_key = f"fund:{fund_code}"
-        try:
-            info = get_all_fund_info(user, fund_code)
-            idx = getattr(info, 'index_code', None) if info else None
-            if idx:
-                index_key = f"index:{idx}"
-        except Exception:
-            pass
-
-        existing = deduped_by_index.get(index_key)
-        current_cnt = int(fund.get('cnt') or 0)
-        existing_cnt = int(existing.get('cnt') or 0) if existing else -1
-        if existing is None or current_cnt > existing_cnt:
-            deduped_by_index[index_key] = fund
-
-    frequent_funds = list(deduped_by_index.values())
-    logger.info(f"After same-index dedup, remaining frequent funds: {len(frequent_funds)}")
 
     # 2. Get group info
     group_id, existing_funds = get_group_info(user, group_name)

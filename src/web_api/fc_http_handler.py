@@ -37,7 +37,7 @@ def _json_response(status_code: int, data: object | None = None, headers: dict |
     }
     if headers:
         base_headers.update(headers)
-    body = "" if data is None else json.dumps(data, ensure_ascii=False)
+    body = "" if data is None else json.dumps(_jsonify(data), ensure_ascii=False)
     return {"statusCode": status_code, "headers": base_headers, "body": body}
 
 
@@ -45,6 +45,22 @@ def _ensure_datetime_string(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
     return value
+
+
+def _jsonify(value: Any) -> Any:
+    from dataclasses import asdict, is_dataclass
+
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if is_dataclass(value):
+        return _jsonify(asdict(value))
+    if isinstance(value, dict):
+        return {str(k): _jsonify(v) for k, v in value.items() if not callable(v)}
+    if isinstance(value, (list, tuple, set)):
+        return [_jsonify(v) for v in value]
+    return str(value)
 
 
 def _parse_event(event):

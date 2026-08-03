@@ -334,7 +334,12 @@ def _handle_portfolio_details(portfolio_name: str):
             nav_date = str(getattr(fund_info, "nav_date", "") or "")[:10]
             est_date = str(getattr(fund_info, "estimated_time", "") or "")[:10]
             nav_change = getattr(fund_info, "nav_change", None)
-            if nav_date and est_date and nav_date == est_date and nav_change is not None:
+            fund_type = getattr(fund_info, "fund_type", None)
+            fund_name = getattr(fund_info, "fund_name", None)
+            is_qdii = (str(fund_type) == "a") or ("QDII" in str(fund_name or "").upper())
+            if is_qdii:
+                asset.estimated_change = float(getattr(fund_info, "estimated_change", None) or 0.0)
+            elif nav_date and est_date and nav_date == est_date and nav_change is not None:
                 asset.estimated_change = float(nav_change or 0.0)
             else:
                 asset.estimated_change = float(getattr(fund_info, "estimated_change", None) or 0.0)

@@ -51,11 +51,17 @@ def calc_estimated_change(fund_info: Any) -> Tuple[float, str]:
     nav_date = _extract_date_part(getattr(fund_info, "nav_date", None))
     est_time = getattr(fund_info, "estimated_time", None)
     est_date = _extract_date_part(est_time)
+    fund_type = getattr(fund_info, "fund_type", None)
+    fund_name = getattr(fund_info, "fund_name", None)
+    is_qdii = (str(fund_type) == "a") or ("QDII" in str(fund_name or "").upper())
 
     try:
         est_change = float(getattr(fund_info, "estimated_change", None) or 0.0)
     except (ValueError, TypeError):
         est_change = 0.0
+
+    if is_qdii:
+        return est_change, f"QDII估值(nav={nav_date}, est={est_time})"
 
     if est_date and nav_date and est_date <= nav_date:
         return 0.0, f"净值已发布(nav={nav_date}, est={est_date})"

@@ -288,7 +288,7 @@ def increase_gold_funds(
                     # 条件：回撤 >15% + 多周期趋势转正（周线 / 月线 / 净值站上5日线）
                     # 思路：深跌后出现反弹信号时，按当前持仓市值的一定比例加仓，
                     #       回撤越深比例越小（防止基本面恶化风险），而非全量翻倍
-                    is_deep_drawdown = estimated_profit_rate < -15.0
+                    is_deep_drawdown = estimated_profit_rate < -10.0
                     has_reversal_signal = (
                         week_growth_rate > 0.0
                         and month_growth_rate > 0.0
@@ -298,16 +298,12 @@ def increase_gold_funds(
 
                     if is_deep_drawdown and has_reversal_signal:
                         # 根据回撤深度分档加仓比例（占当前持仓市值的比例）
-                        if estimated_profit_rate >= -20.0:
+                        if estimated_profit_rate >= -15.0:
                             buy_ratio = 0.5   # -15% ~ -20%: 加仓持仓市值的 50%
-                        elif estimated_profit_rate >= -30.0:
-                            buy_ratio = 0.3   # -20% ~ -30%: 加仓持仓市值的 30%
-                        elif estimated_profit_rate >= -40.0:
-                            buy_ratio = 0.15  # -30% ~ -40%: 加仓持仓市值的 15%
                         else:
-                            # 回撤超过 40%，疑似基本面恶化，放弃抄底
+                            # 回撤超过 15%，疑似基本面恶化，放弃抄底
                             logger.info(
-                                f"持仓基金 {f_name}({f_code}) 回撤 {estimated_profit_rate:.2f}% 超过 -40%，疑似基本面风险，放弃抄底"
+                                f"持仓基金 {f_name}({f_code}) 回撤 {estimated_profit_rate:.2f}% 超过 -15%，疑似基本面风险，放弃抄底"
                             )
                             continue
 

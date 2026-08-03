@@ -105,9 +105,9 @@ def get_portfolio_details(portfolio_name):
             def _enrich(a):
                 fi = getFundInfo(DEFAULT_USER, a.fund_code)
                 if fi:
-                    # QDII 基金 (type='a') 或 名字包含 "QDII" 估值不准，直接设为 0.0
-                    if (hasattr(fi, 'fund_type') and fi.fund_type == 'a') or \
-                       (hasattr(fi, 'fund_name') and "QDII" in fi.fund_name.upper()):
+                    # 场内基金 (type='a') 估值不可靠，直接设为 0.0；
+                    # 其余基金（含 QDII/指数型）走统一估值入口，无重仓股估值时回退跟踪指数估算
+                    if hasattr(fi, 'fund_type') and fi.fund_type == 'a':
                         a.estimated_change = 0.0
                     else:
                         ufi = updateFundEstimatedValue(fi)
@@ -183,9 +183,8 @@ def get_fund_detail_api(fund_code):
         if not fi:
             return jsonify({'error': '未找到基金信息'}), 404
         
-        # 获取实时估值信息
-        if not ((hasattr(fi, 'fund_type') and fi.fund_type == 'a') or \
-                (hasattr(fi, 'fund_name') and "QDII" in fi.fund_name.upper())):
+        # 获取实时估值信息（场内基金 type='a' 估值不可靠，跳过；QDII/指数型走统一估值入口）
+        if not (hasattr(fi, 'fund_type') and fi.fund_type == 'a'):
             updateFundEstimatedValue(fi)
         
         # 计算 5 日均值和波动率

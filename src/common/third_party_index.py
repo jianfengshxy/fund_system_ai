@@ -9,9 +9,10 @@
 
 | source      | 说明                                        | 可达性            |
 |-------------|---------------------------------------------|-------------------|
+| eastmoney   | 东方财富全球指数行情（海外指数为主）        | 国内环境稳定       |
 | tencent_us  | 腾讯证券行情接口（美股/ETF）                | 国内环境稳定       |
 | sina_us     | 新浪财经行情接口（美股/ETF）                | 国内环境稳定       |
-| yahoo_finance | Yahoo Finance v8 Chart API（美股/ETF）    | 海外环境，FC 会 403 |
+| yahoo_finance | Yahoo Finance v8 Chart API（美股/ETF/指数）| 海外环境，FC 会 403 |
 | investing_com | investing.com 页面解析（备用）              | 反爬严格，不推荐   |
 
 ## 扩展方式
@@ -20,10 +21,11 @@
 
     THIRD_PARTY_INDEX_CONFIG["NEW_CODE"] = {
         "name": "指数名称",
-        "source": "tencent_us",        # 首选数据源
-        "symbol": "XLY",               # 证券代码（各源自动拼接前缀）
-        "currency": "USD",
-        "fallback_sources": ["sina_us", "yahoo_finance"],  # 备用源，按顺序尝试
+        "source": "eastmoney",       # 首选数据源
+        "secid": "100.GDAXI",        # 东财行情代码（market.code），eastmoney 源使用
+        "symbol": "^GDAXI",          # Yahoo Finance 代码（备用源，eastmoney 时也需填写）
+        "currency": "EUR",
+        "fallback_sources": ["yahoo_finance"],  # 备用源，按顺序尝试
     }
 
 如需支持新的数据源，只需添加对应的 parser 函数并在 `_FETCHERS` 中注册即可。
@@ -35,6 +37,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional, Dict, List
+from urllib.parse import quote
 
 import requests
 
@@ -87,6 +90,45 @@ THIRD_PARTY_INDEX_CONFIG: Dict[str, dict] = {
         "symbol": "XLY",                       # 美股 XLY ETF 跟踪该指数
         "currency": "USD",
         "fallback_sources": ["sina_us", "yahoo_finance"],
+    },
+    # ── QDII 基金跟踪的海外指数 ──
+    # 天天基金指数接口对海外指数支持不佳（数据滞后/缺失），统一走东方财富全球指数行情。
+    # `secid` 为东财行情代码（market.code），`symbol` 为 Yahoo Finance 指数代码（备用源）。
+    "GDAXI": {
+        "name": "德国DAX",
+        "source": "eastmoney",
+        "secid": "100.GDAXI",
+        "sina_code": "DAX",
+        "symbol": "^GDAXI",
+        "currency": "EUR",
+        "fallback_sources": ["sina_global", "yahoo_finance"],
+    },
+    "FCHI": {
+        "name": "法国CAC40",
+        "source": "eastmoney",
+        "secid": "100.FCHI",
+        "sina_code": "CAC",
+        "symbol": "^FCHI",
+        "currency": "EUR",
+        "fallback_sources": ["sina_global", "yahoo_finance"],
+    },
+    "FTSE": {
+        "name": "英国富时100",
+        "source": "eastmoney",
+        "secid": "100.FTSE",
+        "sina_code": "UKX",
+        "symbol": "^FTSE",
+        "currency": "GBP",
+        "fallback_sources": ["sina_global", "yahoo_finance"],
+    },
+    "NDX100": {
+        "name": "纳斯达克100",
+        "source": "eastmoney",
+        "secid": "100.NDX100",
+        "sina_code": "NDX",
+        "symbol": "^NDX",
+        "currency": "USD",
+        "fallback_sources": ["sina_global", "yahoo_finance"],
     },
 }
 
@@ -221,6 +263,73 @@ def _fetch_tencent_us(config: dict) -> ThirdPartyValuation:
     )
 
 
+def _fetch_eastmoney(config: dict) -> ThirdPartyValuation:
+    """
+    东方财富全球指数行情接口（海外指数为主，国内环境稳定可达）。
+
+    URL: https://push2.eastmoney.com/api/qt/stock/get
+    参数: secid={market}.{code}  (如 100.GDAXI / 100.FCHI / 100.FTSE / 100.NDX100)
+    返回 JSON（fltt=2 时为浮点）：
+      data.f43   最新价
+      data.f60   昨收
+      data.f86   更新时间（unix 秒）
+      data.f170  涨跌幅（%）
+    """
+    secid = config.get("secid")
+    if not secid:
+        return ThirdPartyValuation(index_code="", price=0, success=False,
+                                    error="配置缺少 secid 字段")
+
+    url = "https://push2.eastmoney.com/api/qt/stock/get"
+    params = {
+        "ut": "fa5fd1943c7b386f172d6893dbfba10b",
+        "invt": "2",
+        "fltt": "2",
+        "fields": "f43,f57,f58,f60,f86,f170",
+        "secid": secid,
+    }
+    try:
+        resp = shared_session.get(url, params=params, timeout=15, verify=False)
+        resp.raise_for_status()
+        data = resp.json()
+    except (requests.RequestException, ValueError) as e:
+        return ThirdPartyValuation(index_code="", price=0, success=False, error=str(e))
+
+    d = (data or {}).get("data") or {}
+    price = d.get("f43")
+    if price is None:
+        return ThirdPartyValuation(index_code="", price=0, success=False,
+                                    error=f"响应缺少价格字段: {str(data)[:120]}")
+
+    change_pct = d.get("f170")
+    prev_close = d.get("f60")
+
+    update_time = ""
+    ts = d.get("f86")
+    if ts:
+        try:
+            update_time = datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        except (ValueError, OSError, OverflowError):
+            update_time = ""
+
+    change_amount = None
+    if prev_close:
+        try:
+            change_amount = float(price) - float(prev_close)
+        except (ValueError, TypeError):
+            change_amount = None
+
+    return ThirdPartyValuation(
+        index_code="",
+        price=float(price),
+        change_amount=change_amount,
+        change_pct=float(change_pct or 0),
+        update_time=update_time,
+        currency=config.get("currency", ""),
+        prev_close=float(prev_close) if prev_close else None,
+    )
+
+
 def _fetch_sina_us(config: dict) -> ThirdPartyValuation:
     """
     新浪财经行情接口（美股/ETF）。
@@ -277,6 +386,82 @@ def _fetch_sina_us(config: dict) -> ThirdPartyValuation:
     )
 
 
+def _fetch_sina_global(config: dict) -> ThirdPartyValuation:
+    """
+    新浪全球指数行情（国内可达、适合 FC 环境兜底）。
+
+    URL: https://hq.sinajs.cn/list=b_{CODE}
+
+    返回示例：
+      var hq_str_b_DAX="德国DAX指数,26015.0600,385.82,1.51,9/26/2025,2025-09-26,2026-08-03,19:43:51,...";
+
+    字段（逗号分隔）常见含义：
+      [0] 名称
+      [1] 最新价
+      [2] 涨跌额
+      [3] 涨跌幅(%)
+      [6] 日期(YYYY-MM-DD)
+      [7] 时间(HH:MM:SS)
+    """
+    symbol = config.get("sina_code") or config.get("symbol")
+    if not symbol:
+        return ThirdPartyValuation(index_code="", price=0, success=False, error="配置缺少 sina_code 字段")
+
+    url = f"https://hq.sinajs.cn/list=b_{str(symbol).upper()}"
+    headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn"}
+    try:
+        resp = shared_session.get(url, headers=headers, timeout=10, verify=False)
+        resp.raise_for_status()
+        resp.encoding = "gbk"
+        text = resp.text
+    except requests.RequestException as e:
+        return ThirdPartyValuation(index_code="", price=0, success=False, error=str(e))
+
+    m = re.search(r'="([^"]*)"', text)
+    if not m or not m.group(1):
+        return ThirdPartyValuation(index_code="", price=0, success=False, error=f"响应为空或格式异常: {text[:120]}")
+
+    fields = m.group(1).split(",")
+    if len(fields) < 4:
+        return ThirdPartyValuation(index_code="", price=0, success=False, error=f"字段数量不足: {fields}")
+
+    try:
+        price = float(fields[1])
+        change_amount = float(fields[2]) if fields[2] else None
+        change_pct = float(fields[3]) if fields[3] else None
+    except ValueError as e:
+        return ThirdPartyValuation(index_code="", price=0, success=False, error=f"字段解析失败: {e}")
+
+    update_time = ""
+    if len(fields) >= 8 and fields[6] and fields[7]:
+        update_time = f"{fields[6]} {fields[7]}"
+    elif len(fields) >= 6 and fields[5]:
+        update_time = fields[5]
+
+    prev_close = None
+    day_high = None
+    day_low = None
+    if len(fields) >= 12:
+        try:
+            prev_close = float(fields[8]) if fields[8] else None
+            day_high = float(fields[10]) if fields[10] else None
+            day_low = float(fields[11]) if fields[11] else None
+        except ValueError:
+            pass
+
+    return ThirdPartyValuation(
+        index_code="",
+        price=price,
+        change_amount=change_amount or 0,
+        change_pct=change_pct or 0,
+        update_time=update_time,
+        currency=config.get("currency", ""),
+        day_high=day_high,
+        day_low=day_low,
+        prev_close=prev_close,
+    )
+
+
 def _fetch_yahoo_finance(config: dict) -> ThirdPartyValuation:
     """
     Yahoo Finance v8 Chart API（备用，FC 环境可能 403）。
@@ -296,7 +481,7 @@ def _fetch_yahoo_finance(config: dict) -> ThirdPartyValuation:
             error="配置缺少 symbol 字段",
         )
 
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{quote(symbol, safe='')}"
     params = {"interval": "1d", "range": "1d"}
     headers = {"User-Agent": "Mozilla/5.0"}
 
@@ -449,8 +634,10 @@ def _extract_investing_day_range(html: str) -> tuple:
 # 每种数据源对应一个解析函数(frame)，便于扩展。
 
 _FETCHERS = {
+    "eastmoney": _fetch_eastmoney,
     "tencent_us": _fetch_tencent_us,
     "sina_us": _fetch_sina_us,
+    "sina_global": _fetch_sina_global,
     "yahoo_finance": _fetch_yahoo_finance,
     "investing_com": _fetch_investing_com,
 }

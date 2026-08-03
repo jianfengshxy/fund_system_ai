@@ -99,8 +99,15 @@ def _apply_estimated_or_official_nav(
     estimated_date = _extract_date_part(estimated_time)
     official_nav_date = _extract_date_part(getattr(fund_info, "nav_date", None))
 
-    fund_info.estimated_time = estimated_time
+    # QDII 基金跨市场时差，指数估值日期与净值日期天然不同步，
+    # 保留指数估算增量，不做"同日=正式净值已发布"的强制归零（与 _refresh_estimate 口径一致）。
+    is_qdii = (getattr(fund_info, 'fund_type', '') == 'a'
+               or ("QDII" in (getattr(fund_info, 'fund_name', '') or '').upper()))
+    if is_qdii:
+        fund_info.estimated_time = estimated_time
+        return
 
+    fund_info.estimated_time = estimated_time
     if estimated_date and official_nav_date == estimated_date and getattr(fund_info, "nav", None) is not None:
         if not _estimate_passed_close(estimated_time):
             fund_info.estimated_value = fund_info.nav
@@ -277,49 +284,49 @@ def updateFundEstimatedValue(fund_info: FundInfo, user=None) -> Optional[FundInf
             if is_index_fund:
                 index_code = getattr(fund_info, 'index_code', None)
                 if index_code:
+                    # 第三方指数模块需显式导入；否则会在 FC 环境触发 NameError 并导致重试后返回 None
+                    from src.common.third_party_index import is_third_party_index, fetch_valuation
+                    # 裸接口 update_fund_estimated_value 已回填有效估值（如第三方回退）时跳过，避免重复请求
+                    already_estimated = (getattr(fund_info, 'estimated_change', None) or 0) != 0
                     index_chg = None
                     index_date = ""
-                    try:
-                        from src.API.市场指数.指数详情 import get_index_detail
-                        detail = get_index_detail(local_user, index_code)
-                        index_chg = detail.get('NEWCHG')
-                        index_date = detail.get('NEWPRICEDATE') or detail.get('PDATE', '')
-                        if index_chg is not None:
-                            chg = float(index_chg)
-                            nav = fund_info.nav or 0.0
-                            fund_info.estimated_change = chg
-                            fund_info.estimated_value = round(nav * (1 + chg / 100), 4) if nav > 0 else None
-                            fund_info.estimated_time = index_date
-                            index_name = detail.get('BKNAME') or detail.get('INDEXNAME', index_code) or index_code
-                            logger.info(
-                                f"基金{fund_info.fund_code}指数估值: "
-                                f"[{index_name}]({index_code}) "
-                                f"涨幅={chg}%, 净值={fund_info.estimated_value}, 日期={index_date}"
-                            )
-                    except Exception as e:
-                        logger.warning(f"指数估值查询失败({index_code}): {e}")
+                    index_name = index_code
 
-                    # ── 第三方数据源 fallback ──
-                    # 天天基金不支持的指数（如海外 S&P、MSCI 等）走第三方数据源。
-                    if index_chg is None:
-                        try:
-                            from src.common.third_party_index import is_third_party_index, fetch_valuation
-                            if is_third_party_index(index_code):
+                    # 海外指数（QDII 追踪）优先走第三方数据源（天天基金支持不佳、数据滞后）
+                    if is_third_party_index(index_code):
+                        if not already_estimated:
+                            try:
                                 tv = fetch_valuation(index_code)
-                                if tv.success:
-                                    chg = tv.change_pct
-                                    nav = fund_info.nav or 0.0
-                                    fund_info.estimated_change = chg
-                                    fund_info.estimated_value = round(nav * (1 + chg / 100), 4) if nav > 0 else None
-                                    fund_info.estimated_time = tv.update_time
-                                    logger.info(
-                                        f"基金{fund_info.fund_code}第三方估值: "
-                                        f"[{index_code}] 价格={tv.price}{tv.currency}, "
-                                        f"涨幅={chg:+.2f}%, 净值={fund_info.estimated_value}, "
-                                        f"时间={tv.update_time}"
-                                    )
+                                if tv.success and tv.change_pct is not None:
+                                    index_chg = float(tv.change_pct)
+                                    index_date = tv.update_time
+                                    index_name = tv.source
+                            except Exception as e:
+                                logger.warning(f"第三方指数估值查询失败({index_code}): {e}")
+                    else:
+                        # A股指数基金等：用跟踪指数的真实涨跌幅替代重仓股估算（保持原行为）
+                        try:
+                            from src.API.市场指数.指数详情 import get_index_detail
+                            detail = get_index_detail(local_user, index_code)
+                            index_chg = detail.get('NEWCHG')
+                            index_date = detail.get('NEWPRICEDATE') or detail.get('PDATE', '')
+                            index_name = detail.get('BKNAME') or detail.get('INDEXNAME', index_code) or index_code
+                            if index_chg is not None:
+                                index_chg = float(index_chg)
                         except Exception as e:
-                            logger.warning(f"第三方指数估值查询失败({index_code}): {e}")
+                            logger.warning(f"指数估值查询失败({index_code}): {e}")
+
+                    if index_chg is not None:
+                        chg = float(index_chg)
+                        nav = fund_info.nav or 0.0
+                        fund_info.estimated_change = chg
+                        fund_info.estimated_value = round(nav * (1 + chg / 100), 4) if nav > 0 else None
+                        fund_info.estimated_time = index_date
+                        logger.info(
+                            f"基金{fund_info.fund_code}指数估值: "
+                            f"[{index_name}]({index_code}) "
+                            f"涨幅={chg}%, 净值={fund_info.estimated_value}, 日期={index_date}"
+                        )
 
             # 将获取后的估值数据注入收益率基线修正逻辑
             _apply_estimated_or_official_nav(

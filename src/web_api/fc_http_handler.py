@@ -371,10 +371,8 @@ def _handle_fund_detail(fund_code: str):
     if not fund_info:
         return None
 
-    if not (
-        (hasattr(fund_info, "fund_type") and fund_info.fund_type == "a")
-        or (hasattr(fund_info, "fund_name") and "QDII" in fund_info.fund_name.upper())
-    ):
+    # 获取实时估值信息（场内基金 type='a' 估值不可靠，跳过；QDII/指数型走统一估值入口）
+    if not (hasattr(fund_info, "fund_type") and fund_info.fund_type == "a"):
         updateFundEstimatedValue(fund_info)
 
     vol_data_5 = get_fund_volatility(user, fund_info, 5)

@@ -148,33 +148,48 @@ def _refresh_estimate(fund_info: FundInfo, user: User) -> None:
     # ── type=000 指数型 / QDII：优先用跟踪指数涨跌幅 ──
     index_code = getattr(fund_info, 'index_code', None)
     if (fund_type == '000' or is_qdii) and index_code:
+        # 如果 FundValuationLast 已返回有效估值，保留 API 结果，不做指数覆盖
+        existing_chg = getattr(fund_info, "estimated_change", None)
+        if existing_chg is not None and existing_chg != 0.0:
+            logger.debug(
+                f"{fund_info.fund_name} 已有 API 估值({existing_chg}%)，跳过指数覆盖"
+            )
+            return
+
         chg_val = None
         index_date = None
         index_name = index_code
-        try:
-            from src.API.市场指数.指数详情 import get_index_detail
-            detail = get_index_detail(user, index_code)
-            index_name = detail.get('BKNAME') or detail.get('INDEXNAME', index_code) or index_code
-            index_date = detail.get('NEWPRICEDATE') or detail.get('PDATE', '')
 
-            # 优先 NEWCHG，若无则尝试 D 字段（黄金 AU9999 等特殊指数用 D 表示日涨跌）
-            chg = detail.get('NEWCHG')
-            if chg is None:
-                chg = detail.get('D')
-            if chg is not None:
-                chg_val = float(chg)
+        # 海外指数（QDII 追踪）优先走第三方数据源（天天基金支持不佳、数据滞后）
+        try:
+            from src.common.third_party_index import is_third_party_index, fetch_valuation
+            if is_third_party_index(index_code):
+                tv = fetch_valuation(index_code)
+                if tv.success and tv.change_pct is not None:
+                    chg_val = float(tv.change_pct)
+                    index_date = tv.update_time
+                    index_name = tv.source
         except Exception as e:
-            logger.warning(f"{fund_info.fund_name} 指数详情查询失败({index_code}): {e}")
+            logger.warning(f"{fund_info.fund_name} 第三方指数估值查询失败({index_code}): {e}")
+
+        # 天天基金指数详情（第三方不可用或未配置时使用）
+        if chg_val is None:
+            try:
+                from src.API.市场指数.指数详情 import get_index_detail
+                detail = get_index_detail(user, index_code)
+                index_name = detail.get('BKNAME') or detail.get('INDEXNAME', index_code) or index_code
+                index_date = detail.get('NEWPRICEDATE') or detail.get('PDATE', '')
+
+                # 优先 NEWCHG，若无则尝试 D 字段（黄金 AU9999 等特殊指数用 D 表示日涨跌）
+                chg = detail.get('NEWCHG')
+                if chg is None:
+                    chg = detail.get('D')
+                if chg is not None:
+                    chg_val = float(chg)
+            except Exception as e:
+                logger.warning(f"{fund_info.fund_name} 指数详情查询失败({index_code}): {e}")
 
         if chg_val is not None:
-            # 如果 FundValuationLast 已返回有效估值，保留 API 结果，不做指数覆盖
-            existing_chg = getattr(fund_info, "estimated_change", None)
-            if existing_chg is not None and existing_chg != 0.0:
-                logger.debug(
-                    f"{fund_info.fund_name} 已有 API 估值({existing_chg}%)，跳过指数覆盖"
-                )
-                return
-
             nav = fund_info.nav or 0.0
             fund_info.estimated_change = chg_val
             fund_info.estimated_value = round(nav * (1 + chg_val / 100), 4) if nav > 0 else None
@@ -189,30 +204,6 @@ def _refresh_estimate(fund_info: FundInfo, user: User) -> None:
                 f"[{index_name}]({index_code}) 涨幅={chg_val}%, 净值={fund_info.estimated_value}"
             )
             return
-
-        # ── 第三方数据源 fallback ──
-        # 天天基金不支持的指数（如海外 S&P、MSCI 等）走第三方数据源查询涨幅。
-        try:
-            from src.common.third_party_index import is_third_party_index, fetch_valuation
-            if is_third_party_index(index_code):
-                tv = fetch_valuation(index_code)
-                if tv.success and tv.change_pct is not None:
-                    nav = fund_info.nav or 0.0
-                    fund_info.estimated_change = tv.change_pct
-                    fund_info.estimated_value = round(nav * (1 + tv.change_pct / 100), 4) if nav > 0 else None
-                    fund_info.estimated_time = tv.update_time
-                    fund_info._baseline_nav_date = getattr(fund_info, "nav_date", None)
-                    if not is_qdii:
-                        _clear_if_nav_matches_estimated(fund_info)
-                    logger.info(
-                        f"{fund_info.fund_name} 第三方指数估值: "
-                        f"[{index_code}] 价格={tv.price}{tv.currency}, "
-                        f"涨幅={tv.change_pct:+.2f}%, 净值={fund_info.estimated_value}, "
-                        f"时间={tv.update_time}"
-                    )
-                    return
-        except Exception as e:
-            logger.warning(f"{fund_info.fund_name} 第三方指数估值查询失败({index_code}): {e}")
 
         # 回退：无数据则归零
         if fund_type == '000':

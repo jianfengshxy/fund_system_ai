@@ -54,11 +54,16 @@ def calc_estimated_change(fund_info: Any) -> Tuple[float, str]:
     nav_date = _extract_date_part(getattr(fund_info, "nav_date", None))
     est_time = getattr(fund_info, "estimated_time", None)
     est_date = _extract_date_part(est_time)
+    index_code = getattr(fund_info, "index_code", None)
+    is_overseas_index = bool(index_code) and any(ch.isalpha() for ch in str(index_code))
 
     try:
         est_change = float(getattr(fund_info, "estimated_change", None) or 0.0)
     except (ValueError, TypeError):
         est_change = 0.0
+
+    if is_overseas_index:
+        return est_change, f"海外指数估值(index={index_code}, nav={nav_date}, est={est_time})"
 
     if est_date and nav_date and est_date <= nav_date:
         if est_date == nav_date and _estimate_time_passed_close(est_time):

@@ -284,30 +284,62 @@ def increase_gold_funds(
                 if _max_purchase > 0 and _max_purchase < 2000:
                     logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，但限购金额 {_max_purchase} < 2000，突破限购加仓")
                 else:
-                    if (
-                        estimated_profit_rate < -15.0
-                        and week_growth_rate > 0.0
+                    # ---------- 深度回撤反弹加仓 ----------
+                    # 条件：回撤 >15% + 多周期趋势转正（周线 / 月线 / 净值站上5日线）
+                    # 思路：深跌后出现反弹信号时，按当前持仓市值的一定比例加仓，
+                    #       回撤越深比例越小（防止基本面恶化风险），而非全量翻倍
+                    is_deep_drawdown = estimated_profit_rate < -15.0
+                    has_reversal_signal = (
+                        week_growth_rate > 0.0
                         and month_growth_rate > 0.0
                         and current_asset_value > 0.0
                         and nav5_gate(fund_info, f_name, f_code, logger)
-                    ):
-                        buy_amount = float(current_asset_value)
+                    )
+
+                    if is_deep_drawdown and has_reversal_signal:
+                        # 根据回撤深度分档加仓比例（占当前持仓市值的比例）
+                        if estimated_profit_rate >= -20.0:
+                            buy_ratio = 0.5   # -15% ~ -20%: 加仓持仓市值的 50%
+                        elif estimated_profit_rate >= -30.0:
+                            buy_ratio = 0.3   # -20% ~ -30%: 加仓持仓市值的 30%
+                        elif estimated_profit_rate >= -40.0:
+                            buy_ratio = 0.15  # -30% ~ -40%: 加仓持仓市值的 15%
+                        else:
+                            # 回撤超过 40%，疑似基本面恶化，放弃抄底
+                            logger.info(
+                                f"持仓基金 {f_name}({f_code}) 回撤 {estimated_profit_rate:.2f}% 超过 -40%，疑似基本面风险，放弃抄底"
+                            )
+                            continue
+
+                        buy_amount = float(current_asset_value) * buy_ratio
                         logger.info(
-                            f"持仓基金 {f_name}({f_code}) 触发深度回撤反弹加倍加仓："
-                            f"estimated_profit_rate={estimated_profit_rate:.2f}%, week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%, buy_amount={buy_amount:.2f}"
+                            f"持仓基金 {f_name}({f_code}) 触发深度回撤反弹加仓："
+                            f"estimated_profit_rate={estimated_profit_rate:.2f}%, week={week_growth_rate:.2f}%, "
+                            f"month={month_growth_rate:.2f}%, buy_ratio={buy_ratio*100:.0f}%, buy_amount={buy_amount:.2f}"
                         )
                         if not _can_submit_buy(f_code, f_name, buy_amount):
                             continue
                         res = commit_order(user, sub_account_no, f_code, buy_amount)
                         if res:
                             actual_amount = getattr(res, "amount", buy_amount)
-                            logger.info(f"深度回撤反弹加倍加仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
+                            logger.info(f"深度回撤反弹加仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
                             _mark_buy_metric(f_code, _safe_float(actual_amount, buy_amount))
                             buy_triggered = True
                         else:
-                            logger.info(f"深度回撤反弹加倍加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")
+                            logger.info(f"深度回撤反弹加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")
                         continue
-                    logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，跌幅过大，暂停加仓等待反弹")
+
+                    # 深跌但无反弹信号 → 熔断，不抄底
+                    if is_deep_drawdown:
+                        logger.info(
+                            f"持仓基金 {f_name}({f_code}) 深度回撤 {estimated_profit_rate:.2f}% 但无反弹信号"
+                            f"(week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%)，继续熔断等待"
+                        )
+                    else:
+                        logger.info(
+                            f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% 在 [-15%, -5%) 区间，"
+                            f"熔断暂停，等待回收至 -5% 以上或触发深度反弹信号"
+                        )
                     continue
             
             # 加仓金额计算（统一处理）：

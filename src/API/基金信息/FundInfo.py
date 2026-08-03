@@ -72,6 +72,12 @@ def _sync_official_nav_fields(target: FundInfo, source: FundInfo) -> None:
     target.fund_sub_type = source.fund_sub_type
 
 
+def _estimate_passed_close(estimated_time) -> bool:
+    """估值时间是否已在 A 股收盘后 10 分钟（15:10）之外（复用公共判定，避免循环导入）。"""
+    from src.service.公共服务.estimated_profit_service import _estimate_time_passed_close
+    return _estimate_time_passed_close(estimated_time)
+
+
 def _apply_estimated_or_official_nav(
     fund_info: FundInfo,
     estimate_payload: dict,
@@ -82,7 +88,10 @@ def _apply_estimated_or_official_nav(
 
     业务规则：
     1. 盘中尚未出当日净值时，使用估算净值与估算涨跌幅；
-    2. 一旦当日正式净值已经发布，则估算净值应等于当日净值，估算涨跌幅归零。
+    2. 一旦当日正式净值已经发布，则估算净值应等于当日净值，估算涨跌幅归零；
+    3. 例外：若估值时间在 A 股收盘后 10 分钟（15:10）之外，视为当日定稿估值
+       （如 QDII 海外指数收盘数据），即使与正式净值同日也保留估算涨跌幅作为
+       有效增量。
     """
     estimated_value = float(estimate_payload.get('gsz', 0))
     estimated_change = float(estimate_payload.get('gszzl', 0))
@@ -93,17 +102,19 @@ def _apply_estimated_or_official_nav(
     fund_info.estimated_time = estimated_time
 
     if estimated_date and official_nav_date == estimated_date and getattr(fund_info, "nav", None) is not None:
-        fund_info.estimated_value = fund_info.nav
-        fund_info.estimated_change = 0.0
+        if not _estimate_passed_close(estimated_time):
+            fund_info.estimated_value = fund_info.nav
+            fund_info.estimated_change = 0.0
         return
 
     if estimated_date and user is not None:
         latest_fund_info = getFundInfo(user, fund_info.fund_code)
         latest_nav_date = _extract_date_part(getattr(latest_fund_info, "nav_date", None)) if latest_fund_info else None
         if latest_fund_info and latest_nav_date == estimated_date and getattr(latest_fund_info, "nav", None) is not None:
-            _sync_official_nav_fields(fund_info, latest_fund_info)
-            fund_info.estimated_value = latest_fund_info.nav
-            fund_info.estimated_change = 0.0
+            if not _estimate_passed_close(estimated_time):
+                _sync_official_nav_fields(fund_info, latest_fund_info)
+                fund_info.estimated_value = latest_fund_info.nav
+                fund_info.estimated_change = 0.0
             return
 
     fund_info.estimated_value = estimated_value

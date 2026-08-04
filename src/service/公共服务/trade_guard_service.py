@@ -73,6 +73,23 @@ def _is_buy_trade(t) -> bool:
     )
     return any(p in text for p in buy_phrases)
 
+
+def _is_redeem_trade(t) -> bool:
+    raw = getattr(t, "raw", None) if isinstance(getattr(t, "raw", None), dict) else None
+    display = (getattr(t, "display_business_code", "") or "")
+    biz_type = (getattr(t, "business_type", "") or "")
+    if raw:
+        display = display or str(raw.get("DisPlayBusinessCode") or raw.get("DisplayBusinessCode") or "")
+        biz_type = biz_type or str(raw.get("BusinessType") or "")
+    text = " ".join([display, biz_type]).strip()
+
+    redeem_phrases = (
+        "赎回", "卖出", "退出",
+        "转出基金", "活期宝转出基金", "转出",
+        "快速赎回", "普通赎回",
+    )
+    return any(p in text for p in redeem_phrases)
+
 def _is_canceled_trade(t) -> bool:
     state = (getattr(t, "app_state_text", None) or getattr(t, "status", None) or "")
     remark = (getattr(t, "remark", None) or getattr(t, "busin_remark", None) or "")
@@ -174,9 +191,15 @@ def _find_sub_account_asset(user: User, sub_account_no: str, fund_code: str):
             return asset
     return None
 
-def has_buy_submission_on_dates(user: User, sub_account_no: str, fund_code: str, trans_date: datetime.date):
+def has_buy_submission_on_dates(
+    user: User,
+    sub_account_no: str,
+    fund_code: str,
+    trans_date: datetime.date,
+    include_redeem: bool = True,
+):
     """
-    查询同一基金在指定日期是否存在“有效买入/定投提交”记录（排除撤单）。
+    查询同一基金在指定日期是否存在“有效提交”记录（排除撤单）。
     命中则返回该条交易对象，否则返回 None。
     """
     try:
@@ -207,6 +230,8 @@ def has_buy_submission_on_dates(user: User, sub_account_no: str, fund_code: str,
         if trade_dt.date() == trans_date:
             if trade_dt.time() >= datetime.time(0, 0, 0) and trade_dt.time() <= datetime.time(15, 0, 0):
                 if not _is_canceled_trade(t):
+                    if not (_is_buy_trade(t) or (include_redeem and _is_redeem_trade(t))):
+                        continue
                     filtered_trades.append(t)
     
     logger.info(f"时间过滤后: trans_date={trans_date}, 0:00-15:00时间段内的有效交易记录数={len(filtered_trades)}") 

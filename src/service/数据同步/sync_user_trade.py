@@ -3,13 +3,20 @@
 
 每日将用户最近 1 年的交易记录同步到 user_trade_record 表。
 使用 get_one_fund_tran_infos (GetOneFundTranInfos API)，因为该 API 返回的
-Colour 字段可以用于精确区分撤单交易（已撤单交易的 StatuIcon 也是 "3"）。
+Colour 字段可以用于精确区分撤单交易（已撤单交易的 StatuIcon 也是 "3")。
+
+设计要点：
+  - 正常按 1 周增量同步，降低接口与数据库压力
+  - 若检测到漏跑（超过 7 天）或首次初始化，则自动扩大窗口补齐历史
+  - 分类使用 trade_classifier.get_trade_direction 统一入口，覆盖所有
+    交易类型（买入/定投/转入投资账户/转出投资账户/现金分红/强行赎回等）
 
 与旧版的主要差异：
   - 旧版使用 get_trades_list (GetQueryInfosQuickUse API)，Colour 始终为 None
   - 新版使用 get_one_fund_tran_infos，配合 trade_classifier 精确分类
   - 新增 trade_status 字段，记录每条交易是"已确认"还是"已撤单"
-  - 新增 buy_sell 字段，标明交易方向（买入/卖出/未知）
+  - 新增 buy_sell 字段，标明交易方向（买入/卖出/分红/未知）
+  - 新增 fund_code 字段，从 product_code 或 API 回退
   - 函数重命名为 sync_user_trades_daily（原 sync_user_weekly_trades）
 """
 
@@ -23,8 +30,8 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-from src.API.交易管理.trade import get_one_fund_tran_infos, get_trade_order_result
-from src.service.交易管理.trade_classifier import classify_trades
+from src.API.交易管理.trade import get_one_fund_tran_infos, get_trades_list
+from src.service.交易管理.trade_classifier import classify_trades, get_trade_direction
 from src.service.定投管理.定投查询.定投查询 import get_all_fund_plan_details
 from src.API.组合管理.SubAccountMrg import getSubAccountList
 from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
@@ -75,7 +82,8 @@ def create_table_if_not_exists():
         # 自动补充可能缺失的列（兼容旧表结构）
         new_columns = {
             "trade_status": "VARCHAR(16) COMMENT '交易状态: 已确认 | 已撤单'",
-            "buy_sell": "VARCHAR(8) COMMENT '交易方向: 买入 | 卖出'",
+            "buy_sell": "VARCHAR(8) COMMENT '交易方向: 买入 | 卖出 | 分红'",
+            "fund_code": "VARCHAR(20) COMMENT '基金代码(从 product_code 回退提取)'",
             "sub_account_no": "VARCHAR(64) NULL COMMENT '子账户编号'",
             "sub_account_name": "VARCHAR(128) NULL COMMENT '子账户名称'",
         }
@@ -101,10 +109,12 @@ def _enrich_sub_account_info(trades, user: User):
     """
     为缺少子账户信息的交易记录补充 sub_account_no / sub_account_name。
 
-    三步回退策略（按优先级）:
-      1. 通过 get_trade_order_result API 精确查询单笔交易的子账户
-      2. 通过基金代码匹配定投计划（fund_plan_map）
-      3. 通过资产扫描匹配（asset_sub_map: 遍历所有组合，看哪个组合持有该基金）
+    两步回退策略（按优先级）:
+      1. 通过基金代码匹配定投计划（fund_plan_map）
+      2. 通过资产扫描匹配（asset_sub_map: 遍历所有组合，看哪个组合持有该基金）
+
+    注意：已移除逐条 get_trade_order_result API 调用（8k+ 条记录场景下耗时过长）。
+          定投计划的交易本身已通过 fund_plan_map 覆盖，没必要逐条查。
     """
     # Step 1: 加载定投计划映射
     fund_plan_map = {}
@@ -122,34 +132,14 @@ def _enrich_sub_account_info(trades, user: User):
     except Exception as e:
         logger.warning(f"Failed to load fund plans: {e}")
 
-    # Step 2: 逐条尝试精确查询
+    # Step 2: 定投计划映射回退
     for trade in trades:
         if getattr(trade, "sub_account_no", None):
             continue
-
-        serial_no = (
-            getattr(trade, "busin_serial_no", None)
-            or getattr(trade, "id", None)
-            or getattr(trade, "ID", None)
-        )
-        biz_code = getattr(trade, "business_code", None)
-
-        if serial_no and biz_code and str(biz_code).isdigit():
-            try:
-                detail = get_trade_order_result(user, serial_no, str(biz_code))
-                data = detail.get("Data") if isinstance(detail, dict) else None
-                if data:
-                    trade.sub_account_no = data.get("SubAccountNo")
-                    trade.sub_account_name = data.get("SubAccountName")
-            except Exception:
-                pass  # 定投交易常返回"当前交易不存在"
-
-        # 回退：定投计划映射
-        if not getattr(trade, "sub_account_no", None):
-            fund_code = getattr(trade, "fund_code", None) or getattr(trade, "product_code", None)
-            if fund_code and fund_code in fund_plan_map:
-                trade.sub_account_no = fund_plan_map[fund_code]["sub_account_no"]
-                trade.sub_account_name = fund_plan_map[fund_code]["sub_account_name"]
+        fund_code = getattr(trade, "fund_code", None) or getattr(trade, "product_code", None)
+        if fund_code and fund_code in fund_plan_map:
+            trade.sub_account_no = fund_plan_map[fund_code]["sub_account_no"]
+            trade.sub_account_name = fund_plan_map[fund_code]["sub_account_name"]
 
     # Step 3: 仍缺失的，通过全量资产扫描匹配
     still_missing = [t for t in trades if not getattr(t, "sub_account_no", None)]
@@ -189,19 +179,98 @@ def _enrich_sub_account_info(trades, user: User):
             logger.error(f"资产扫描失败: {e}")
 
 
+def _enrich_product_info(trades, user: User, date_type: str):
+    """
+    补充 product_code / product_name。
+
+    get_one_fund_tran_infos API 返回的每条交易中 ProductCode/ProductName 为空。
+    get_trades_list API 则返回完整的产品信息。
+    这里通过 get_trades_list 获取同一时间窗口的数据，按 ID 匹配补充。
+    """
+    # 检查有多少条无 product_code
+    missing = [t for t in trades if not getattr(t, "product_code", None)]
+    if not missing:
+        return
+
+    logger.info(f"有 {len(missing)} 条交易缺少 product_code，从 get_trades_list 补充...")
+    try:
+        enriched = get_trades_list(user, date_type=date_type)
+        if not enriched:
+            logger.warning("get_trades_list 返回空，无法补充 product_code")
+            return
+
+        # 按 ID 建立映射（ID 在两个 API 中一致）
+        id_map = {}
+        for t in enriched:
+            tid = getattr(t, "id", None) or getattr(t, "ID", None)
+            if tid:
+                pc = getattr(t, "product_code", None) or getattr(t, "fund_code", None)
+                pn = getattr(t, "product_name", None)
+                if pc:
+                    id_map[tid] = (pc, pn)
+
+        updated = 0
+        for t in trades:
+            if getattr(t, "product_code", None):
+                continue
+            tid = getattr(t, "id", None) or getattr(t, "ID", None)
+            if tid and tid in id_map:
+                pc, pn = id_map[tid]
+                t.product_code = pc
+                if pn:
+                    t.product_name = pn
+                # 同步更新 fund_code
+                if not getattr(t, "fund_code", None) or getattr(t, "fund_code", None) == "":
+                    t.fund_code = pc
+                updated += 1
+
+        logger.info(f"成功补充 {updated}/{len(missing)} 条交易的 product_code")
+    except Exception as e:
+        logger.error(f"补充 product_code 失败: {e}")
+
+
 def sync_user_trades_daily(user: User):
     """
-    每日同步用户交易记录（最近 1 周）。
+    每日同步用户交易记录（默认近 1 周增量）。
 
     使用 get_one_fund_tran_infos (GetOneFundTranInfos) 获取交易，
-    通过 trade_classifier 精准区分 买入/卖出/撤单。
+    通过 trade_classifier 精准区分 买入/卖出/撤单/分红。
+
+    设计说明：
+      - 正常拉取近 1 周增量；若检测到漏跑或首次运行，则扩大窗口补齐
+      - get_trade_direction 统一分类入口，覆盖所有 business_type / business_code
     """
     try:
         create_table_if_not_exists()
 
-        # 使用 get_one_fund_tran_infos，能获取完整的 APPStateText 和 Colour 字段
-        # fund_code="" 获取所有基金的交易记录（不限定单只基金）
-        trades = get_one_fund_tran_infos(user, fund_code="", date_type="5")
+        db = DatabaseConnection()
+        last_rows = db.execute_query(
+            "SELECT MAX(strike_start_date) AS last_dt FROM user_trade_record WHERE customer_no=%s",
+            (user.customer_no,),
+        )
+        last_dt = last_rows[0]["last_dt"] if last_rows and last_rows[0].get("last_dt") else None
+
+        today = datetime.date.today()
+        date_type = "5"
+        product_date_type = "5"
+
+        if last_dt:
+            if isinstance(last_dt, str):
+                try:
+                    last_dt = datetime.datetime.fromisoformat(last_dt)
+                except Exception:
+                    last_dt = None
+        if last_dt:
+            last_day = last_dt.date()
+            gap_days = (today - last_day).days
+            if gap_days > 6:
+                date_type = "3"
+                product_date_type = "3"
+        else:
+            date_type = "3"
+            product_date_type = "3"
+
+        trades = get_one_fund_tran_infos(user, fund_code="", date_type=date_type)
 
         if not trades:
             logger.info(f"无交易记录需要同步 (user={user.account})")
@@ -216,6 +285,9 @@ def sync_user_trades_daily(user: User):
             f"交易分类: {len(buy_trades)} 买入 / {len(sell_trades)} 卖出 / "
             f"{len(cancelled_trades)} 撤单"
         )
+
+        # 补充 product_code（get_one_fund_tran_infos 不返回此字段，需从 get_trades_list 获取）
+        _enrich_product_info(trades, user, product_date_type)
 
         # 补充子账户信息
         _enrich_sub_account_info(trades, user)
@@ -240,13 +312,13 @@ def sync_user_trades_daily(user: User):
             business_type, business_code, apply_amount, apply_count,
             confirm_count, status, strike_start_date, app_state_text,
             trade_status, buy_sell, remark,
-            sub_account_no, sub_account_name
+            sub_account_no, sub_account_name, fund_code
         ) VALUES (
             %(customer_no)s, %(busin_serial_no)s, %(product_code)s, %(product_name)s,
             %(business_type)s, %(business_code)s, %(apply_amount)s, %(apply_count)s,
             %(confirm_count)s, %(status)s, %(strike_start_date)s, %(app_state_text)s,
             %(trade_status)s, %(buy_sell)s, %(remark)s,
-            %(sub_account_no)s, %(sub_account_name)s
+            %(sub_account_no)s, %(sub_account_name)s, %(fund_code)s
         ) ON DUPLICATE KEY UPDATE
             product_code = VALUES(product_code),
             product_name = VALUES(product_name),
@@ -262,7 +334,8 @@ def sync_user_trades_daily(user: User):
             buy_sell = VALUES(buy_sell),
             remark = VALUES(remark),
             sub_account_no = VALUES(sub_account_no),
-            sub_account_name = VALUES(sub_account_name);
+            sub_account_name = VALUES(sub_account_name),
+            fund_code = VALUES(fund_code);
         """
 
         inserted = 0
@@ -283,22 +356,37 @@ def sync_user_trades_daily(user: User):
 
             trade_status = "已撤单" if is_cancelled else "已确认"
 
+            # 使用统一分类器判定交易方向
             bt = trade.business_type or ""
-            if bt in ("买入", "定投"):
+            bc = getattr(trade, "business_code", None)
+            direction = get_trade_direction(bt, bc)
+
+            if direction == "buy":
                 buy_sell = "买入"
-            elif "卖基金" in bt or "赎回" in bt or "卖出" in bt:
+            elif direction == "sell":
                 buy_sell = "卖出"
+            elif direction == "dividend":
+                buy_sell = "分红"
             else:
                 buy_sell = ""
+
+            # 提取 fund_code：优先用 fund_code 字段，其次从 product_code
+            fund_code = getattr(trade, "fund_code", None)
+            product_code = getattr(trade, "product_code", "") or ""
+            if not fund_code or fund_code == "":
+                # product_code 可能是纯数字基金代码，也可能为空
+                if product_code and product_code.isdigit() and len(product_code) == 6:
+                    fund_code = product_code
+                else:
+                    fund_code = product_code if product_code else ""
 
             record = {
                 "customer_no": user.customer_no,
                 "busin_serial_no": serial_no,
-                "product_code": getattr(trade, "product_code", "")
-                or getattr(trade, "fund_code", ""),
+                "product_code": product_code or fund_code,
                 "product_name": getattr(trade, "product_name", ""),
                 "business_type": bt,
-                "business_code": getattr(trade, "business_code", ""),
+                "business_code": bc,
                 "apply_amount": to_decimal(
                     getattr(trade, "amount", 0) or getattr(trade, "apply_amount", 0)
                 ),
@@ -313,6 +401,7 @@ def sync_user_trades_daily(user: User):
                 "remark": getattr(trade, "remark", ""),
                 "sub_account_no": getattr(trade, "sub_account_no", None),
                 "sub_account_name": getattr(trade, "sub_account_name", None),
+                "fund_code": fund_code,
             }
             cursor.execute(sql, record)
             inserted += 1

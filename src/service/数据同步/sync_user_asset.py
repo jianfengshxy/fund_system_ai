@@ -24,19 +24,20 @@ def create_table_if_not_exists():
     db = DatabaseConnection()
     sql = """
     CREATE TABLE IF NOT EXISTS user_asset_daily (
-        date DATE NOT NULL COMMENT '日期',
+        date DATE NOT NULL COMMENT '净值日期',
         customer_no VARCHAR(64) NOT NULL COMMENT '用户客户号',
         mobile_phone VARCHAR(20) COMMENT '手机号',
         name VARCHAR(64) COMMENT '姓名',
         total_asset DECIMAL(20, 4) COMMENT '总资产',
-        total_profit DECIMAL(20, 4) COMMENT '总累计收益',
-        day_profit DECIMAL(20, 4) COMMENT '今日收益',
+        total_profit DECIMAL(20, 4) COMMENT '总累计收益(CumulProfit)',
+        day_profit DECIMAL(20, 4) COMMENT '今日收益(ProfitValue)',
         hqb_asset DECIMAL(20, 4) COMMENT '活期宝资产',
         hqb_profit DECIMAL(20, 4) COMMENT '活期宝累计收益',
         hqb_day_profit DECIMAL(20, 4) COMMENT '活期宝今日收益',
         fund_asset DECIMAL(20, 4) COMMENT '基金资产',
         fund_profit DECIMAL(20, 4) COMMENT '基金累计收益',
         fund_day_profit DECIMAL(20, 4) COMMENT '基金今日收益',
+        nav_date DATE COMMENT '净值参考日期(YesterDayDate)',
         update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
         PRIMARY KEY (date, customer_no),
         INDEX idx_customer_date (customer_no, date)
@@ -48,6 +49,19 @@ def create_table_if_not_exists():
         cursor.execute(sql)
         conn.commit()
         cursor.close()
+
+        # 自动补充可能缺失的列（兼容旧表结构）
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SHOW COLUMNS FROM user_asset_daily LIKE 'nav_date'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE user_asset_daily ADD COLUMN nav_date DATE COMMENT '净值参考日期(YesterDayDate)' AFTER fund_day_profit")
+                logger.info("Added column nav_date to user_asset_daily")
+            conn.commit()
+            cursor.close()
+        except Exception:
+            pass
+
         db.disconnect(conn)
         logger.info("Table user_asset_daily check/creation completed.")
     except Exception as e:
@@ -88,7 +102,7 @@ def sync_user_daily_asset(user: User):
             "mobile_phone": getattr(user, "account", ""),
             "name": getattr(user, "customer_name", ""),
             "total_asset": to_decimal(data.get("TotalValue")),
-            "total_profit": to_decimal(data.get("CumulProfit")), # Assuming CumulProfit is total accumulated profit
+            "total_profit": to_decimal(data.get("CumulProfit")),  # 全账户历史累计收益
             "day_profit": to_decimal(data.get("ProfitValue")),
             "hqb_asset": to_decimal(data.get("HqbValue")),
             "hqb_profit": to_decimal(data.get("HqbBenifit")),
@@ -96,6 +110,7 @@ def sync_user_daily_asset(user: User):
             "fund_asset": to_decimal(data.get("TotalFundAsset")),
             "fund_profit": to_decimal(data.get("TotalFundProfit")),
             "fund_day_profit": to_decimal(data.get("FundProfitValue")),
+            "nav_date": date_str,  # YesterDayDate 即是净值日期
         }
 
         # 4. Insert or Update into Database
@@ -104,12 +119,14 @@ def sync_user_daily_asset(user: User):
             date, customer_no, mobile_phone, name,
             total_asset, total_profit, day_profit,
             hqb_asset, hqb_profit, hqb_day_profit,
-            fund_asset, fund_profit, fund_day_profit
+            fund_asset, fund_profit, fund_day_profit,
+            nav_date
         ) VALUES (
             %(date)s, %(customer_no)s, %(mobile_phone)s, %(name)s,
             %(total_asset)s, %(total_profit)s, %(day_profit)s,
             %(hqb_asset)s, %(hqb_profit)s, %(hqb_day_profit)s,
-            %(fund_asset)s, %(fund_profit)s, %(fund_day_profit)s
+            %(fund_asset)s, %(fund_profit)s, %(fund_day_profit)s,
+            %(nav_date)s
         ) ON DUPLICATE KEY UPDATE
             mobile_phone = VALUES(mobile_phone),
             name = VALUES(name),
@@ -121,7 +138,8 @@ def sync_user_daily_asset(user: User):
             hqb_day_profit = VALUES(hqb_day_profit),
             fund_asset = VALUES(fund_asset),
             fund_profit = VALUES(fund_profit),
-            fund_day_profit = VALUES(fund_day_profit);
+            fund_day_profit = VALUES(fund_day_profit),
+            nav_date = VALUES(nav_date);
         """
         
         # Using manual connection for safety and clarity with named parameters

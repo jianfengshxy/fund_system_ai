@@ -79,6 +79,9 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
 
     success_count = 0
     default_amount = 10000.0
+    total_portfolio_asset_value = 0.0
+    for a in asset_details:
+        total_portfolio_asset_value += _safe_float(getattr(a, "asset_value", 0.0), 0.0)
 
     for asset in asset_details:
         try:
@@ -193,6 +196,19 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 continue
             # 记录五日均值检查通过
             filter_checks.append("✓ 五日均值检查通过（估算净值 > 5日均值）")
+
+            if total_portfolio_asset_value > 0.0:
+                position_ratio = safe_asset_value / total_portfolio_asset_value * 100.0
+                if position_ratio > 15.0:
+                    logger.info(
+                        f"跳过 {fund_name}({fund_code}): 单基金仓位占比过高 {position_ratio:.2f}% > 15.00% "
+                        f"(单基金市值={safe_asset_value:,.2f}, 组合总市值={total_portfolio_asset_value:,.2f})"
+                    )
+                    filter_checks.append(f"✗ 单基金仓位占比拦截（{position_ratio:.2f}% > 15.00%）")
+                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 未通过条件:")
+                    for check in filter_checks:
+                        logger.info(f"  {check}")
+                    continue
 
             # 回撤不足直接跳过（阈值：-1%）
             if estimated_profit_rate >= -1.0:

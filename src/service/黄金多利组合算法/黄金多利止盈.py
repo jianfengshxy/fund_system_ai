@@ -1,5 +1,6 @@
 import sys
 import os
+import datetime
 from typing import Optional, List, Dict
 
 # 获取项目根目录路径
@@ -17,6 +18,7 @@ from src.service.交易管理.赎回基金 import sell_0_fee_shares, sell_low_fe
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.交易管理.trade import get_bank_shares
 from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
+from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
 
 logger = get_logger(__name__)
 
@@ -95,6 +97,16 @@ def redeem_gold_funds(
 
             # 获取基金估值信息
             fund_info = get_all_fund_info(user, fund_code)
+
+            nav_date_str = getattr(fund_info, "nav_date", None) if fund_info else None
+            if nav_date_str:
+                try:
+                    prev_trade_day = datetime.datetime.strptime(str(nav_date_str)[:10], "%Y-%m-%d").date()
+                except Exception:
+                    prev_trade_day = None
+            else:
+                prev_trade_day = None
+
             estimated_change, label_est = calc_estimated_change(fund_info)
             
             # 获取波动率和基金类型以供日志输出
@@ -123,6 +135,21 @@ def redeem_gold_funds(
                 f"当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, "
                 f"预估收益率: {estimated_profit_rate:.2f}%, 止盈点: {resolved_stop_rate:.2f}% ({stop_rate_source}), {label_est}"
             )
+
+            prev_trade_record = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
+            if prev_trade_record:
+                state = getattr(prev_trade_record, "app_state_text", None) or getattr(prev_trade_record, "status", None)
+                logger.info(f"[在途检查] 基金 {fund_code} 上一个交易日({nav_date_str})已有有效交易（状态={state}），跳过止盈")
+                continue
+
+            today = datetime.date.today()
+            today_trade_record = has_buy_submission_on_dates(user, sub_account_no, fund_code, today)
+            if today_trade_record:
+                state = getattr(today_trade_record, "app_state_text", None) or getattr(today_trade_record, "status", None)
+                logger.info(f"[在途检查] 基金 {fund_code} 今日({today})已有有效交易（状态={state}），跳过止盈")
+                continue
+
+            logger.info(f"[在途检查] 基金 {fund_code} nav_date={nav_date_str}, prev_trade_day={prev_trade_day}, 查询结果: 无交易")
 
             if estimated_profit_rate > resolved_stop_rate or estimated_profit_rate > 10.0:
                 # 获取可用份额

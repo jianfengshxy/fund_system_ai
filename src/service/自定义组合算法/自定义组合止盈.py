@@ -1,5 +1,6 @@
 import os
 import sys
+import datetime
 from typing import Optional
 
 # 获取项目根目录路径
@@ -30,6 +31,7 @@ from src.common.constant import DEFAULT_USER, HQB_RATIO_THRESHOLD, PROFIT_THRESH
 from src.service.公共服务.nav_gate_service import nav5_fall_gate
 from src.common.logger import get_logger
 from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
+from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
 
 logger = get_logger(__name__)
 
@@ -108,6 +110,32 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             if shares == []:
                 logger.info(f"组合{sub_account_name}的{fund_name}{fund_code}当前份额为空，跳过该计划")
                 continue
+
+            nav_date_str = getattr(fund_info, "nav_date", None)
+            if nav_date_str:
+                try:
+                    prev_trade_day = datetime.datetime.strptime(str(nav_date_str)[:10], "%Y-%m-%d").date()
+                except Exception:
+                    prev_trade_day = None
+            else:
+                prev_trade_day = None
+
+            def _has_pending_trade() -> bool:
+                prev_trade_record = has_buy_submission_on_dates(user, sub_account_no, fund_code, prev_trade_day)
+                if prev_trade_record:
+                    state = getattr(prev_trade_record, "app_state_text", None) or getattr(prev_trade_record, "status", None)
+                    logger.info(f"[在途检查] 基金 {fund_code} 上一个交易日({nav_date_str})已有有效交易（状态={state}），跳过止盈")
+                    return True
+
+                today = datetime.date.today()
+                today_trade_record = has_buy_submission_on_dates(user, sub_account_no, fund_code, today)
+                if today_trade_record:
+                    state = getattr(today_trade_record, "app_state_text", None) or getattr(today_trade_record, "status", None)
+                    logger.info(f"[在途检查] 基金 {fund_code} 今日({today})已有有效交易（状态={state}），跳过止盈")
+                    return True
+
+                logger.info(f"[在途检查] 基金 {fund_code} nav_date={nav_date_str}, prev_trade_day={prev_trade_day}, 查询结果: 无交易")
+                return False
             
             # --- 止盈逻辑更新：对齐全局智能定投 (redeem.py) ---
             
@@ -121,6 +149,8 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             
             if estimated_profit_rate > stop_rate:
                 basic_stop_condition_checks.append(f"✓ 预估收益率检查通过（{estimated_profit_rate:.2f}% > {stop_rate:.2f}%）")
+                if _has_pending_trade():
+                    continue
                 logger.info(f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate},实际止盈点:{stop_rate}")
                 res = sell_0_fee_shares(user, sub_account_no, fund_code, shares)
                 if res is not None and getattr(res, 'busin_serial_no', None):
@@ -234,6 +264,8 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
                 
                 # 检查所有条件是否都满足
                 if fund_type == '000' and fund_type != 'a' and "QDII" not in fund_name and hqb_ratio_percent < HQB_RATIO_THRESHOLD and estimated_change > 0.5 and estimated_profit_rate > 1.0 and rank_100 is not None and rank_100 > 90:
+                    if _has_pending_trade():
+                        continue
                     logger.info(
                         f"{customer_name}的止盈操作开始：指数基金{fund_name}{fund_code}且非QDII，"
                         f"活期宝占比{hqb_ratio_percent:.2f}%<{HQB_RATIO_THRESHOLD}%，"
@@ -282,6 +314,8 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             
             if estimated_profit_rate > 10.0:
                 fallback_stop_condition_checks.append(f"✓ 预估收益率检查通过（{estimated_profit_rate:.2f}% > 10.0%）")
+                if _has_pending_trade():
+                    continue
                 logger.info(f"{customer_name}的兜底止盈操作开始：基金{fund_name}{fund_code}预估收益{estimated_profit_rate:.2f}% > 10.0%，赎回低费率份额")
                 res = sell_low_fee_shares(user, sub_account_no, fund_code, shares)
                 if res is not None and getattr(res, 'busin_serial_no', None):

@@ -139,8 +139,8 @@ def redeem_funds(user: User, sub_account_name: str, fund_list: Optional[list] = 
             
             # --- 止盈逻辑更新：对齐全局智能定投 (redeem.py) ---
             
-            # 2. 计算动态止盈点：min(max(30日年化波动率, 3.0%), 10.0%)
-            stop_rate = min(max(float(volatility), 3.0), 10.0)
+            # 2. 计算动态止盈点：min(max(30日年化波动率, 5.0%), 10.0%)
+            stop_rate = min(max(float(volatility), 5.0), 10.0)
             logger.info(f"组合{sub_account_name}的{fund_name}{fund_code}波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（3.0~10.0之间）")
 
             # 3. 检查基本止盈条件

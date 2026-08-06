@@ -187,8 +187,12 @@ def get_fund_asset_details_of_base_sub_hdt(user, fund_code: str, with_meta: bool
         asset_detail.fund_nav = _clean_num(data.get("UnitNav") or data.get("FundNav"))
         asset_detail.nav_date = data.get("NavDate") or data.get("FDate")
         if asset_detail.fund_nav and not asset_detail.nav_date:
-            latest_fund_info = getFundInfo(user, fund_code)
-            asset_detail.nav_date = getattr(latest_fund_info, "nav_date", None) or asset_detail.nav_date
+            try:
+                latest_fund_info = getFundInfo(user, fund_code)
+                asset_detail.nav_date = getattr(latest_fund_info, "nav_date", None) or asset_detail.nav_date
+            except Exception as e:
+                # 补充字段失败不影响主流程：保持 nav_date 为空，继续返回其余资产信息
+                logger.warning(f"补充净值日期失败，跳过 fund_code={fund_code}: {e}", extra=extra)
 
         # OnWayTransactionCount is not explicitly in the top level Data, maybe 0 default
         asset_detail.on_way_transaction_count = 0 

@@ -683,7 +683,12 @@ const updateTaskEnabled = async (task: ScheduledTask) => {
   } catch (error) {
     console.error('Update task enabled error:', error)
     task.is_enabled = !task.is_enabled
-    ElMessage.error('更新启用状态失败')
+    const serverMessage =
+      (error as any)?.response?.data?.error ||
+      (error as any)?.response?.data?.message ||
+      (error as any)?.message ||
+      '更新启用状态失败'
+    await ElMessageBox.alert(String(serverMessage), '更新失败', { type: 'error' }).catch(() => null)
   }
 }
 

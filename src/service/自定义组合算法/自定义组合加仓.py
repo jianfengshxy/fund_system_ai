@@ -45,8 +45,8 @@ BLACKLIST_FUND_CODES = [
     # "006105",  # 宏利印度股票
     # "020412",  # 永赢中证沪港深黄金产业股票ETF发起联接C
     # "004433",  # 南方有色金属ETF联接C   
-    # # "012769",  # 华夏中证动漫游戏ETF发起联接C
-    # "017193",  # 天弘中证工业有色金属主题ETF发起联接C
+    "012769",  # 华夏中证动漫游戏ETF发起联接C
+    "017193",  # 天弘中证工业有色金属主题ETF发起联接C
     # "013292" # 富国中证智能汽车(LOF)C 
 ]
 
@@ -148,7 +148,9 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 continue
 
             fund_info = get_all_fund_info(user, fund_code)
-            # 更新 fund_name 以防 asset 中没有
+            if not fund_info:
+                logger.warning(f"未获取到基金信息，跳过该基金继续处理下一条: {fund_name}({fund_code})")
+                continue
             fund_name = getattr(fund_info, 'fund_name', fund_name)
             logger.info(f"基金信息：{fund_name}({fund_code})，可申购：{getattr(fund_info, 'can_purchase', None)}")
 
@@ -403,7 +405,7 @@ if __name__ == "__main__":
         # 测试1：海外基金组合
         increase_funds(
             DEFAULT_USER,
-            "最优止盈",
+            "快速止盈",
             fund_list=[
                 # {"fund_code": "016702", "fund_name": "银华海外数字经济量化选股混合发起式(QDII)C", "amount": 5000.0},
                 # {"fund_code": "006105", "fund_name": "宏利印度股票(QDII)", "amount": 5000.0},

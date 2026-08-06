@@ -289,10 +289,15 @@ def get_all_fund_info(user: User, fund_code: str) -> Optional[FundInfo]:
     """
     logger.debug(f"开始获取基金 {fund_code} 的完整信息")
     
-    # 第1步：获取基金基础信息
-    fund_info = getFundInfo(user, fund_code)
+    # 第1步：获取基金基础信息（失败时返回 None，交由上层跳过，不中断整体流程）
+    fund_info: Optional[FundInfo] = None
+    try:
+        fund_info = getFundInfo(user, fund_code)
+    except Exception as e:
+        logger.warning(f"获取基金基础信息失败，跳过该基金: {fund_code} ({e})")
+        return None
     if not fund_info:
-        logger.error(f"获取基金基础信息失败: {fund_code}")
+        logger.warning(f"获取基金基础信息为空，跳过该基金: {fund_code}")
         return None
     
     logger.debug(

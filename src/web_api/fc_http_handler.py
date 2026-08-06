@@ -162,7 +162,12 @@ def _validate_scheduled_task_payload(data: Any, partial: bool = False) -> dict[s
     return normalized
 
 
-def _apply_fc_timer_trigger(task: dict[str, Any], *, old_task_name: str | None = None) -> FcOpenApiClient:
+def _apply_fc_timer_trigger(
+    task: dict[str, Any],
+    *,
+    old_task_name: str | None = None,
+    allow_create: bool = True,
+) -> FcOpenApiClient:
     function_name = str(task.get("policy") or "").strip()
     trigger_name = str(task.get("task_name") or "").strip()
     if not function_name or not trigger_name:
@@ -173,7 +178,9 @@ def _apply_fc_timer_trigger(task: dict[str, Any], *, old_task_name: str | None =
 
     enable = bool(task.get("is_enabled"))
     payload = task.get("payload")
-    client = FcOpenApiClient()
+    account_id = (str(task.get("fc_account_id") or "").strip() or None) if task.get("fc_account_id") is not None else None
+    region = (str(task.get("fc_region") or "").strip() or None) if task.get("fc_region") is not None else None
+    client = FcOpenApiClient(account_id=account_id, region=region)
     if old_task_name and old_task_name != trigger_name:
         client.create_timer_trigger(
             function_name=function_name,
@@ -196,6 +203,8 @@ def _apply_fc_timer_trigger(task: dict[str, Any], *, old_task_name: str | None =
         )
         return client
     except Exception:
+        if not allow_create:
+            raise
         client.create_timer_trigger(
             function_name=function_name,
             trigger_name=trigger_name,
@@ -641,9 +650,14 @@ def handler(event, _context):
                 merged["is_enabled"] = bool(task_payload.get("is_enabled"))
             new_task_name = str(merged.get("task_name") or "").strip()
             old_name_for_rename = old_task_name if old_task_name != new_task_name else None
+            enable_toggle_only = set(task_payload.keys()) == {"is_enabled"} and old_name_for_rename is None
 
             try:
-                client = _apply_fc_timer_trigger(merged, old_task_name=old_name_for_rename)
+                client = _apply_fc_timer_trigger(
+                    merged,
+                    old_task_name=old_name_for_rename,
+                    allow_create=not enable_toggle_only,
+                )
             except Exception as exc:
                 raise ValueError(f"FC 更新触发器失败，数据库未变更: {exc}")
 
@@ -679,7 +693,9 @@ def handler(event, _context):
                 return _json_response(404, {"error": "任务不存在"})
             function_name = str(current.get("policy") or "").strip()
             trigger_name = str(current.get("task_name") or "").strip()
-            client = FcOpenApiClient()
+            account_id = (str(current.get("fc_account_id") or "").strip() or None) if current.get("fc_account_id") is not None else None
+            region = (str(current.get("fc_region") or "").strip() or None) if current.get("fc_region") is not None else None
+            client = FcOpenApiClient(account_id=account_id, region=region)
             try:
                 client.delete_trigger(function_name, trigger_name)
             except Exception as exc:

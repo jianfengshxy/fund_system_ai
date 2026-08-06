@@ -227,7 +227,8 @@ def getFundInfo(user, fund_code) -> Optional[FundInfo]:
             
         fund_data = json_data.get('data', [])
         if not fund_data:
-            logger.error("未找到基金信息", extra=extra)
+            # 上层业务允许“基金信息缺失”跳过处理，因此这里仅降级为 warning
+            logger.warning("未找到基金信息", extra=extra)
             raise ValidationError("DATA_EMPTY")
             
         try:

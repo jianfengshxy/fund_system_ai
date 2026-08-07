@@ -520,6 +520,12 @@ const refreshPortfolio = async () => {
   await loadPortfolio(selectedPortfolioName.value)
 }
 
+const handlePortfolioChange = async (name: string) => {
+  if (!name) return
+  selectedPortfolioName.value = name
+  await refreshPortfolio()
+}
+
 const fetchTasks = async () => {
   taskLoading.value = true
   try {
@@ -974,7 +980,7 @@ onMounted(async () => {
                       v-model="selectedPortfolioName"
                       placeholder="选择组合"
                       class="!w-full sm:!w-[260px]"
-                      @change="loadPortfolio"
+                      @change="handlePortfolioChange"
                     >
                       <el-option
                         v-for="portfolio in portfolios"

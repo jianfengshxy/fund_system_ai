@@ -265,7 +265,7 @@ def increase_gold_funds(
         should_increase = False
         increase_reason = ""
         
-        if current_asset_value <= base_amt:
+        if current_asset_value < base_amt:
             # 持有资产小于或等于一次性买入量，可能是因为限购，允许加仓
             should_increase = True
             increase_reason = f"持仓资产({current_asset_value:.2f}) <= 买入金额({base_amt:.2f})，可能因限购导致持仓不足"

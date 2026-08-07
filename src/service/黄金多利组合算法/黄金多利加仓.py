@@ -258,6 +258,7 @@ def increase_gold_funds(
         # 2. 如果没有基金级别的amount，则使用组合级别的amount（函数参数amount）
         # payload_amt_dict是从normalized_funds构建的，已经遵循了这个优先级
         base_amt = payload_amt_dict.get(f_code, amount)
+        min_asset_value_for_limited = base_amt * 0.95
         
         # 检查是否满足加仓条件：
         # 1. 如果当前资产值 <= 买入金额（可能是因为限购导致持仓不足），则允许加仓（忽略-1%过滤器）
@@ -265,10 +266,12 @@ def increase_gold_funds(
         should_increase = False
         increase_reason = ""
         
-        if current_asset_value < base_amt:
+        if current_asset_value < min_asset_value_for_limited:
             # 持有资产小于或等于一次性买入量，可能是因为限购，允许加仓
             should_increase = True
-            increase_reason = f"持仓资产({current_asset_value:.2f}) <= 买入金额({base_amt:.2f})，可能因限购导致持仓不足"
+            increase_reason = (
+                f"持仓资产({current_asset_value:.2f}) < 买入金额*0.95({min_asset_value_for_limited:.2f})，可能因限购导致持仓不足"
+            )
         elif estimated_profit_rate < -1.0:
             # 满足原来的-1%过滤器条件
             should_increase = True
@@ -362,7 +365,10 @@ def increase_gold_funds(
             else:
                 logger.info(f"加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")
         else:
-            logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% >= -1.0%，且持仓资产({current_asset_value:.2f}) > 买入金额({base_amt:.2f})，不满足加仓条件")
+            logger.info(
+                f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% >= -1.0%，"
+                f"且持仓资产({current_asset_value:.2f}) >= 买入金额*0.95({min_asset_value_for_limited:.2f})，不满足加仓条件"
+            )
 
 
     if not buy_triggered:

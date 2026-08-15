@@ -124,6 +124,9 @@ async function main() {
     const headers = { 'Content-Type': contentType }
     if (contentType.startsWith('text/html')) {
       headers['Content-Disposition'] = 'inline'
+      headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    } else {
+      headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     }
     if (dryRun) {
       process.stdout.write(`[DRY_RUN] upload ${filePath} -> oss://${bucket}/${objectKey}\n`)

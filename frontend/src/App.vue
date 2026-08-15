@@ -112,6 +112,7 @@ const tasks = ref<ScheduledTask[]>([])
 const taskLoading = ref(false)
 const schedulerState = ref<Record<string, any>>({})
 const executingTaskIds = ref<number[]>([])
+const updatingTaskIds = ref<number[]>([])
 const executionDialogVisible = ref(false)
 const latestExecutionResult = ref<Record<string, any> | null>(null)
 const logDialogVisible = ref(false)
@@ -385,9 +386,27 @@ const formatNumber = (num: number) =>
     maximumFractionDigits: 2
   })
 
-const formatDateTime = (value: string | null) => {
+const formatDateTime = (value: string | null | undefined) => {
   if (!value) return '-'
   return value.replace('T', ' ').replace(/\.\d+/, '')
+}
+
+const getSyncTagType = (status?: string | null) => {
+  const normalized = String(status || '').toUpperCase()
+  if (normalized === 'OK') return 'success'
+  if (normalized === 'IMPORTED') return 'info'
+  if (normalized === 'ERROR') return 'danger'
+  if (!normalized) return 'warning'
+  return 'warning'
+}
+
+const formatSyncStatus = (status?: string | null) => {
+  const normalized = String(status || '').toUpperCase()
+  if (normalized === 'OK') return 'OK'
+  if (normalized === 'IMPORTED') return 'IMPORTED'
+  if (normalized === 'ERROR') return 'ERROR'
+  if (!normalized) return '-'
+  return normalized
 }
 
 const getStatusClass = (num: number) => {
@@ -680,21 +699,41 @@ const submitTask = async () => {
 }
 
 const updateTaskEnabled = async (task: ScheduledTask) => {
+  if (updatingTaskIds.value.includes(task.task_id)) {
+    return false
+  }
+  const nextValue = !task.is_enabled
   try {
-    await axios.put(`/api/scheduled-tasks/${task.task_id}`, {
-      is_enabled: task.is_enabled
+    updatingTaskIds.value = [...updatingTaskIds.value, task.task_id]
+    const res = await axios.put(`/api/scheduled-tasks/${task.task_id}`, {
+      is_enabled: nextValue
     })
-    await reloadTasks()
+    const updated: ScheduledTask | null = (res as any)?.data?.task || null
+    if (updated && updated.task_id != null) {
+      const idx = tasks.value.findIndex((item) => item.task_id === updated.task_id)
+      if (idx >= 0) {
+        tasks.value[idx] = { ...tasks.value[idx], ...updated }
+      } else {
+        tasks.value = [updated, ...tasks.value]
+      }
+    } else {
+      task.is_enabled = nextValue
+    }
+    fetchTasks().catch(() => null)
     ElMessage.success('启用状态已更新')
+    return true
   } catch (error) {
     console.error('Update task enabled error:', error)
-    task.is_enabled = !task.is_enabled
     const serverMessage =
       (error as any)?.response?.data?.error ||
       (error as any)?.response?.data?.message ||
       (error as any)?.message ||
       '更新启用状态失败'
-    await ElMessageBox.alert(String(serverMessage), '更新失败', { type: 'error' }).catch(() => null)
+    const title = String(serverMessage).includes('FC') ? 'FC 同步失败' : '更新失败'
+    await ElMessageBox.alert(String(serverMessage), title, { type: 'error' }).catch(() => null)
+    return false
+  } finally {
+    updatingTaskIds.value = updatingTaskIds.value.filter((id) => id !== task.task_id)
   }
 }
 
@@ -828,7 +867,24 @@ onMounted(async () => {
                 <el-table-column prop="cron_expression" label="Cron" min-width="240" show-overflow-tooltip />
                 <el-table-column label="启用" width="90" align="center">
                   <template #default="{ row }">
-                    <el-switch v-model="row.is_enabled" @change="updateTaskEnabled(row)" />
+                    <el-switch
+                      v-model="row.is_enabled"
+                      :loading="updatingTaskIds.includes(row.task_id)"
+                      :before-change="() => updateTaskEnabled(row)"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="同步" width="140">
+                  <template #default="{ row }">
+                    <el-tooltip v-if="row.sync_error_message" :content="row.sync_error_message" placement="top" :show-after="300">
+                      <el-tag size="small" :type="getSyncTagType(row.sync_status)">
+                        {{ formatSyncStatus(row.sync_status) }}
+                      </el-tag>
+                    </el-tooltip>
+                    <el-tag v-else size="small" :type="getSyncTagType(row.sync_status)">
+                      {{ formatSyncStatus(row.sync_status) }}
+                    </el-tag>
+                    <div class="text-xs text-gray-400">{{ formatDateTime(row.last_synced_at) }}</div>
                   </template>
                 </el-table-column>
                 <el-table-column label="优先级" width="100">
@@ -887,11 +943,32 @@ onMounted(async () => {
                     <div class="font-semibold break-all">{{ task.task_name }}</div>
                     <div class="text-sm text-gray-500 break-all">{{ task.policy }}</div>
                   </div>
-                  <el-switch v-model="task.is_enabled" @change="updateTaskEnabled(task)" />
+                  <el-switch
+                    v-model="task.is_enabled"
+                    :loading="updatingTaskIds.includes(task.task_id)"
+                    :before-change="() => updateTaskEnabled(task)"
+                  />
                 </div>
                 <div class="mt-3 text-sm text-gray-600 space-y-2">
                   <div><span class="text-gray-400">处理器</span> {{ task.display_handler || task.handler || '-' }}</div>
                   <div class="break-all"><span class="text-gray-400">Cron</span> {{ task.cron_expression }}</div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-gray-400">同步</span>
+                    <el-tooltip
+                      v-if="task.sync_error_message"
+                      :content="task.sync_error_message"
+                      placement="top"
+                      :show-after="300"
+                    >
+                      <el-tag size="small" :type="getSyncTagType(task.sync_status)">
+                        {{ formatSyncStatus(task.sync_status) }}
+                      </el-tag>
+                    </el-tooltip>
+                    <el-tag v-else size="small" :type="getSyncTagType(task.sync_status)">
+                      {{ formatSyncStatus(task.sync_status) }}
+                    </el-tag>
+                    <span class="text-xs text-gray-400">{{ formatDateTime(task.last_synced_at) }}</span>
+                  </div>
                   <div><span class="text-gray-400">优先级</span> {{ task.display_priority ?? 100 }}</div>
                   <div><span class="text-gray-400">下次执行</span> {{ formatDateTime(task.next_run_at) }}</div>
                   <div class="flex items-center gap-2 flex-wrap">

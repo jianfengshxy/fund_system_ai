@@ -13,6 +13,7 @@ def increase(event, context):
         password = payload.get("password")
         sub_account_name = payload.get("sub_account_name")
         amount = payload.get("amount", 2000.0)
+        init_amount = payload.get("init_amount")
         total_limit = payload.get("total_limit")
         fund_list = payload.get("fund_list") or payload.get("funds")
         extra = {
@@ -61,7 +62,14 @@ def increase(event, context):
             else:
                 logger.warning(f"[多利组合] 未传 fund_list，且未找到同名自选组合: {sub_account_name}", extra=extra)
         logger.info("[多利组合] 开始执行加仓检查...", extra=extra)
-        success = gold_increase_biz(user, sub_account_name, amount, fund_list, total_limit=total_limit)
+        success = gold_increase_biz(
+            user,
+            sub_account_name,
+            amount,
+            init_amount=init_amount,
+            fund_list=fund_list,
+            total_limit=total_limit,
+        )
         if success:
             logger.info("[多利组合] 加仓检查/执行成功", extra=extra)
         else:
@@ -103,4 +111,3 @@ def redeem(event, context):
             logger.info("[黄金多利组合] 未触发止盈或执行失败", extra=extra)
     except Exception as exc:
         logger.error(f"redeem_gold_portfolio 异常: {exc}", extra={"action": "gold_redeem"})
-

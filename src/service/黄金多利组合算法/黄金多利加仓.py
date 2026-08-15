@@ -27,6 +27,7 @@ def increase_gold_funds(
     user: User,
     sub_account_name: str,
     amount: float = 2000.0,
+    init_amount: Optional[float] = None,
     fund_list: Optional[List[Dict]] = None,
     total_limit: Optional[float] = None,
 ) -> bool:
@@ -72,15 +73,40 @@ def increase_gold_funds(
             if not fund_code:
                 continue
             try:
-                # 获取基金买入金额，遵循优先级规则：
-                # 1. 基金级别的amount优先级最高（在item中配置）
-                # 2. 如果没有基金级别的amount，则使用组合级别的amount（函数参数amount）
+                # 加仓金额（amount）计算规则：
+                # - 优先使用基金级别 amount（fund_list 每个 item 内配置）
+                # - 若基金级别未配置，则使用组合级别 amount（函数入参 amount）
                 fund_amount = float(item.get("amount", amount))
             except Exception:
                 fund_amount = amount
+
+            # 初始化建仓金额（init_amount）计算规则（用于“未持有时的首次买入”）：
+            # 1) 基金级别 init_amount 优先（兼容键 init_amount / initAmount）
+            # 2) 若基金级别未配置，则使用组合级别 init_amount（函数入参 init_amount，来自 payload）
+            # 3) 若两者都未配置，为保持兼容：init_amount 取“最终生效的 amount”
+            #    - 即：基金级别 amount（如有）优先，否则组合级别 amount
+            if "init_amount" in item:
+                raw_init_amount = item.get("init_amount")
+            elif "initAmount" in item:
+                raw_init_amount = item.get("initAmount")
+            else:
+                raw_init_amount = None
+            if raw_init_amount not in (None, ""):
+                try:
+                    fund_init_amount = float(raw_init_amount)
+                except Exception:
+                    fund_init_amount = fund_amount
+            elif init_amount not in (None, ""):
+                try:
+                    fund_init_amount = float(init_amount)
+                except Exception:
+                    fund_init_amount = fund_amount
+            else:
+                fund_init_amount = fund_amount
             normalized_funds.append({
                 "fund_code": str(fund_code),
                 "amount": fund_amount,
+                "init_amount": fund_init_amount,
                 # 没有配置limit时返回None，表示不做限制
                 "limit": _normalize_limit(item.get("limit"), None),
             })
@@ -195,7 +221,7 @@ def increase_gold_funds(
     # 1. 遍历传过来的基金列表，如果未持有该基金，则执行该基金的初始化建仓
     for f in normalized_funds:
         f_code = f["fund_code"]
-        f_amt = f["amount"]
+        f_amt = f["init_amount"]
         f_name = _get_fund_name(f_code)
         
         # 最先校验单个基金的资产是否已超过限制，超过则跳过该基金

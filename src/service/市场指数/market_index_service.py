@@ -126,6 +126,41 @@ class MarketIndexService:
 
     # ===================== 每日动态数据（批量写入） =====================
 
+    def sync_all_indices_latest_daily_price_flow(
+        self,
+        user: User,
+        *,
+        range_type: str = "y",
+        limit: Optional[int] = None,
+    ) -> dict:
+        static_indices = self._db.execute_query(
+            "SELECT index_code, index_name FROM market_index_static "
+            "WHERE type_name IN ('宽基','行业','主题','海外') ORDER BY index_code"
+        )
+        result = {"total": len(static_indices), "synced": 0, "failed": 0}
+
+        for idx in static_indices:
+            if limit and result["synced"] + result["failed"] >= limit:
+                break
+            code = idx["index_code"]
+            name = idx["index_name"]
+            try:
+                changed = self.sync_daily_price_flow_batch(user, code, range_type)
+                if changed:
+                    result["synced"] += 1
+                else:
+                    result["failed"] += 1
+                    logger.warning(f"[{code}] {name} 最新日数据同步无返回")
+            except Exception as e:
+                result["failed"] += 1
+                logger.error(f"[{code}] {name} 最新日数据同步失败: {e}")
+            time.sleep(0.1)
+
+        logger.info(
+            f"最新日数据同步完成: 成功 {result['synced']}/{result['total']}, 失败 {result['failed']}"
+        )
+        return result
+
     def sync_daily_valuation_batch(self, user: User, index_code: str,
                                    period: str = "10n") -> int:
         """
@@ -343,7 +378,7 @@ class MarketIndexService:
             except Exception as e:
                 result["failed"] += 1
                 logger.error(f"[{code}] {name} 阶段指标同步失败: {e}")
-            time.sleep(0.3)
+            time.sleep(0.1)
 
         logger.info(
             f"阶段指标同步完成: 成功 {result['synced']}, "

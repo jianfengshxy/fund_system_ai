@@ -265,6 +265,10 @@ def remove_unqualified_funds_from_lln_group(user, group_name: str = "大数定�
     Returns:
         Dict with stats: {'total_checked': int, 'removed': int, 'failed': int}
     """
+    latest_trade_date = DatabaseConnection().execute_query(
+        "SELECT MAX(trade_date) AS d FROM market_index_daily"
+    )[0]["d"]
+    logger.info(f"market_index_daily 最新交易日: {latest_trade_date}")
     logger.info(f"开始清理 '{group_name}' 组合（移出不再满足大数定律条件的基金）...")
 
     # 1. 获取满足条件的跟踪基金代码集合

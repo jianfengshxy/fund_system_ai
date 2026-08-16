@@ -17,9 +17,11 @@ def handler(event=None, context=None):
     result = sync_latest_snapshot()
     logger.info(
         f"指数阶段指标快照同步完成: "
-        f"成功 {result['synced']}/{result['total']}, "
-        f"失败 {result['failed']}, "
-        f"无日数据 {result['no_daily_data']}, "
+        f"日数据 {result['daily']['synced']}/{result['daily']['total']}, "
+        f"日数据失败 {result['daily']['failed']}, "
+        f"阶段指标 {result['stage']['synced']}/{result['stage']['total']}, "
+        f"阶段指标失败 {result['stage']['failed']}, "
+        f"无日数据 {result['stage']['no_daily_data']}, "
         f"耗时 {result.get('elapsed_min', '-')} 分钟"
     )
     return result

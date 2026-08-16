@@ -75,7 +75,13 @@ def sync_all_full(user: Optional[User] = None) -> dict:
     return result
 
 
-def sync_latest_snapshot(user: Optional[User] = None) -> dict:
+def sync_latest_snapshot(
+    user: Optional[User] = None,
+    *,
+    daily_range_type: str = "y",
+    daily_limit: Optional[int] = None,
+    stage_limit: Optional[int] = None,
+) -> dict:
     """
     同步所有宽基/行业/主题/海外指数的最新交易日阶段指标。
 
@@ -93,12 +99,24 @@ def sync_latest_snapshot(user: Optional[User] = None) -> dict:
 
     svc = MarketIndexService()
     t0 = time.time()
-    logger.info("=== 业务: 最新交易日阶段指标快照 ===")
-    result = svc.sync_all_indices_stage_performance(user)
+    logger.info("=== 业务: 最新交易日快照(日数据+阶段指标) ===")
+
+    daily_result = svc.sync_all_indices_latest_daily_price_flow(
+        user,
+        range_type=daily_range_type,
+        limit=daily_limit,
+    )
+
+    stage_result = svc.sync_all_indices_stage_performance(user, limit=stage_limit)
+
+    result = {"daily": daily_result, "stage": stage_result}
     result["elapsed_min"] = round((time.time() - t0) / 60, 1)
     logger.info(
-        f"最新快照完成: 成功 {result['synced']}/{result['total']}, "
-        f"失败 {result['failed']}, 耗时 {result['elapsed_min']} 分钟"
+        f"最新快照完成: 日数据 {daily_result['synced']}/{daily_result['total']} "
+        f"(失败 {daily_result['failed']}), "
+        f"阶段指标 {stage_result['synced']}/{stage_result['total']} "
+        f"(失败 {stage_result['failed']}, 无日数据 {stage_result['no_daily_data']}), "
+        f"耗时 {result['elapsed_min']} 分钟"
     )
     return result
 

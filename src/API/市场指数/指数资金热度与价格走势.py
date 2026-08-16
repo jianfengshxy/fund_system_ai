@@ -187,9 +187,11 @@ if __name__ == "__main__":
         for point in resp.items[:3]:
             chg = f"{point.CHGRT:+.4f}%" if point.CHGRT is not None else "N/A"
             score = f"{point.XLFLOW_SCORE:.2f}" if point.XLFLOW_SCORE is not None else "--"
-            print(f"    {point.PDATE}  价格={point.PERCENTPRICE:.4f}  涨跌幅={chg}  热度={score}")
+            price = f"{point.PERCENTPRICE:.4f}" if point.PERCENTPRICE is not None else "N/A"
+            print(f"    {point.PDATE}  价格={price}  涨跌幅={chg}  热度={score}")
         print(f"  最后 3 条:")
         for point in resp.items[-3:]:
             chg = f"{point.CHGRT:+.4f}%" if point.CHGRT is not None else "N/A"
             score = f"{point.XLFLOW_SCORE:.2f}" if point.XLFLOW_SCORE is not None else "--"
-            print(f"    {point.PDATE}  价格={point.PERCENTPRICE:.4f}  涨跌幅={chg}  热度={score}")
+            price = f"{point.PERCENTPRICE:.4f}" if point.PERCENTPRICE is not None else "N/A"
+            print(f"    {point.PDATE}  价格={price}  涨跌幅={chg}  热度={score}")

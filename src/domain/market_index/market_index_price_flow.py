@@ -38,7 +38,7 @@ class IndexPriceFlowPoint:
     └───────────────┴────────┴──────────────────────────────────────────┘
     """
     PDATE: str = ""
-    PERCENTPRICE: float = 0.0
+    PERCENTPRICE: Optional[float] = None
     CHGRT: Optional[float] = None
     XLFLOW_SCORE: Optional[float] = None
 
@@ -48,8 +48,11 @@ class IndexPriceFlowPoint:
         point = cls(PDATE=str(d.get("PDATE", "")))
 
         raw_price = d.get("PERCENTPRICE")
-        if raw_price is not None:
-            point.PERCENTPRICE = float(raw_price)
+        if raw_price is not None and raw_price != "" and raw_price != "--":
+            try:
+                point.PERCENTPRICE = float(raw_price)
+            except (ValueError, TypeError):
+                point.PERCENTPRICE = None
 
         raw_chgrt = d.get("CHGRT")
         if raw_chgrt is not None and raw_chgrt != "":

@@ -262,6 +262,10 @@ def add_qualified_funds_to_lln_group(user, group_name: str = "大数定律") -> 
     Returns:
         Dict with stats: {'total_qualified': int, 'added': int, 'skipped': int, 'no_track_fund': int}
     """
+    latest_trade_date = DatabaseConnection().execute_query(
+        "SELECT MAX(trade_date) AS d FROM market_index_daily"
+    )[0]["d"]
+    logger.info(f"market_index_daily 最新交易日: {latest_trade_date}")
     logger.info(f"开始筛选满足大数定律条件的基金，目标组合: '{group_name}'...")
 
     # 1. 查询满足条件的指数及其跟踪基金

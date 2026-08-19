@@ -490,7 +490,11 @@ class MarketIndexService:
           - 被动指数型 (DTZT="1")
           - 可申购 (ISBUY="1")
           - C 类份额 (ISCLASSC==1.0)
-        按基金规模 (ENDNAV) 降序取第一个。
+        
+        选择优先级：
+          1. 在满足上述条件的 C 类中，优先选择 7 天后赎回费为 0 的份额（SHRATE7 == 0）
+          2. 在候选池内按基金规模 (ENDNAV) 取最大
+          3. 若无 SHRATE7==0 的候选，则回退到“全部 C 类候选”里按 ENDNAV 取最大
 
         Args:
             user:       User 对象
@@ -511,21 +515,47 @@ class MarketIndexService:
             logger.info(f"[{index_code}] 无跟踪基金数据")
             return None
 
-        # 筛选：场外 + 被动指数型 + 可申购 + C 类
+        def _as_float(v, default: float = 0.0) -> float:
+            try:
+                if v is None or v == "":
+                    return default
+                return float(v)
+            except Exception:
+                return default
+
+        def _is_class_c(v) -> bool:
+            try:
+                return float(v) == 1.0
+            except Exception:
+                return str(v) == "1"
+
+        def _is_zero_fee_after_7(v) -> bool:
+            try:
+                return float(v) == 0.0
+            except Exception:
+                return False
+
         candidates = [
-            f for f in fund_list
-            if f.ISEXCHG == "0" and f.DTZT == "1"
-            and f.ISBUY == "1" and f.ISCLASSC == 1.0
+            f
+            for f in fund_list
+            if f.ISEXCHG == "0"
+            and f.DTZT == "1"
+            and f.ISBUY == "1"
+            and _is_class_c(getattr(f, "ISCLASSC", None))
         ]
         if not candidates:
             logger.info(f"[{index_code}] 无符合条件的 C 类跟踪基金")
             return None
 
-        # 按规模降序取第一个
-        best = max(candidates, key=lambda f: f.ENDNAV)
+        zero_fee_candidates = [
+            f for f in candidates if _is_zero_fee_after_7(getattr(f, "SHRATE7", None))
+        ]
+        best_pool = zero_fee_candidates if zero_fee_candidates else candidates
+        best = max(best_pool, key=lambda f: _as_float(getattr(f, "ENDNAV", None), 0.0))
+        best_endnav = _as_float(getattr(best, "ENDNAV", None), 0.0)
         logger.info(
             f"[{index_code}] 最佳 C 类跟踪基金: "
-            f"{best.FCODE} {best.SHORTNAME} (规模={best.ENDNAV:.1f}万)"
+            f"{best.FCODE} {best.SHORTNAME} (规模={best_endnav:.1f}万)"
         )
         return {"fund_code": best.FCODE, "fund_name": best.SHORTNAME}
 
@@ -562,6 +592,11 @@ class MarketIndexService:
         将结果写入 market_index_static.track_fund_code / track_fund_name。
 
         已有关联基金的指数会跳过（track_fund_code 非空）。
+        
+        为了避免历史落库的跟踪基金不满足“7天后0费率”条件导致后续运算不准确，
+        这里会重新计算 best 并对比当前 track_fund_code：
+          - 一致则计入 skipped
+          - 不一致则执行 update（支持纠偏更新）
 
         Returns:
             {"total": int, "updated": int, "skipped": int, "no_match": int, "failed": int}
@@ -578,18 +613,16 @@ class MarketIndexService:
             code = idx["index_code"]
             name = idx["index_name"]
 
-            # 跳过已有关联基金的
-            if idx.get("track_fund_code"):
-                result["skipped"] += 1
-                continue
-
             try:
                 best = self.get_best_tracking_c_fund(user, code)
                 if best:
-                    self.update_index_tracking_fund(
-                        code, best["fund_code"], best["fund_name"]
-                    )
-                    result["updated"] += 1
+                    if idx.get("track_fund_code") == best["fund_code"]:
+                        result["skipped"] += 1
+                    else:
+                        self.update_index_tracking_fund(
+                            code, best["fund_code"], best["fund_name"]
+                        )
+                        result["updated"] += 1
                 else:
                     result["no_match"] += 1
                 time.sleep(0.3)

@@ -1,0 +1,3 @@
+Why: reports/ 下为本地生成产物（扫描CSV、AI报告、缓存等），不应入库。
+What: .gitignore 忽略 reports/ 与 .workbuddy/；并将已被跟踪的 reports 文件从索引移除（保留本地文件）。
+Impact: 避免误提交大文件/本地数据，保持仓库干净。

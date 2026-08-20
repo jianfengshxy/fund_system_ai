@@ -1,0 +1,2 @@
+Why: 统一忽略 reports/ 后，无需逐条列出 reports/nav_cache/*.csv。
+What: 简化 .gitignore，移除具体 nav_cache 文件条目，保持规则一致。

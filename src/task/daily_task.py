@@ -28,9 +28,11 @@ if root_dir not in sys.path:
 from src.common.constant import DEFAULT_USER
 from src.service.大数据.增加高频加仓基金到自选组合 import add_frequent_funds_to_fast_profit_group
 from src.service.大数据.增加大数定律基金到自选组合 import add_qualified_funds_to_lln_group
+from src.service.大数据.增加智投平台基金到自选组合 import add_qualified_funds_to_group
 from src.service.大数据.加仓风向标服务 import save_fund_investment_indicators
 from src.service.大数据.删除高频加仓基金到自选组合 import remove_infrequent_funds_from_group
 from src.service.大数据.删除大数定律基金到自选组合 import remove_unqualified_funds_from_lln_group
+from src.service.大数据.删除智投平台基金到自选组合 import remove_unqualified_funds_from_group
 from src.service.数据同步.sync_sub_account_asset import sync_sub_account_daily_asset
 from src.service.数据同步.sync_sub_account_fund_asset import sync_sub_account_fund_asset_daily
 from src.service.数据同步.sync_total_account_fund_asset import sync_total_account_fund_asset_daily
@@ -49,6 +51,8 @@ def handler(event, context):
     remove_infrequent_funds_from_group(user=DEFAULT_USER, group_name="快速止盈")
     add_qualified_funds_to_lln_group(user=DEFAULT_USER, group_name="大数定律")
     remove_unqualified_funds_from_lln_group(user=DEFAULT_USER, group_name="大数定律")
+    add_qualified_funds_to_group(user=DEFAULT_USER, group_name="智投平台")
+    remove_unqualified_funds_from_group(user=DEFAULT_USER, group_name="智投平台")
 
     # 2. 资产和交易数据同步
     try:
@@ -74,4 +78,3 @@ def handler(event, context):
 
 if __name__ == "__main__":
     handler(None, None)
-

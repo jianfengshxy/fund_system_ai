@@ -143,3 +143,6 @@ src/service/基金信息/基金信息.py
 *.pkl
 reports/
 .workbuddy/
+
+# Local scripts (ad-hoc analysis utilities)
+scripts/

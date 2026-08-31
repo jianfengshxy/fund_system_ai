@@ -50,7 +50,7 @@ class HostResolveAdapter(HTTPAdapter):
     def add_headers(self, request, **kwargs):
         request.headers["Host"] = self._host
 
-def get_one_fund_tran_infos(user, fund_code, start_date=None, end_date=None, page_index=1, page_size=100, date_type="3"):
+def get_one_fund_tran_infos(user, fund_code, start_date=None, end_date=None, page_index=1, page_size=100, date_type="3", sub_account_no=""):
     """
     获取单个基金的历史交易记录（底层 API: GetOneFundTranInfos）。
 
@@ -79,6 +79,10 @@ def get_one_fund_tran_infos(user, fund_code, start_date=None, end_date=None, pag
                      "2": 近3月
                      "3": 近1年 (唯一推荐值，能获取较长历史记录)
                    ⚠️ "": 全量 — 实测返回 ErrorCode=304，不要使用。
+        sub_account_no: 子账户编号，默认为空（查全部）。
+                   ⚠️ 传值后 API 按**该子账户**精确过滤返回的交易（已探针验证）。
+                   这是交易归属的**权威来源**——同步服务用它逐子账户拉取、建立
+                   流水号→子账户 的精确映射，从根本上避免资产扫描兜底的错贴。
 
     Returns:
         List[TradeResult]: 交易结果列表。
@@ -133,7 +137,7 @@ def get_one_fund_tran_infos(user, fund_code, start_date=None, end_date=None, pag
             "PageIndex": p_index,
             "PageSize": p_size,
             "FundCode": fund_code,
-            "SubAccountNo": "",
+            "SubAccountNo": sub_account_no or "",
             "CustomerNo": curr_u.customer_no,
             "BusType": "",
             "Statu": "",

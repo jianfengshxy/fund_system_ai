@@ -105,18 +105,103 @@ def create_table_if_not_exists():
         raise
 
 
-def _enrich_sub_account_info(trades, user: User):
+def _build_serial_sub_map(user: User, date_type: str):
     """
-    为缺少子账户信息的交易记录补充 sub_account_no / sub_account_name。
+    逐子账户调用 GetOneFundTranInfos（传 SubAccountNo 精确过滤，已探针验证），
+    建立 流水号 → (sub_account_no, sub_account_name) 的**精确归属映射**。
 
-    两步回退策略（按优先级）:
-      1. 通过基金代码匹配定投计划（fund_plan_map）
-      2. 通过资产扫描匹配（asset_sub_map: 遍历所有组合，看哪个组合持有该基金）
+    这是交易归属的权威来源：
+      - 全量拉取（SubAccountNo=""）只保证交易完整性，返回的交易不带子账户归属；
+      - 资产扫描兜底对"一基金被多组合持有"会随机错贴（遍历顺序决定，不可靠）；
+      - 逐子账户拉取的每条交易，其归属由 API 按子账户过滤直接保证，100% 精确。
 
-    注意：已移除逐条 get_trade_order_result API 调用（8k+ 条记录场景下耗时过长）。
-          定投计划的交易本身已通过 fund_plan_map 覆盖，没必要逐条查。
+    遍历范围 = getSubAccountList 全部子账户 + 定投计划涉及的子账户。
     """
-    # Step 1: 加载定投计划映射
+    serial_map = {}
+    subs = []
+
+    # 1) 真实子账户列表
+    try:
+        sub_res = getSubAccountList(user)
+        if sub_res and sub_res.Data:
+            for sub in sub_res.Data:
+                no = getattr(sub, "sub_account_no", None)
+                nm = getattr(sub, "sub_account_name", None)
+                if no:
+                    subs.append((no, nm))
+        logger.info(f"获取到 {len(subs)} 个子账户，开始逐子账户拉取交易建立精确映射")
+    except Exception as e:
+        logger.warning(f"获取子账户列表失败: {e}")
+
+    # 2) 定投计划涉及的子账户（可能不在普通子账户列表里）
+    try:
+        plan_details = get_all_fund_plan_details(user)
+        if plan_details:
+            for detail in plan_details:
+                plan = detail.rationPlan
+                if plan and plan.subAccountNo:
+                    no = plan.subAccountNo
+                    if not any(s[0] == no for s in subs):
+                        subs.append((no, plan.subAccountName))
+    except Exception as e:
+        logger.warning(f"获取定投计划子账户失败: {e}")
+
+    # 3) 逐子账户拉取，建映射
+    for no, nm in subs:
+        try:
+            trades = get_one_fund_tran_infos(
+                user, fund_code="", date_type=date_type, sub_account_no=no
+            )
+            cnt = 0
+            for t in trades:
+                serial = (
+                    getattr(t, "busin_serial_no", None)
+                    or getattr(t, "ID", None)
+                    or getattr(t, "id", None)
+                )
+                if serial:
+                    serial_map[serial] = (no, nm)
+                    cnt += 1
+            logger.info(f"子账户 {nm}({no}) 精确映射 {cnt} 条流水")
+        except Exception as e:
+            logger.warning(f"子账户 {nm}({no}) 拉取失败: {e}")
+
+    logger.info(f"精确归属映射构建完成: {len(serial_map)} 条流水 → {len(subs)} 个子账户")
+    return serial_map
+
+
+def _enrich_sub_account_info(trades, user: User, serial_map=None):
+    """
+    为交易记录补充 sub_account_no / sub_account_name。
+
+    归属优先级（2026-09-01 重写，根治错贴）：
+      1. **精确映射**（serial_map，逐子账户拉取 API 直接返回）—— 权威，命中即定
+      2. 定投计划映射（fund_plan_map，基金代码 → 定投计划子账户）
+      3. 资产扫描兜底 —— **仅当基金在全账户中只有唯一持有人**时才填充；
+         一基金被多个组合持有时**不填充**（宁缺勿错，避免历史"遍历覆盖"式随机错贴）
+
+    历史教训：08-28 曾发生智投平台 7 笔买入被资产扫描错贴成"大数定律/定投计划"，
+    且每次重新同步都会覆盖人工修正（ON DUPLICATE 全量覆盖）。故写库 SQL 已同步改为
+    条件更新——本次同步拿不到确切归属时，保留库中已有归属，绝不覆盖为空/错误值。
+    """
+    serial_map = serial_map or {}
+
+    # Step 1: 精确映射（最高优先级）
+    hit = 0
+    for trade in trades:
+        if getattr(trade, "sub_account_no", None):
+            continue
+        serial = (
+            getattr(trade, "busin_serial_no", None)
+            or getattr(trade, "ID", None)
+            or getattr(trade, "id", None)
+        )
+        if serial and serial in serial_map:
+            trade.sub_account_no, trade.sub_account_name = serial_map[serial]
+            hit += 1
+    logger.info(f"精确映射命中 {hit} 条交易归属")
+
+    # Step 2: 加载定投计划映射
     fund_plan_map = {}
     try:
         plan_details = get_all_fund_plan_details(user)
@@ -132,7 +217,7 @@ def _enrich_sub_account_info(trades, user: User):
     except Exception as e:
         logger.warning(f"Failed to load fund plans: {e}")
 
-    # Step 2: 定投计划映射回退
+    # Step 3: 定投计划映射回退
     for trade in trades:
         if getattr(trade, "sub_account_no", None):
             continue
@@ -141,11 +226,12 @@ def _enrich_sub_account_info(trades, user: User):
             trade.sub_account_no = fund_plan_map[fund_code]["sub_account_no"]
             trade.sub_account_name = fund_plan_map[fund_code]["sub_account_name"]
 
-    # Step 3: 仍缺失的，通过全量资产扫描匹配
+    # Step 4: 仍缺失的，通过资产扫描匹配 —— 仅唯一持有人时填充（歧义保护）
     still_missing = [t for t in trades if not getattr(t, "sub_account_no", None)]
     if still_missing:
-        logger.info(f"仍有 {len(still_missing)} 条无子账户信息，启动资产扫描...")
-        asset_sub_map = {}
+        logger.info(f"仍有 {len(still_missing)} 条无子账户信息，启动资产扫描（歧义保护：多持有人不填充）...")
+        fund_owners = {}  # fund_code -> set of sub_account_no
+        sub_meta = {}
         try:
             sub_res = getSubAccountList(user)
             if sub_res and sub_res.Data:
@@ -154,27 +240,32 @@ def _enrich_sub_account_info(trades, user: User):
                     sub_name = getattr(sub, "sub_account_name", None)
                     if not sub_no:
                         continue
+                    sub_meta[sub_no] = sub_name
                     try:
                         assets = get_asset_list_of_sub(user, sub_no, with_meta=False)
                         if assets:
                             for a in assets:
                                 if a.fund_code:
-                                    asset_sub_map[a.fund_code] = {
-                                        "sub_account_no": sub_no,
-                                        "sub_account_name": sub_name,
-                                    }
+                                    fund_owners.setdefault(a.fund_code, set()).add(sub_no)
                     except Exception:
                         pass
-            logger.info(f"资产扫描完成: {len(asset_sub_map)} 个基金-子账户映射")
+            # 仅唯一持有人基金可回填；多持有人基金保持缺失（宁缺勿错）
+            asset_sub_map = {
+                fc: next(iter(owners))
+                for fc, owners in fund_owners.items()
+                if len(owners) == 1
+            }
+            logger.info(f"资产扫描完成: {len(fund_owners)} 个基金，其中唯一持有人 {len(asset_sub_map)} 个可安全回填")
 
             updated = 0
             for trade in still_missing:
                 fc = getattr(trade, "fund_code", None) or getattr(trade, "product_code", None)
                 if fc and fc in asset_sub_map:
-                    trade.sub_account_no = asset_sub_map[fc]["sub_account_no"]
-                    trade.sub_account_name = asset_sub_map[fc]["sub_account_name"]
+                    trade.sub_account_no = asset_sub_map[fc]
+                    trade.sub_account_name = sub_meta.get(asset_sub_map[fc])
                     updated += 1
-            logger.info(f"资产扫描补充了 {updated} 条子账户信息")
+            logger.info(f"资产扫描安全回填了 {updated} 条子账户信息"
+                        f"（其余 {len(still_missing)-updated} 条因多持有人歧义而留空）")
         except Exception as e:
             logger.error(f"资产扫描失败: {e}")
 
@@ -289,8 +380,9 @@ def sync_user_trades_daily(user: User):
         # 补充 product_code（get_one_fund_tran_infos 不返回此字段，需从 get_trades_list 获取）
         _enrich_product_info(trades, user, product_date_type)
 
-        # 补充子账户信息
-        _enrich_sub_account_info(trades, user)
+        # 构建精确归属映射（逐子账户拉取，权威来源），再补充子账户信息
+        serial_map = _build_serial_sub_map(user, date_type)
+        _enrich_sub_account_info(trades, user, serial_map=serial_map)
 
         # 入库
         db = DatabaseConnection()
@@ -333,9 +425,9 @@ def sync_user_trades_daily(user: User):
             trade_status = VALUES(trade_status),
             buy_sell = VALUES(buy_sell),
             remark = VALUES(remark),
-            sub_account_no = VALUES(sub_account_no),
-            sub_account_name = VALUES(sub_account_name),
-            fund_code = VALUES(fund_code);
+            fund_code = IF(VALUES(fund_code) IS NULL OR VALUES(fund_code)='', fund_code, VALUES(fund_code)),
+            sub_account_no = IF(VALUES(sub_account_no) IS NULL OR VALUES(sub_account_no)='', sub_account_no, VALUES(sub_account_no)),
+            sub_account_name = IF(VALUES(sub_account_no) IS NULL OR VALUES(sub_account_no)='', sub_account_name, VALUES(sub_account_name));
         """
 
         inserted = 0

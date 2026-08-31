@@ -106,6 +106,36 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     if not trades:
             logger.info(f"{fund_name}({fund_code}) [均线风控] 无可撤回交易，跳过撤单")
             return True
+
+    def _parse_money_amount(raw) -> float:
+        if raw is None:
+            return 0.0
+        s = str(raw).strip()
+        if not s or s in {"--", "-"}:
+            return 0.0
+        if "元" not in s:
+            return 0.0
+        s = s.replace("元", "").replace(",", "").replace("，", "").strip()
+        m = re.search(r"-?\d+(?:\.\d+)?", s)
+        if not m:
+            return 0.0
+        try:
+            return float(m.group(0))
+        except Exception:
+            return 0.0
+
+    actual_invest_amount = 0.0
+    for trade in trades or []:
+        raw = getattr(trade, "raw", None)
+        apply_count = getattr(trade, "apply_count", None)
+        if apply_count in (None, "", "--", "-") and isinstance(raw, dict):
+            apply_count = raw.get("ApplyCount") or raw.get("apply_amount") or raw.get("apply_count")
+        actual_invest_amount += _parse_money_amount(apply_count)
+    if actual_invest_amount < 1000:
+        logger.info(
+            f"{fund_name}({fund_code}) 实际定投金额过小，跳过风控处理：实际={actual_invest_amount:.2f} < 1000.01，计划金额={fund_amount}"
+        )
+        return True
     
     logger.info(f"计划详情 - 组合账号: {sub_account_no}, 组合名称: {sub_account_name}")
     logger.info(f"计划详情 - 周期类型: {period_type}, 周期值: {period_value}, 定投金额: {fund_amount}, 计划类型: {plan_type}")

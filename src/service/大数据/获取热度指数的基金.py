@@ -1,7 +1,6 @@
 import os
 import sys
-import logging
-from typing import List, Dict, Any, Optional
+from typing import List
 
 # Ensure src is in path
 if __name__ == "__main__":
@@ -118,7 +117,7 @@ def get_heat_index_funds(user: User, top_n: int = 20) -> List[FundInfo]:
     
     logger.info(f"已获取热度指数排行，开始筛选基金...")
     
-    for i, index in enumerate(target_indices):
+    for index in target_indices:
         index_code = index.get("code")
         index_name = index.get("name")
         index_score = index.get("score")
@@ -140,7 +139,10 @@ def get_heat_index_funds(user: User, top_n: int = 20) -> List[FundInfo]:
                 continue
                 
             # 3. 获取追踪基金
-            funds = get_tracking_funds(user, index_code=index_code, page_size=50)
+            funds_resp = get_tracking_funds(user, [index_code], page_size=50)
+            funds = []
+            if funds_resp and getattr(funds_resp, "success", False):
+                funds = getattr(funds_resp, "items", {}).get(index_code, []) or []
             
             # 4. 筛选基金
             selected_fund_basic = None
@@ -148,7 +150,7 @@ def get_heat_index_funds(user: User, top_n: int = 20) -> List[FundInfo]:
             for fund in funds:
                 # 检查是否为 C 类份额
                 is_class_c = False
-                val_c = fund.get("ISCLASSC")
+                val_c = getattr(fund, "ISCLASSC", None)
                 if val_c == 1 or val_c == 1.0 or val_c == "1":
                     is_class_c = True
                 
@@ -157,7 +159,7 @@ def get_heat_index_funds(user: User, top_n: int = 20) -> List[FundInfo]:
                 
                 # 检查费率 (SHRATE7 == 0 表示7天赎回费为0，通常对应 {0, 1.5} 两档费率)
                 # 1.5% (<7天), 0% (>=7天)
-                shrate7 = fund.get("SHRATE7")
+                shrate7 = getattr(fund, "SHRATE7", None)
                 is_low_fee = False
                 try:
                     if float(shrate7) == 0:
@@ -170,8 +172,8 @@ def get_heat_index_funds(user: User, top_n: int = 20) -> List[FundInfo]:
                     break # 找到第一个就退出
             
             if selected_fund_basic:
-                fund_code = selected_fund_basic.get('FCODE')
-                fund_name = selected_fund_basic.get('SHORTNAME')
+                fund_code = getattr(selected_fund_basic, "FCODE", None)
+                fund_name = getattr(selected_fund_basic, "SHORTNAME", None)
                 logger.info(f"指数 {index_name} 选中基金: {fund_name} ({fund_code})，正在获取详细信息...")
                 
                 # 5. 获取详细基金信息

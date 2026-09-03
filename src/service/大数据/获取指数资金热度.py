@@ -1,7 +1,6 @@
 import os
 import sys
-import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 # Ensure src is in path
 if __name__ == "__main__":
@@ -40,22 +39,22 @@ def get_index_heat_rank(user: User, page_size: int = 50) -> List[Dict[str, Any]]
     
     # 获取主题指数
     logger.info("正在获取主题指数...")
-    themes = get_market_index(user, type_code="001003", page_size=page_size)
-    if themes:
-        indices.extend(themes)
+    themes_resp = get_market_index(user, type_code="001003", page_size=page_size)
+    if themes_resp and getattr(themes_resp, "success", False):
+        indices.extend(getattr(themes_resp, "items", []) or [])
         
     # 获取行业指数
     logger.info("正在获取行业指数...")
-    industries = get_market_index(user, type_code="001002", page_size=page_size)
-    if industries:
-        indices.extend(industries)
+    industries_resp = get_market_index(user, type_code="001002", page_size=page_size)
+    if industries_resp and getattr(industries_resp, "success", False):
+        indices.extend(getattr(industries_resp, "items", []) or [])
     
     # 2. 根据指数代码去重并合并名称
     unique_indices = {}
     for index in indices:
         # 优先使用 INDEXCODE，如果没有则使用 SEC_CODE
-        index_code = index.get("INDEXCODE") or index.get("SEC_CODE")
-        index_name = index.get("SEC_NAME")
+        index_code = getattr(index, "INDEXCODE", None) or getattr(index, "SEC_CODE", None)
+        index_name = getattr(index, "SEC_NAME", None) or getattr(index, "INDEXNAME", None)
         
         if not index_code:
             continue
@@ -74,7 +73,7 @@ def get_index_heat_rank(user: User, page_size: int = 50) -> List[Dict[str, Any]]
     result_list = []
     
     # 3. 查询资金流向
-    for i, (index_code, data) in enumerate(unique_indices.items()):
+    for index_code, data in unique_indices.items():
         # 合并名称
         merged_name = ",".join(sorted(list(data["names"])))
         

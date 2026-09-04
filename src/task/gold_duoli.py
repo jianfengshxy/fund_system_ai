@@ -84,6 +84,7 @@ def _merge_favorites_funds(
     base_funds: List[Dict[str, Any]],
     seen_codes: Set[str],
     default_amount: float,
+    default_limit: Optional[float],
     extra: Dict[str, Any],
 ) -> Tuple[List[Dict[str, Any]], int, int]:
     from src.service.自选基金.自选组合服务 import get_all_group_names, get_group_funds_by_name
@@ -116,7 +117,13 @@ def _merge_favorites_funds(
             fund_amount = _safe_float(item.get("amount"), 0.0)
         else:
             fund_amount = default_amount
-        base_funds.append({"fund_code": code, "fund_name": name_val, "amount": fund_amount})
+        fund_item: Dict[str, Any] = {"fund_code": code, "fund_name": name_val, "amount": fund_amount}
+        raw_limit = item.get("limit") if "limit" in item else None
+        if raw_limit not in (None, ""):
+            fund_item["limit"] = _safe_float(raw_limit, default_limit if default_limit is not None else 0.0)
+        elif default_limit is not None:
+            fund_item["limit"] = default_limit
+        base_funds.append(fund_item)
         seen_codes.add(code)
         added += 1
 
@@ -138,6 +145,7 @@ def increase(event, context):
             init_amount = 0.0
         else:
             init_amount = raw_init_amount
+        limit = payload.get("limit")
         total_limit = payload.get("total_limit")
         raw_fund_list = payload.get("fund_list") or payload.get("funds")
         fund_list, seen_codes = _normalize_payload_fund_list(raw_fund_list)
@@ -160,6 +168,7 @@ def increase(event, context):
             base_funds=fund_list,
             seen_codes=seen_codes,
             default_amount=amount,
+            default_limit=limit,
             extra=extra,
         )
         logger.info(
@@ -173,6 +182,7 @@ def increase(event, context):
             amount,
             init_amount=init_amount,
             fund_list=fund_list,
+            limit=limit,
             total_limit=total_limit,
         )
         if success:

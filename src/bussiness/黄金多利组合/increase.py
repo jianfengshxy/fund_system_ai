@@ -12,6 +12,7 @@ def increase(
     amount: float = 2000.0,
     init_amount: Optional[float] = None,
     fund_list: Optional[List[Dict]] = None,
+    limit: Optional[float] = None,
     total_limit: Optional[float] = None,
 ) -> bool:
     """
@@ -24,5 +25,6 @@ def increase(
         amount,
         init_amount=init_amount,
         fund_list=fund_list,
+        limit=limit,
         total_limit=total_limit,
     )

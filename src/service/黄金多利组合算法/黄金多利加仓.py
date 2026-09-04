@@ -29,6 +29,7 @@ def increase_gold_funds(
     amount: float = 2000.0,
     init_amount: Optional[float] = None,
     fund_list: Optional[List[Dict]] = None,
+    limit: Optional[float] = None,
     total_limit: Optional[float] = None,
 ) -> bool:
     """
@@ -64,6 +65,7 @@ def increase_gold_funds(
         logger.error(f"未找到组合 {sub_account_name} 的账号")
         return False
 
+    portfolio_limit = _normalize_limit(limit)
     normalized_funds: List[Dict] = []
     if isinstance(fund_list, list) and fund_list:
         for item in fund_list:
@@ -103,12 +105,18 @@ def increase_gold_funds(
                     fund_init_amount = fund_amount
             else:
                 fund_init_amount = fund_amount
+            # 单基金持仓上限（limit）优先级规则：
+            # 1) 基金级别 limit 优先（fund_list 每个 item 内配置）
+            # 2) 若基金级别未配置或解析失败，则使用组合级别 limit（函数入参 limit）
+            resolved_limit = portfolio_limit
+            if "limit" in item:
+                resolved_limit = _normalize_limit(item.get("limit"), portfolio_limit)
             normalized_funds.append({
                 "fund_code": str(fund_code),
                 "amount": fund_amount,
                 "init_amount": fund_init_amount,
                 # 没有配置limit时返回None，表示不做限制
-                "limit": _normalize_limit(item.get("limit"), None),
+                "limit": resolved_limit,
             })
 
     # if not normalized_funds:
@@ -169,8 +177,16 @@ def increase_gold_funds(
     fund_metric_dict = {f_code: _get_asset_limit_metric(asset) for f_code, asset in asset_dict.items()}
     total_metric = sum(fund_metric_dict.values())
 
+    def _get_effective_fund_limit(fund_code: str) -> Optional[float]:
+        fund_limit = payload_limit_dict.get(fund_code)
+        if fund_limit is not None:
+            return fund_limit
+        return portfolio_limit
+
     logger.info(
-        f"组合 {sub_account_name} 当前资产限制口径值: {total_metric:.2f}, total_limit={total_limit if total_limit is not None else '无限制'}"
+        f"组合 {sub_account_name} 当前资产限制口径值: {total_metric:.2f}, "
+        f"limit={portfolio_limit if portfolio_limit is not None else '无限制'}, "
+        f"total_limit={total_limit if total_limit is not None else '无限制'}"
     )
 
     # 优先验证组合总资产是否已超过限制，超过则直接输出原因并返回
@@ -183,7 +199,7 @@ def increase_gold_funds(
 
         current_fund_metric = fund_metric_dict.get(fund_code, 0.0)
         # 只在有配置limit时进行检查，没有配置就不限制
-        fund_limit = payload_limit_dict.get(fund_code)
+        fund_limit = _get_effective_fund_limit(fund_code)
         projected_fund_metric = current_fund_metric + buy_amount
         projected_total_metric = total_metric + buy_amount
 
@@ -227,7 +243,7 @@ def increase_gold_funds(
         # 最先校验单个基金的资产是否已超过限制，超过则跳过该基金
         current_fund_metric = fund_metric_dict.get(f_code, 0.0)
         # 只在有配置limit时进行检查，没有配置就不限制
-        fund_limit = payload_limit_dict.get(f_code)
+        fund_limit = _get_effective_fund_limit(f_code)
         if fund_limit is not None and current_fund_metric >= fund_limit:
             logger.info(f"基金 {f_name}({f_code}) 当前资产值 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过初始化建仓")
             continue
@@ -257,7 +273,7 @@ def increase_gold_funds(
         # 最先校验单个基金的资产是否已超过限制，超过则跳过该基金
         current_fund_metric = fund_metric_dict.get(f_code, 0.0)
         # 只在有配置limit时进行检查，没有配置就不限制
-        fund_limit = payload_limit_dict.get(f_code)
+        fund_limit = _get_effective_fund_limit(f_code)
         if fund_limit is not None and current_fund_metric >= fund_limit:
             logger.info(f"持仓基金 {f_name}({f_code}) 当前资产值 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过加仓")
             continue
@@ -413,6 +429,7 @@ if __name__ == "__main__":
         # 2. 设置测试参数
         test_sub_account = "智投平台"
         test_amount = 10000.0
+        test_limit = 50000.0
         test_total_limit = 500000.0
         test_fund_list = [ 
             { 
@@ -441,6 +458,7 @@ if __name__ == "__main__":
             sub_account_name=test_sub_account, 
             amount=test_amount, 
             fund_list=test_fund_list,
+            limit=test_limit,
             total_limit=test_total_limit
         )
         

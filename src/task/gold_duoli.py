@@ -221,6 +221,7 @@ def redeem(event, context):
             base_funds=fund_list,
             seen_codes=seen_codes,
             default_amount=0.0,
+            default_limit=None,
             extra=extra,
         )
         logger.info(

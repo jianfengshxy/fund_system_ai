@@ -38,11 +38,15 @@ from src.service.数据同步.sync_sub_account_fund_asset import sync_sub_accoun
 from src.service.数据同步.sync_total_account_fund_asset import sync_total_account_fund_asset_daily
 from src.service.数据同步.sync_user_asset import sync_user_daily_asset
 from src.service.数据同步.sync_user_trade import sync_user_trades_daily
-from src.task.runtime import logger
+from src.task.runtime import logger, parse_strategy_event
 
 
 def handler(event, context):
     """阿里云 FC 定时触发器入口"""
+    # 回写执行记录（scheduled_tasks.last_executed_at / scheduled_task_logs）。
+    # FC 定时事件的 triggerName（如 daily_task_2130）会被解析为 task_name 并据此定位 task_id；
+    # 本地直接运行时 event=None，内部安全跳过，不影响手工调试。
+    parse_strategy_event(event, "daily_task")
     logger.info("每日数据同步任务开始")
 
     # 1. 大数据：更新投资指标和组合

@@ -330,9 +330,12 @@ def increase_gold_funds(
                     logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，但限购金额 {_max_purchase} < 2000，突破限购加仓")
                 else:
                     # ---------- 深度回撤反弹加仓 ----------
-                    # 条件：回撤 >15% + 多周期趋势转正（周线 / 月线 / 净值站上5日线）
-                    # 思路：深跌后出现反弹信号时，按当前持仓市值的一定比例加仓，
-                    #       回撤越深比例越小（防止基本面恶化风险），而非全量翻倍
+                    # 触发条件（两个必须同时成立）：
+                    #   1) is_deep_drawdown    : 回撤 > 10%（estimated_profit_rate < -10.0），
+                    #                            注意不是 >15%，15% 是已停用的旧门槛，见下方说明
+                    #   2) has_reversal_signal : 多周期趋势同时转正 —— 周线 > 0 且 月线 > 0
+                    #                            且 持仓市值 > 0 且 净值站上 5 日均线
+                    # 加仓额度：当前持仓市值 × buy_ratio（而非全量翻倍），用“比例”控制单笔投入
                     is_deep_drawdown = estimated_profit_rate < -10.0
                     has_reversal_signal = (
                         week_growth_rate > 0.0
@@ -342,21 +345,49 @@ def increase_gold_funds(
                     )
 
                     if is_deep_drawdown and has_reversal_signal:
-                        # 根据回撤深度分档加仓比例（占当前持仓市值的比例）
-                        if estimated_profit_rate >= -15.0:
-                            buy_ratio = 0.5   # -15% ~ -20%: 加仓持仓市值的 50%
-                        else:
-                            # 回撤超过 15%，疑似基本面恶化，放弃抄底
-                            logger.info(
-                                f"持仓基金 {f_name}({f_code}) 回撤 {estimated_profit_rate:.2f}% 超过 -15%，疑似基本面风险，放弃抄底"
-                            )
-                            continue
+                        # ====================================================================
+                        # 【规则调整 2026-09-20】取消「回撤 ≥ −15% 才抄底」的硬地板限制
+                        # --------------------------------------------------------------------
+                        # 依据：scripts/backtest_gold_duoli_fund.py 对 008327（东财通信C）
+                        #       2026-06-18 ~ 2026-09-18（init_amount=5000 / amount=2000）的
+                        #       A / N 双情景对照回测。该区间标的净值最大回撤 −40.6%，
+                        #       属教科书级极端行情。对比结论（A=原规则，N=取消本限制）：
+                        #
+                        #   ① 收益转正：区间总盈亏    −¥485  →  +¥109
+                        #      资金占用效率也转正：总盈亏/日均占用 −10.04%  →  +1.64%
+                        #   ② 脱困能力：期末浮亏率    −15.79% →  −0.96%
+                        #      距 +1% 止盈            +19.94% →  +1.98%
+                        #   ③ 峰值浮亏【完全不变】（两情景同为 −35.77% / −¥1,789）——
+                        #      这是关键：本策略的三信号（周线>0、月线>0、站上5日均）本身就是
+                        #      **滞后确认**条件，单边下跌段根本不可能同时成立（回测中 07-17~08-26
+                        #      N 也是一笔没买）。也就是说，这道门槛拦住的恰恰是
+                        #      「反弹初期的加仓机会」，并没有起到「防止接飞刀」的作用。
+                        #   ④ 代价：资金占用放大约 2.9 倍（¥7,000 → ¥20,503），
+                        #      **必须依赖 limit（单基金上限）/ total_limit（组合上限）兜底**，
+                        #      否则在二次探底时绝对亏损会同步放大（回测：¥1,789 → ¥5,014）。
+                        #
+                        # 详见 reports/东财通信C008327_黄金多利回测报告_2026-06-18_2026-09-18.html §6
+                        # 回滚方式：把下面这段被注释的旧逻辑解注释，并删掉 buy_ratio = 0.5 这行即可。
+                        # ====================================================================
+                        # ---- 旧逻辑（已停用，保留以便回滚）----
+                        # if estimated_profit_rate >= -15.0:
+                        #     buy_ratio = 0.5   # -15% ~ -20%: 加仓持仓市值的 50%
+                        # else:
+                        #     # 回撤超过 15%，疑似基本面恶化，放弃抄底
+                        #     logger.info(
+                        #         f"持仓基金 {f_name}({f_code}) 回撤 {estimated_profit_rate:.2f}% 超过 -15%，疑似基本面风险，放弃抄底"
+                        #     )
+                        #     continue
+                        # ---- 新逻辑：取消硬地板，深度回撤 + 三信号齐备即按 50% 抄底 ----
+                        buy_ratio = 0.5   # 加仓当前持仓市值的 50%（与回撤深度无关）
 
+                        was_deep_floor = estimated_profit_rate < -15.0   # 仅用于日志区分所在的旧硬地板区
                         buy_amount = float(current_asset_value) * buy_ratio
                         logger.info(
                             f"持仓基金 {f_name}({f_code}) 触发深度回撤反弹加仓："
                             f"estimated_profit_rate={estimated_profit_rate:.2f}%, week={week_growth_rate:.2f}%, "
                             f"month={month_growth_rate:.2f}%, buy_ratio={buy_ratio*100:.0f}%, buy_amount={buy_amount:.2f}"
+                            f"{'（注：回撤已深于 -15%，按 2026-09-20 规则调整不再放弃抄底，请确认 limit 上限兜底已生效）' if was_deep_floor else ''}"
                         )
                         if not _can_submit_buy(f_code, f_name, buy_amount):
                             continue
@@ -377,8 +408,10 @@ def increase_gold_funds(
                             f"(week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%)，继续熔断等待"
                         )
                     else:
+                        # 注意：此分支为 [-10%, -5%) 的「死区」——深跌分支的门槛是 < -10%，
+                        # 所以这一段够不到抄底通道，此时即便三信号全部转好也一律不买。
                         logger.info(
-                            f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% 在 [-15%, -5%) 区间，"
+                            f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% 在 [-10%, -5%) 死区，"
                             f"熔断暂停，等待回收至 -5% 以上或触发深度反弹信号"
                         )
                     continue

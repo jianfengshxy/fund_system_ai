@@ -9,9 +9,8 @@ if root_dir not in sys.path:
 from src.common.constant import DEFAULT_USER
 from src.API.自选基金.FavorFund import get_favor_groups, remove_from_favorites, get_favor_group
 from src.common.logger import get_logger
-from src.db.database_connection import DatabaseConnection
+from src.service.公共服务.redeem_fee_filter_service import filter_indices_by_tracking_fund_fee
 from src.service.大数据.增加智投平台基金到自选组合 import (
-    TARGET_TYPES,
     _dedup_similar_indices,
     _get_all_index_names_for_grouping,
     get_latest_trade_date_for_3m_metrics,
@@ -85,8 +84,16 @@ def get_group_info(user, group_name: str) -> Tuple[int, Dict[str, str]]:
     return target_group_id, existing_funds
 
 
-def get_qualified_fund_codes() -> Set[str]:
+def get_qualified_fund_codes(user) -> Set[str]:
     qualified_indices = get_qualified_indices()
+    if not qualified_indices:
+        return set()
+
+    qualified_indices = filter_indices_by_tracking_fund_fee(
+        user=user,
+        indices=qualified_indices,
+        scene_name="智投平台",
+    )
     if not qualified_indices:
         return set()
 
@@ -100,7 +107,7 @@ def remove_unqualified_funds_from_group(user, group_name: str = "智投平台", 
     logger.info(f"market_index_daily(含3M指标) 最新交易日: {latest_trade_date}")
     logger.info(f"开始清理 '{group_name}' 组合（移出不再满足条件的基金）...")
 
-    qualified_fund_codes = get_qualified_fund_codes()
+    qualified_fund_codes = get_qualified_fund_codes(user)
 
     group_id, existing_funds_dict = get_group_info(user, group_name)
     if group_id == -1:
@@ -155,4 +162,3 @@ if __name__ == "__main__":
 
     user = ensure_user_fresh(DEFAULT_USER)
     remove_unqualified_funds_from_group(user=user, group_name="智投平台")
-

@@ -2,7 +2,6 @@ import os
 import sys
 import re
 import math
-import logging
 from typing import List, Dict, Set, Tuple
 
 # Add root dir to sys.path
@@ -14,6 +13,7 @@ from src.common.constant import DEFAULT_USER
 from src.API.自选基金.FavorFund import get_favor_groups, add_to_favorites, get_favor_group
 from src.common.logger import get_logger
 from src.db.database_connection import DatabaseConnection
+from src.service.公共服务.redeem_fee_filter_service import filter_indices_by_tracking_fund_fee
 
 logger = get_logger(__name__)
 
@@ -275,6 +275,19 @@ def add_qualified_funds_to_lln_group(user, group_name: str = "大数定律") -> 
         logger.info("没有满足大数定律条件的指数。")
         return {'total_qualified': 0, 'added': 0, 'skipped': 0, 'no_track_fund': 0}
 
+    before_fee_filter = len(qualified_indices)
+    qualified_indices = filter_indices_by_tracking_fund_fee(
+        user=user,
+        indices=qualified_indices,
+        scene_name=group_name,
+    )
+    fee_filtered = before_fee_filter - len(qualified_indices)
+    if fee_filtered > 0:
+        logger.info(f"费率过滤: 排除 {fee_filtered} 个指数，剩余 {len(qualified_indices)} 个")
+    if not qualified_indices:
+        logger.info("费率过滤后没有满足大数定律条件的指数。")
+        return {'total_qualified': 0, 'added': 0, 'skipped': 0, 'no_track_fund': 0}
+
     # 1b. 同类指数去重（基于全量指数构建分组，不依赖过滤子集）
     all_index_names = _get_all_index_names_for_grouping()
     before_dedup = len(qualified_indices)
@@ -342,4 +355,4 @@ if __name__ == "__main__":
     from src.API.登录接口.login import ensure_user_fresh
 
     user = ensure_user_fresh(DEFAULT_USER)
-    add_qualified_funds_to_lln_group(user=DEFAULT_USER, group_name="大数定律")
+    add_qualified_funds_to_lln_group(user=user, group_name="大数定律")

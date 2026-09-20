@@ -12,6 +12,7 @@ from src.common.constant import DEFAULT_USER
 from src.API.自选基金.FavorFund import get_favor_groups, add_to_favorites, get_favor_group
 from src.common.logger import get_logger
 from src.db.database_connection import DatabaseConnection
+from src.service.公共服务.redeem_fee_filter_service import filter_indices_by_tracking_fund_fee
 
 logger = get_logger(__name__)
 
@@ -205,6 +206,19 @@ def add_qualified_funds_to_group(user, group_name: str = "智投平台", dry_run
     qualified_indices = get_qualified_indices()
     if not qualified_indices:
         logger.info("没有满足条件的指数。")
+        return {"total_qualified": 0, "added": 0, "skipped": 0, "no_track_fund": 0}
+
+    before_fee_filter = len(qualified_indices)
+    qualified_indices = filter_indices_by_tracking_fund_fee(
+        user=user,
+        indices=qualified_indices,
+        scene_name=group_name,
+    )
+    fee_filtered = before_fee_filter - len(qualified_indices)
+    if fee_filtered > 0:
+        logger.info(f"费率过滤: 排除 {fee_filtered} 个指数，剩余 {len(qualified_indices)} 个")
+    if not qualified_indices:
+        logger.info("费率过滤后没有满足条件的指数。")
         return {"total_qualified": 0, "added": 0, "skipped": 0, "no_track_fund": 0}
 
     all_index_names = _get_all_index_names_for_grouping()

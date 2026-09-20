@@ -2,7 +2,6 @@ import os
 import sys
 import re
 import math
-import logging
 from typing import List, Dict, Set, Tuple
 
 # Add root dir to sys.path
@@ -14,6 +13,7 @@ from src.common.constant import DEFAULT_USER
 from src.API.自选基金.FavorFund import get_favor_groups, remove_from_favorites, get_favor_group
 from src.common.logger import get_logger
 from src.db.database_connection import DatabaseConnection
+from src.service.公共服务.redeem_fee_filter_service import filter_indices_by_tracking_fund_fee
 
 logger = get_logger(__name__)
 
@@ -126,7 +126,7 @@ def _dedup_similar_indices(indices: List[Dict], all_index_names: List[Dict]) -> 
     return result
 
 
-def get_qualified_fund_codes() -> Set[str]:
+def get_qualified_fund_codes(user) -> Set[str]:
     """
     查询满足"大数定律"条件的指数跟踪基金代码集合（已去重）。
 
@@ -165,6 +165,13 @@ def get_qualified_fund_codes() -> Set[str]:
 
     rows = db.execute_query(sql, TARGET_TYPES)
     logger.info(f"大数定律条件查询: 满足条件的指数共 {len(rows)} 个")
+    rows = filter_indices_by_tracking_fund_fee(
+        user=user,
+        indices=rows,
+        scene_name="大数定律",
+    )
+    if not rows:
+        return set()
     # 基于全量指数构建分组后去重
     all_index_names = _get_all_index_names_for_grouping()
     deduped = _dedup_similar_indices(rows, all_index_names)
@@ -272,7 +279,7 @@ def remove_unqualified_funds_from_lln_group(user, group_name: str = "大数定�
     logger.info(f"开始清理 '{group_name}' 组合（移出不再满足大数定律条件的基金）...")
 
     # 1. 获取满足条件的跟踪基金代码集合
-    qualified_fund_codes = get_qualified_fund_codes()
+    qualified_fund_codes = get_qualified_fund_codes(user)
 
     # 2. 获取组合信息
     group_id, existing_funds_dict = get_group_info(user, group_name)
@@ -327,4 +334,4 @@ if __name__ == "__main__":
     from src.API.登录接口.login import ensure_user_fresh
 
     user = ensure_user_fresh(DEFAULT_USER)
-    remove_unqualified_funds_from_lln_group(user=DEFAULT_USER, group_name="大数定律")
+    remove_unqualified_funds_from_lln_group(user=user, group_name="大数定律")

@@ -87,16 +87,24 @@ def _merge_favorites_funds(
     default_limit: Optional[float],
     extra: Dict[str, Any],
 ) -> Tuple[List[Dict[str, Any]], int, int]:
-    from src.service.自选基金.自选组合服务 import get_all_group_names, get_group_funds_by_name
+    from src.service.自选基金.自选组合服务 import resolve_group_by_name
 
-    all_favorite_groups = get_all_group_names(user)
     group_name_key = str(group_name).strip()
-    favorite_set = {str(g).strip() for g in all_favorite_groups if g} if all_favorite_groups else set()
-    if group_name_key not in favorite_set:
+    group_result = resolve_group_by_name(group_name_key, user)
+    if not group_result.get("success"):
+        logger.warning(
+            f"[多利组合] 查询自选组合失败: {group_name_key}, "
+            f"error_code={group_result.get('error_code')}, "
+            f"message={group_result.get('first_error')}",
+            extra=extra,
+        )
+        return base_funds, 0, 0
+
+    if not group_result.get("group_found"):
         logger.warning(f"[多利组合] 未找到同名自选组合: {group_name_key}", extra=extra)
         return base_funds, 0, 0
 
-    funds = get_group_funds_by_name(group_name_key, user)
+    funds = group_result.get("funds") or []
     if not funds:
         logger.warning(f"[多利组合] 同名自选组合 {group_name_key} 下无基金", extra=extra)
         return base_funds, 0, 0

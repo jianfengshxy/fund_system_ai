@@ -245,6 +245,34 @@ def _build_headers_for_getgroup() -> Dict[str, str]:
     }
 
 def _refresh_user_tokens(user: User) -> Optional[User]:
+    account = getattr(user, "account", None)
+    password = getattr(user, "password", None)
+
+    try:
+        from src.service.用户管理.用户信息 import refresh_user_tokens
+
+        if account and password:
+            refreshed = refresh_user_tokens(account, password, ensure_bank=False)
+            if refreshed:
+                return refreshed
+    except Exception:
+        pass
+
+    try:
+        from src.API.登录接口.login import ensure_user_fresh
+
+        refreshed = ensure_user_fresh(user, 600, True)
+        if refreshed and all([
+            getattr(refreshed, "c_token", None),
+            getattr(refreshed, "u_token", None),
+            getattr(refreshed, "passport_ctoken", None),
+            getattr(refreshed, "passport_utoken", None),
+            getattr(refreshed, "passport_id", None),
+        ]):
+            return refreshed
+    except Exception:
+        pass
+
     from src.API.登录接口.login import login, login_passport, inference_passport_for_bind
     from src.service.用户管理.用户信息 import update_user_cache
 

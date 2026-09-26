@@ -2,7 +2,7 @@ import logging
 import yaml
 from random import vonmisesvariate
 import re
-from typing import Optional
+from typing import Dict, Optional
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import os
@@ -60,7 +60,7 @@ def default_user_redeem_all_fund_plans():
     redeem_all_fund_plans(DEFAULT_USER)
     logger.info(f"{DEFAULT_USER.customer_name}所有定投计划止盈操作已执行")
 
-def redeem_all_fund_plans(user: User):
+def redeem_all_fund_plans(user: User, stop_rate_overrides: Optional[Dict[str, float]] = None):
     fund_plan_details = get_all_fund_plan_details(user)
     
     # 资产预过滤：按组合账号批量获取资产
@@ -101,7 +101,7 @@ def redeem_all_fund_plans(user: User):
         return
 
     with ThreadPoolExecutor(max_workers=1) as executor:
-        futures = [executor.submit(redeem, user, plan_detail, asset) 
+        futures = [executor.submit(redeem, user, plan_detail, asset, stop_rate_overrides)
                   for plan_detail, asset in redeemable_plans]
         
     results = [future.result() for future in futures]
@@ -109,7 +109,12 @@ def redeem_all_fund_plans(user: User):
     
 
 # 止盈算法实现
-def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Optional[AssetDetails] = None) -> bool:
+def redeem(
+    user: User,
+    plan_detail: FundPlanDetail,
+    pre_fetched_asset_detail: Optional[AssetDetails] = None,
+    stop_rate_overrides: Optional[Dict[str, float]] = None,
+) -> bool:
     """
     止盈算法实现
 
@@ -151,6 +156,9 @@ def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Op
     
     fund_amount = plan_detail.rationPlan.amount 
     stop_rate = 1.0
+    payload_stop_rate = None
+    if stop_rate_overrides:
+        payload_stop_rate = stop_rate_overrides.get(str(fund_code).strip())
     
     try:
         if pre_fetched_asset_detail is not None:
@@ -208,9 +216,18 @@ def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Op
         logger.info(f"止盈趋势门槛检查：缺少用于对比的净值（estimated_value={est_nav}, prev_nav={prev_nav}, nav_5day_avg={nav5}），跳过止盈")
         return True
 
-    # 更新：止盈点 = 波动率，限制在3.0到10.0之间）
-    stop_rate = min(max(float(volatility), 3.0), 10.0)
-    logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（不低于3.0）")
+    # 基金级 payload 覆盖优先；未配置时回退到现有代码里的波动率动态止盈
+    if payload_stop_rate is not None:
+        stop_rate = float(payload_stop_rate)
+        logger.info(
+            f"组合{sub_account_no}的{fund_name}{fund_code}命中payload止盈率配置，设置止盈点={stop_rate:.2f}"
+        )
+    else:
+        stop_rate = min(max(float(volatility), 3.0), 10.0)
+        logger.info(
+            f"组合{sub_account_no}的{fund_name}{fund_code}未命中payload止盈率配置，"
+            f"波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（不低于3.0）"
+        )
 
     if asset_detail.fund_type == 'a' and estimated_profit_rate > 3.0:
         logger.info(f"{customer_name}的止盈操作开始：QDII基金{fund_name}{fund_code}预估收益{estimated_profit_rate},赎回0费率份额,实际止盈点:3.0")

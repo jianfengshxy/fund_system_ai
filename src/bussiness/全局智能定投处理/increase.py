@@ -201,10 +201,13 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
 
     stop_reason = None
     
-    if half_year_val is not None and half_year_val <= 0:
-        stop_reason = f"半年收益率({half_year_val}%) <= 0"
+    # 三断风控：双熊确认模式（半年收益率≤0 AND 年收益率≤0 才撤，单个熊市保留交易权限，适配强周期/海外品种V反）
+    if half_year_val is not None and year_val is not None and half_year_val <= 0 and year_val <= 0:
+        stop_reason = f"双熊确认：半年收益率({half_year_val}%) ≤0 且 年收益率({year_val}%) ≤0"
+    elif half_year_val is not None and half_year_val <= 0:
+        stop_reason = None  # 单熊（仅半年≤0但年>0）：保留交易权限，允许在强周期底部加仓不踏空
     elif year_val is not None and year_val <= 0:
-        stop_reason = f"年收益率({year_val}%) <= 0"
+        stop_reason = None  # 单熊（仅年≤0但半年>0）：同上，单熊保留交易权限
     # HQB占比不足且无持仓的撤回已在上方统一处理，这里不再设置 stop_reason
     
     # 趋势豁免逻辑：虽然长期指标走弱，但如果短期趋势强劲，允许豁免拦截

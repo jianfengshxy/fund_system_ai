@@ -2,7 +2,7 @@ import os
 import sys
 import re
 import math
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Optional, Set, Tuple
 
 # Add root dir to sys.path
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -14,6 +14,7 @@ from src.API.自选基金.FavorFund import get_favor_groups, add_to_favorites, g
 from src.common.logger import get_logger
 from src.db.database_connection import DatabaseConnection
 from src.service.公共服务.redeem_fee_filter_service import filter_indices_by_tracking_fund_fee
+from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
 
 logger = get_logger(__name__)
 
@@ -35,9 +36,17 @@ def _get_all_index_names_for_grouping() -> List[Dict]:
     return rows
 
 
-def _dedup_similar_indices(indices: List[Dict], all_index_names: List[Dict]) -> List[Dict]:
+def _dedup_similar_indices(
+    indices: List[Dict],
+    all_index_names: List[Dict],
+    existing_funds: Optional[Set[str]] = None,
+) -> List[Dict]:
     """
-    同类指数去重：基于全量指数名称构建相似度分组，每组只保留3M收益率最高的一个。
+    同类指数去重：基于全量指数名称构建相似度分组。
+
+    选取规则：
+      1. 若组内存在当前组合已持有的跟踪基金，优先保留已持有基金；
+      2. 若组内没有已持有基金，再保留 3M 收益率最高的一个。
 
     **为什么用全量而非仅过滤结果？**
     同类关系是全局的（如"有色金属"与"国证有色"是同类），
@@ -106,18 +115,31 @@ def _dedup_similar_indices(indices: List[Dict], all_index_names: List[Dict]) -> 
         g = code_to_gid.get(code, code)  # 无同类时以自身code为组标识
         qualified_groups.setdefault(g, []).append(idx)
 
-    # 5. 每组取 3M 收益率最高的
+    existing_funds = existing_funds or set()
+
+    # 5. 每组优先保留已持有基金，否则取 3M 收益率最高的
     result = []
     for g, group in qualified_groups.items():
-        best = max(group, key=lambda x: float(x['avg_return_q']))
+        held_group = [
+            x for x in group
+            if str(x.get('track_fund_code') or '') in existing_funds
+        ]
+        if held_group:
+            best = max(held_group, key=lambda x: float(x['avg_return_q']))
+            dedup_reason = "优先保留已持有基金"
+        else:
+            best = max(group, key=lambda x: float(x['avg_return_q']))
+            dedup_reason = "按3M收益率最高保留"
         if len(group) > 1:
             removed = [
-                f"{x['index_code']} {x['index_name']} (3M={x['avg_return_q']:.2f}%)"
+                f"{x['index_code']} {x['index_name']} -> {x.get('track_fund_code')} "
+                f"{x.get('track_fund_name', 'Unknown')} (3M={x['avg_return_q']:.2f}%)"
                 for x in group if x != best
             ]
             logger.info(
                 f"[去重] 同类指数: 保留 {best['index_code']} {best['index_name']} "
-                f"(3M={best['avg_return_q']:.2f}%), "
+                f"-> {best.get('track_fund_code')} {best.get('track_fund_name', 'Unknown')} "
+                f"(3M={best['avg_return_q']:.2f}%, {dedup_reason}), "
                 f"跳过 {'; '.join(removed)}"
             )
         result.append(best)
@@ -246,6 +268,31 @@ def get_group_info(user, group_name: str) -> Tuple[int, Set[str]]:
     return target_group_id, existing_funds
 
 
+def get_group_held_fund_codes(user, group_name: str) -> Set[str]:
+    """
+    获取组合当前真实持仓的基金代码集合。
+    """
+    try:
+        assets = get_sub_account_asset_by_name(user, group_name)
+    except Exception as exc:
+        logger.warning(f"获取组合 {group_name} 当前持仓失败，退化为不考虑持仓优先: {exc}")
+        return set()
+
+    held_codes: Set[str] = set()
+    for asset in assets or []:
+        try:
+            code = str(getattr(asset, "fund_code", "") or "").strip()
+            asset_value = float(getattr(asset, "asset_value", 0.0) or 0.0)
+            available_vol = float(getattr(asset, "available_vol", 0.0) or 0.0)
+            if code and (asset_value > 1.0 or available_vol > 0.01):
+                held_codes.add(code)
+        except Exception:
+            continue
+
+    logger.info(f"组合 {group_name} 当前真实持仓基金数: {len(held_codes)}")
+    return held_codes
+
+
 def add_qualified_funds_to_lln_group(user, group_name: str = "大数定律") -> Dict[str, int]:
     """
     将满足大数定律条件的指数跟踪基金加入自选组合。
@@ -267,6 +314,13 @@ def add_qualified_funds_to_lln_group(user, group_name: str = "大数定律") -> 
     )[0]["d"]
     logger.info(f"market_index_daily 最新交易日: {latest_trade_date}")
     logger.info(f"开始筛选满足大数定律条件的基金，目标组合: '{group_name}'...")
+
+    # 0. 先获取目标组合信息与真实持仓，用于同类指数去重时优先保留已持有基金
+    group_id, existing_funds = get_group_info(user, group_name)
+    if group_id == -1:
+        logger.error(f"目标组合 '{group_name}' 未找到，请先在天天基金中创建该自选组合。")
+        return {'total_qualified': 0, 'added': 0, 'skipped': 0, 'no_track_fund': 0}
+    held_funds = get_group_held_fund_codes(user, group_name)
 
     # 1. 查询满足条件的指数及其跟踪基金
     qualified_indices = get_qualified_indices()
@@ -291,17 +345,14 @@ def add_qualified_funds_to_lln_group(user, group_name: str = "大数定律") -> 
     # 1b. 同类指数去重（基于全量指数构建分组，不依赖过滤子集）
     all_index_names = _get_all_index_names_for_grouping()
     before_dedup = len(qualified_indices)
-    qualified_indices = _dedup_similar_indices(qualified_indices, all_index_names)
+    qualified_indices = _dedup_similar_indices(
+        qualified_indices,
+        all_index_names,
+        existing_funds=held_funds,
+    )
     dedup_removed = before_dedup - len(qualified_indices)
     if dedup_removed > 0:
         logger.info(f"同类指数去重: 减少 {dedup_removed} 个，保留 {len(qualified_indices)} 个")
-
-    # 2. 获取目标组合信息
-    group_id, existing_funds = get_group_info(user, group_name)
-
-    if group_id == -1:
-        logger.error(f"目标组合 '{group_name}' 未找到，请先在天天基金中创建该自选组合。")
-        return {'total_qualified': len(qualified_indices), 'added': 0, 'skipped': 0, 'no_track_fund': 0}
 
     logger.info(f"目标组合: {group_name} (ID: {group_id})")
     logger.info(f"组合当前基金数: {len(existing_funds)}")

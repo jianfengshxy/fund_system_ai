@@ -89,17 +89,12 @@ def check_hqb_risk_allowed(user: User, threshold: Optional[float] = None) -> boo
             
             return True
         else:
-            logger.warning("获取资产信息失败，无法进行活期宝占比风控检查，默认放行(或根据策略调整)")
-            # 这里选择放行还是拦截？根据"风控问题不容挑战"，也许应该拦截？
-            # 但如果API临时失败，拦截可能导致业务中断。
-            # 参考 increase.py 的逻辑是 "获取失败，跳过此风控项" (default pass).
-            # 也可以选择保守策略。考虑到这是“全局风控”，如果拿不到数据，可能无法判断风险。
-            # 但为了避免阻塞，暂且返回 True，并在日志中警告。
-            return True
+            logger.warning("获取资产信息失败，无法进行活期宝占比风控检查，默认拦截新增/买入操作。")
+            return False
             
     except Exception as e:
         logger.error(f"风控检查执行异常: {e}")
-        return True # 异常时默认放行，避免阻断，但需监控
+        return False
 
 if __name__ == "__main__":
     from src.common.constant import DEFAULT_USER

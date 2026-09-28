@@ -19,9 +19,12 @@ from src.service.交易管理.购买基金 import commit_order
 from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.service.公共服务.nav_gate_service import nav5_gate
-from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
+from src.service.公共服务.estimated_profit_service import calc_estimated_change
+from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 
 logger = get_logger(__name__)
+
+HQB_NEW_POSITION_THRESHOLD = 20.0
 
 def increase_gold_funds(
     user: User,
@@ -189,6 +192,9 @@ def increase_gold_funds(
         f"total_limit={total_limit if total_limit is not None else '无限制'}"
     )
 
+    # 活期宝风控仅用于阻止首次开新仓，不影响已有持仓的后续加仓。
+    hqb_new_position_allowed = check_hqb_risk_allowed(user, threshold=HQB_NEW_POSITION_THRESHOLD)
+
     # 优先验证组合总资产是否已超过限制，超过则直接输出原因并返回
     if total_limit is not None and total_metric >= total_limit:
         logger.info(f"组合 {sub_account_name} 当前资产 {total_metric:.2f} 已达到或超过组合上限 {total_limit:.2f}，停止加仓操作。")
@@ -249,6 +255,13 @@ def increase_gold_funds(
             continue
 
         if f_code not in asset_dict:
+            if not hqb_new_position_allowed:
+                logger.info(
+                    f"[黄金多利] 活期宝占比不足 {HQB_NEW_POSITION_THRESHOLD:.1f}%，"
+                    f"跳过新仓初始化建仓: {f_name}({f_code})，init_amount={f_amt}"
+                )
+                continue
+
             if _has_pending_trade(f_code):
                 logger.info(f"目标基金 {f_code} 存在在途交易，跳过初始化建仓")
                 continue

@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import logging
+from collections import Counter
 from typing import List, Dict, Any, Optional, Union
 
 # 动态注入项目根目录，避免 ModuleNotFoundError: No module named 'src'
@@ -51,6 +52,7 @@ def collect_plan_info_for_fund(user: User, fund_code: str, period_type_filter: O
         return []
 
     results: List[Dict[str, Any]] = []
+    available_periods: Counter = Counter()
     for idx, plan in enumerate(plans, start=1):
         try:
             detail_resp = getPlanDetailPro(plan.planId, user)
@@ -64,6 +66,7 @@ def collect_plan_info_for_fund(user: User, fund_code: str, period_type_filter: O
 
         detail: FundPlanDetail = detail_resp.Data
         rp = detail.rationPlan
+        available_periods[(rp.periodType, rp.periodValue)] += 1
         # 周期过滤：默认仅保留 periodType=3（月定投）；None 表示不过滤
         if period_type_filter is not None and rp.periodType != period_type_filter:
             continue
@@ -95,6 +98,12 @@ def collect_plan_info_for_fund(user: User, fund_code: str, period_type_filter: O
     results.sort(key=lambda x: (x.get("periodValue") or 0, x.get("planId")))
     label = "定投计划" if period_type_filter is None else f"{_period_text(period_type_filter, None)}定投计划"
     logger.info(f"基金 {fund_code} 已识别到 {len(results)} 个{label}")
+    if period_type_filter is not None and not results and available_periods:
+        available_text = ", ".join(
+            f"{_period_text(pt, pv)} x{cnt}"
+            for (pt, pv), cnt in sorted(available_periods.items(), key=lambda item: (item[0][0], item[0][1] or 0))
+        )
+        logger.info(f"基金 {fund_code} 当前可用周期分布: {available_text}")
     for r in results:
         label_r = _period_text(r["periodType"], r["periodValue"])
         logger.info(
@@ -361,11 +370,11 @@ def update_smart_investment_info(
 if __name__ == "__main__":
     info = update_smart_investment_info(
         user=DEFAULT_USER,
-        fund_code="021740",
-        buy_strategy_switch=False,
-        amount="10000.0",            # 更新金额
+        fund_code="016702",
+        buy_strategy_switch=True,
+        amount="1000.0",            # 更新金额
         profit_percent="5.0%",      # 更新目标止盈
-        period_type_filter=1,       # 仅更新月定投；传 None 则所有周期
+        period_type_filter=3,       # 3仅更新月定投；传 None 则所有周期
         
         # --- 关键参数配置示例 ---
         renewal=True,               # 【关键】止盈后继续续投（必须显式传True，否则默认结束）

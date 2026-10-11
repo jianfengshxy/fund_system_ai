@@ -23,11 +23,19 @@ def pytest_addoption(parser):
     parser.addoption("--run-integration", action="store_true", default=False)
 
 
-def pytest_ignore_collect(path, config):
-    run_integration = bool(config.getoption("--run-integration")) or os.environ.get("RUN_INTEGRATION") == "1"
+def pytest_ignore_collect(collection_path, path=None, config=None):
+    active_config = config
+    candidate_path = path
+    if active_config is None and hasattr(path, "getoption"):
+        active_config = path
+        candidate_path = collection_path
+    run_integration = False
+    if active_config is not None:
+        run_integration = bool(active_config.getoption("--run-integration"))
+    run_integration = run_integration or os.environ.get("RUN_INTEGRATION") == "1"
     if run_integration:
         return False
-    p = str(path)
+    p = str(candidate_path or collection_path)
     if f"{os.sep}test{os.sep}unit{os.sep}" in p:
         return False
     if any(

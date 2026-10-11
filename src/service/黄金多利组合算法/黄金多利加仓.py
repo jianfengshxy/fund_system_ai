@@ -34,6 +34,7 @@ def increase_gold_funds(
     fund_list: Optional[List[Dict]] = None,
     limit: Optional[float] = None,
     total_limit: Optional[float] = None,
+    hqb_ratio_limit_enabled: bool = True,
 ) -> bool:
     """
     黄金多利组合加仓逻辑：
@@ -193,7 +194,15 @@ def increase_gold_funds(
     )
 
     # 活期宝风控仅用于阻止首次开新仓，不影响已有持仓的后续加仓。
-    hqb_new_position_allowed = check_hqb_risk_allowed(user, threshold=HQB_NEW_POSITION_THRESHOLD)
+    if hqb_ratio_limit_enabled:
+        hqb_new_position_allowed = check_hqb_risk_allowed(user, threshold=HQB_NEW_POSITION_THRESHOLD)
+        logger.info(
+            f"[黄金多利] 组合 {sub_account_name} 启用活期宝新仓限制，阈值={HQB_NEW_POSITION_THRESHOLD:.1f}% ，"
+            f"校验结果={'通过' if hqb_new_position_allowed else '未通过'}"
+        )
+    else:
+        hqb_new_position_allowed = True
+        logger.info(f"[黄金多利] 组合 {sub_account_name} 已关闭活期宝新仓限制，允许跳过活期宝占比校验")
 
     # 优先验证组合总资产是否已超过限制，超过则直接输出原因并返回
     if total_limit is not None and total_metric >= total_limit:
@@ -473,7 +482,8 @@ if __name__ == "__main__":
             amount=test_amount, 
             fund_list=test_fund_list,
             limit=test_limit,
-            total_limit=test_total_limit
+            total_limit=test_total_limit,
+            hqb_ratio_limit_enabled=True,
         )
         
         print(f"--- 测试结束 ---")

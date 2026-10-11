@@ -17,6 +17,27 @@ def _safe_float(value: Any, default: float) -> float:
         return default
 
 
+def _parse_hqb_ratio_limit_enabled(value: Any, *, extra: Optional[Dict[str, Any]] = None) -> bool:
+    if value is None or value == "":
+        return True
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "y", "on"}:
+        return True
+    if text in {"false", "0", "no", "n", "off"}:
+        return False
+
+    logger.warning(
+        f"[多利组合] 参数 hqb_ratio_limit_enabled 取值无效: {value!r}，已按 True 处理（保持活期宝风控开启）",
+        extra=extra,
+    )
+    return True
+
+
 def _extract_fund_code(item: Dict[str, Any]) -> Optional[str]:
     code = (
         item.get("fund_code")
@@ -155,14 +176,18 @@ def increase(event, context):
             init_amount = raw_init_amount
         limit = payload.get("limit")
         total_limit = payload.get("total_limit")
-        raw_fund_list = payload.get("fund_list") or payload.get("funds")
-        fund_list, seen_codes = _normalize_payload_fund_list(raw_fund_list)
         extra = {
             "account": account,
             "sub_account_name": sub_account_name,
             "action": "gold_increase",
             "invoke_source": invoke_source,
         }
+        hqb_ratio_limit_enabled = _parse_hqb_ratio_limit_enabled(
+            payload.get("hqb_ratio_limit_enabled"),
+            extra=extra,
+        )
+        raw_fund_list = payload.get("fund_list") or payload.get("funds")
+        fund_list, seen_codes = _normalize_payload_fund_list(raw_fund_list)
         if not all([account, password, sub_account_name]):
             logger.error("Payload缺少必填参数")
             return
@@ -180,7 +205,8 @@ def increase(event, context):
             extra=extra,
         )
         logger.info(
-            f"[多利组合] 候选基金构建完成: payload={len(seen_codes) - added} 从自选组合新增={added} 去重跳过={skipped} 总计={len(fund_list)}",
+            f"[多利组合] 候选基金构建完成: payload={len(seen_codes) - added} 从自选组合新增={added} 去重跳过={skipped} "
+            f"总计={len(fund_list)} 活期宝新仓限制={'开启' if hqb_ratio_limit_enabled else '关闭'}",
             extra=extra,
         )
         logger.info("[多利组合] 开始执行加仓检查...", extra=extra)
@@ -192,6 +218,7 @@ def increase(event, context):
             fund_list=fund_list,
             limit=limit,
             total_limit=total_limit,
+            hqb_ratio_limit_enabled=hqb_ratio_limit_enabled,
         )
         if success:
             logger.info("[多利组合] 加仓检查/执行成功", extra=extra)

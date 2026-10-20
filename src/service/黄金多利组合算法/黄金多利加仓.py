@@ -21,10 +21,12 @@ from src.service.基金信息.基金信息 import get_all_fund_info
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.estimated_profit_service import calc_estimated_change
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
+from src.service.市场指数.market_index_service import MarketIndexService
 
 logger = get_logger(__name__)
 
 HQB_NEW_POSITION_THRESHOLD = 20.0
+INDEX_HEAT_INCREASE_THRESHOLD = 40.0
 
 def increase_gold_funds(
     user: User,
@@ -62,6 +64,60 @@ def increase_gold_funds(
         # 只使用资产值进行上限检查，忽略浮动盈亏
         asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
         return asset_value
+
+    market_index_service = MarketIndexService()
+    index_heat_cache: Dict[str, Optional[float]] = {}
+
+    def _get_latest_index_heat_score(index_code: Optional[str]) -> Optional[float]:
+        normalized_index_code = str(index_code or "").strip()
+        if not normalized_index_code:
+            return None
+        if normalized_index_code in index_heat_cache:
+            return index_heat_cache[normalized_index_code]
+
+        try:
+            snapshot = market_index_service.get_latest_snapshot(normalized_index_code)
+            heat_score = _safe_float(snapshot.get("heat_score"), None) if snapshot else None
+            index_heat_cache[normalized_index_code] = heat_score
+            return heat_score
+        except Exception as e:
+            logger.warning(f"[指数热度] 查询指数 {normalized_index_code} 最新热度异常: {e}")
+            index_heat_cache[normalized_index_code] = None
+            return None
+
+    def _passes_index_heat_gate(
+        fund_info,
+        fund_name: str,
+        fund_code: str,
+        trigger_label: str,
+    ) -> bool:
+        if not fund_info or getattr(fund_info, "fund_type", None) != "000":
+            return True
+
+        index_code = str(getattr(fund_info, "index_code", "") or "").strip()
+        if not index_code:
+            logger.info(f"[指数热度] {trigger_label}放行: {fund_name}({fund_code}) 为指数基金但无跟踪指数代码")
+            return True
+
+        heat_score = _get_latest_index_heat_score(index_code)
+        if heat_score is None:
+            logger.info(
+                f"[指数热度] {trigger_label}放行: {fund_name}({fund_code}) 跟踪指数 {index_code} 最新热度为空，不启用热度过滤"
+            )
+            return True
+
+        if heat_score <= INDEX_HEAT_INCREASE_THRESHOLD:
+            logger.info(
+                f"[指数热度] {trigger_label}拦截: {fund_name}({fund_code}) 跟踪指数 {index_code} "
+                f"最新资金热度 {heat_score:.2f} <= {INDEX_HEAT_INCREASE_THRESHOLD:.2f}"
+            )
+            return False
+
+        logger.info(
+            f"[指数热度] {trigger_label}通过: {fund_name}({fund_code}) 跟踪指数 {index_code} "
+            f"最新资金热度 {heat_score:.2f} > {INDEX_HEAT_INCREASE_THRESHOLD:.2f}"
+        )
+        return True
 
     # 获取子账户编号
     sub_account_no = getSubAccountNoByName(user, sub_account_name)
@@ -343,6 +399,9 @@ def increase_gold_funds(
         
         if should_increase:
             logger.info(f"持仓基金 {f_name}({f_code}) {increase_reason}，触发加仓判定")
+
+            if not _passes_index_heat_gate(fund_info, f_name, f_code, "加仓"):
+                continue
             
             # 检查是否跌幅过大（小于-5.0%），如果是则跳过加仓，防止单边下跌
             if estimated_profit_rate < -5.0:
@@ -450,10 +509,10 @@ if __name__ == "__main__":
         test_user.password = "sWX15706"
         
         # 2. 设置测试参数
-        test_sub_account = "智投平台"
+        test_sub_account = "大数定律"
         test_amount = 10000.0
-        test_limit = 50000.0
-        test_total_limit = 500000.0
+        test_limit = 100000.0
+        test_total_limit = 1000000.0
         test_fund_list = [ 
             { 
                 "fund_code": "011707", 

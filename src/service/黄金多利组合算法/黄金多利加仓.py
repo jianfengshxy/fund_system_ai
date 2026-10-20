@@ -26,7 +26,7 @@ from src.service.市场指数.market_index_service import MarketIndexService
 logger = get_logger(__name__)
 
 HQB_NEW_POSITION_THRESHOLD = 20.0
-INDEX_HEAT_INCREASE_THRESHOLD = 40.0
+INDEX_HEAT_INCREASE_THRESHOLD = 20.0
 
 def increase_gold_funds(
     user: User,

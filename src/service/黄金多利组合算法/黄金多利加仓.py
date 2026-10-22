@@ -355,7 +355,7 @@ def increase_gold_funds(
                     # 触发条件（两个必须同时成立）：
                     #   1) is_deep_drawdown    : 回撤 > 5%（estimated_profit_rate < -5.0）
                     #   2) has_reversal_signal : 周线 > 0、月线 > 0、持仓市值 > 0，且净值站上 5 日均线
-                    # 加仓额度：当前持仓市值 × 50%，但回撤超过 -20% 时放弃抄底
+                    # 加仓额度：当前持仓市值 × 50%，但回撤超过 -10% 时放弃抄底
                     is_deep_drawdown = estimated_profit_rate < -5.0
                     has_reversal_signal = (
                         week_growth_rate > 0.0
@@ -365,7 +365,7 @@ def increase_gold_funds(
                     )
 
                     if is_deep_drawdown and has_reversal_signal:
-                        if estimated_profit_rate >= -20.0:
+                        if estimated_profit_rate >= -10.0:
                             buy_ratio = 0.5
                         else:
                             logger.info(

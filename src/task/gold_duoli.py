@@ -38,6 +38,43 @@ def _parse_hqb_ratio_limit_enabled(value: Any, *, extra: Optional[Dict[str, Any]
     return True
 
 
+def _parse_index_heat_filter_enabled(value: Any, *, extra: Optional[Dict[str, Any]] = None) -> bool:
+    if value is None or value == "":
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "y", "on"}:
+        return True
+    if text in {"false", "0", "no", "n", "off"}:
+        return False
+
+    logger.warning(
+        f"[多利组合] 参数 index_heat_filter_enabled 取值无效: {value!r}，已按 False 处理（保持资金热度过滤关闭）",
+        extra=extra,
+    )
+    return False
+
+
+def _parse_optional_bool(value: Any) -> Optional[bool]:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "y", "on"}:
+        return True
+    if text in {"false", "0", "no", "n", "off"}:
+        return False
+    return None
+
+
 def _extract_fund_code(item: Dict[str, Any]) -> Optional[str]:
     code = (
         item.get("fund_code")
@@ -91,6 +128,14 @@ def _normalize_payload_fund_list(raw: Any) -> Tuple[List[Dict[str, Any]], Set[st
             normalized["init_amount"] = _safe_float(raw_init, 0.0)
         if "limit" in item:
             normalized["limit"] = _safe_float(item.get("limit"), 0.0)
+        raw_index_heat_filter_enabled = (
+            item.get("index_heat_filter_enabled")
+            if "index_heat_filter_enabled" in item
+            else item.get("indexHeatFilterEnabled")
+        )
+        parsed_index_heat_filter_enabled = _parse_optional_bool(raw_index_heat_filter_enabled)
+        if parsed_index_heat_filter_enabled is not None:
+            normalized["index_heat_filter_enabled"] = parsed_index_heat_filter_enabled
         if "stop_rate" in item:
             normalized["stop_rate"] = item.get("stop_rate")
         result.append(normalized)
@@ -186,6 +231,10 @@ def increase(event, context):
             payload.get("hqb_ratio_limit_enabled"),
             extra=extra,
         )
+        index_heat_filter_enabled = _parse_index_heat_filter_enabled(
+            payload.get("index_heat_filter_enabled"),
+            extra=extra,
+        )
         raw_fund_list = payload.get("fund_list") or payload.get("funds")
         fund_list, seen_codes = _normalize_payload_fund_list(raw_fund_list)
         if not all([account, password, sub_account_name]):
@@ -206,7 +255,8 @@ def increase(event, context):
         )
         logger.info(
             f"[多利组合] 候选基金构建完成: payload={len(seen_codes) - added} 从自选组合新增={added} 去重跳过={skipped} "
-            f"总计={len(fund_list)} 活期宝新仓限制={'开启' if hqb_ratio_limit_enabled else '关闭'}",
+            f"总计={len(fund_list)} 活期宝新仓限制={'开启' if hqb_ratio_limit_enabled else '关闭'} "
+            f"资金热度过滤={'开启' if index_heat_filter_enabled else '关闭'}",
             extra=extra,
         )
         logger.info("[多利组合] 开始执行加仓检查...", extra=extra)
@@ -219,6 +269,7 @@ def increase(event, context):
             limit=limit,
             total_limit=total_limit,
             hqb_ratio_limit_enabled=hqb_ratio_limit_enabled,
+            index_heat_filter_enabled=index_heat_filter_enabled,
         )
         if success:
             logger.info("[多利组合] 加仓检查/执行成功", extra=extra)

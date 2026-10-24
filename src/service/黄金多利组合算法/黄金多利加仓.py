@@ -21,10 +21,13 @@ from src.service.基金信息.基金信息 import get_all_fund_info
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.estimated_profit_service import calc_estimated_change
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
+from src.API.市场指数.指数资金热度与价格走势 import get_index_price_flow
 
 logger = get_logger(__name__)
 
 HQB_NEW_POSITION_THRESHOLD = 20.0
+INDEX_HEAT_FILTER_MIN = 20.0
+INDEX_HEAT_FILTER_MAX = 100.0
 
 def increase_gold_funds(
     user: User,
@@ -35,6 +38,7 @@ def increase_gold_funds(
     limit: Optional[float] = None,
     total_limit: Optional[float] = None,
     hqb_ratio_limit_enabled: bool = True,
+    index_heat_filter_enabled: bool = False,
 ) -> bool:
     """
     黄金多利组合加仓逻辑：
@@ -57,6 +61,20 @@ def increase_gold_funds(
             return float(raw_limit)
         except Exception:
             return default_val
+
+    def _normalize_optional_bool(raw_value) -> Optional[bool]:
+        if raw_value in (None, ""):
+            return None
+        if isinstance(raw_value, bool):
+            return raw_value
+        if isinstance(raw_value, (int, float)):
+            return bool(raw_value)
+        text = str(raw_value).strip().lower()
+        if text in {"true", "1", "yes", "y", "on"}:
+            return True
+        if text in {"false", "0", "no", "n", "off"}:
+            return False
+        return None
 
     def _get_asset_limit_metric(asset) -> float:
         # 只使用资产值进行上限检查，忽略浮动盈亏
@@ -115,12 +133,16 @@ def increase_gold_funds(
             resolved_limit = portfolio_limit
             if "limit" in item:
                 resolved_limit = _normalize_limit(item.get("limit"), portfolio_limit)
+            fund_index_heat_filter_enabled = _normalize_optional_bool(
+                item.get("index_heat_filter_enabled")
+            )
             normalized_funds.append({
                 "fund_code": str(fund_code),
                 "amount": fund_amount,
                 "init_amount": fund_init_amount,
                 # 没有配置limit时返回None，表示不做限制
                 "limit": resolved_limit,
+                "index_heat_filter_enabled": fund_index_heat_filter_enabled,
             })
 
     # if not normalized_funds:
@@ -177,15 +199,91 @@ def increase_gold_funds(
     # 建立 payload 中基金的 amount 映射，用于加仓时取金额
     payload_amt_dict = {f["fund_code"]: f["amount"] for f in normalized_funds}
     payload_limit_dict = {f["fund_code"]: f.get("limit") for f in normalized_funds}
+    payload_index_heat_filter_dict = {
+        f["fund_code"]: f.get("index_heat_filter_enabled") for f in normalized_funds
+    }
     total_limit = _normalize_limit(total_limit)
     fund_metric_dict = {f_code: _get_asset_limit_metric(asset) for f_code, asset in asset_dict.items()}
     total_metric = sum(fund_metric_dict.values())
+    index_heat_cache: Dict[str, Optional[float]] = {}
 
     def _get_effective_fund_limit(fund_code: str) -> Optional[float]:
         fund_limit = payload_limit_dict.get(fund_code)
         if fund_limit is not None:
             return fund_limit
         return portfolio_limit
+
+    def _get_effective_index_heat_filter_enabled(fund_code: str) -> bool:
+        fund_level_switch = payload_index_heat_filter_dict.get(fund_code)
+        if fund_level_switch is not None:
+            return bool(fund_level_switch)
+        return index_heat_filter_enabled
+
+    def _get_latest_realtime_index_heat(index_code: str) -> Optional[float]:
+        if not index_code:
+            return None
+        if index_code in index_heat_cache:
+            return index_heat_cache[index_code]
+
+        try:
+            resp = get_index_price_flow(user, index_code=index_code, range_type="w")
+            latest_score = None
+            if resp.success and resp.items:
+                for item in reversed(resp.items):
+                    if item.XLFLOW_SCORE is not None:
+                        latest_score = float(item.XLFLOW_SCORE)
+                        break
+            index_heat_cache[index_code] = latest_score
+            return latest_score
+        except Exception as exc:
+            logger.warning(f"获取指数 {index_code} 实时资金热度失败: {exc}")
+            index_heat_cache[index_code] = None
+            return None
+
+    def _passes_index_heat_filter(
+        *,
+        fund_code: str,
+        fund_name: str,
+        fund_info,
+        buy_context: str,
+    ) -> bool:
+        if not _get_effective_index_heat_filter_enabled(fund_code):
+            return True
+
+        if not fund_info:
+            logger.info(f"持仓基金 {fund_name}({fund_code}) 未获取到基金信息，跳过资金热度过滤")
+            return True
+
+        fund_type = str(getattr(fund_info, "fund_type", "") or "").strip()
+        index_code = str(getattr(fund_info, "index_code", "") or "").strip()
+        if fund_type != "000" or not index_code:
+            logger.info(
+                f"持仓基金 {fund_name}({fund_code}) 非有效指数基金或无跟踪指数，"
+                f"跳过资金热度过滤（fund_type={fund_type or '-'}, index_code={index_code or '-'}）"
+            )
+            return True
+
+        latest_heat_score = _get_latest_realtime_index_heat(index_code)
+        if latest_heat_score is None:
+            logger.info(
+                f"持仓基金 {fund_name}({fund_code}) 跟踪指数 {index_code} 当前无资金热度值，"
+                f"跳过资金热度过滤"
+            )
+            return True
+
+        if INDEX_HEAT_FILTER_MIN <= latest_heat_score <= INDEX_HEAT_FILTER_MAX:
+            logger.info(
+                f"持仓基金 {fund_name}({fund_code}) {buy_context} 通过资金热度过滤："
+                f"index_code={index_code}, heat_score={latest_heat_score:.2f}"
+            )
+            return True
+
+        logger.info(
+            f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过资金热度过滤："
+            f"index_code={index_code}, heat_score={latest_heat_score:.2f}, "
+            f"要求范围=[{INDEX_HEAT_FILTER_MIN:.0f}, {INDEX_HEAT_FILTER_MAX:.0f}]"
+        )
+        return False
 
     logger.info(
         f"组合 {sub_account_name} 当前资产限制口径值: {total_metric:.2f}, "
@@ -379,6 +477,13 @@ def increase_gold_funds(
                             f"estimated_profit_rate={estimated_profit_rate:.2f}%, week={week_growth_rate:.2f}%, "
                             f"month={month_growth_rate:.2f}%, buy_ratio={buy_ratio*100:.0f}%, buy_amount={buy_amount:.2f}"
                         )
+                        if not _passes_index_heat_filter(
+                            fund_code=f_code,
+                            fund_name=f_name,
+                            fund_info=fund_info,
+                            buy_context="深度回撤反弹加仓",
+                        ):
+                            continue
                         if not _can_submit_buy(f_code, f_name, buy_amount):
                             continue
                         res = commit_order(user, sub_account_no, f_code, buy_amount)
@@ -418,6 +523,14 @@ def increase_gold_funds(
                 f"金额: {buy_amount}（base_amt={base_amt}，倍率={buy_multiplier}，预估收益率 {estimated_profit_rate:.2f}%）"
             )
 
+            if not _passes_index_heat_filter(
+                fund_code=f_code,
+                fund_name=f_name,
+                fund_info=fund_info,
+                buy_context="常规加仓",
+            ):
+                continue
+
             if not _can_submit_buy(f_code, f_name, buy_amount):
                 continue
             
@@ -448,7 +561,7 @@ if __name__ == "__main__":
         test_user = DEFAULT_USER
         test_user.account = "13918199137"
         test_user.password = "sWX15706"
-        
+        index_heat_filter_enabled = True
         # 2. 设置测试参数
         test_sub_account = "大数定律"
         test_amount = 10000.0
@@ -483,6 +596,7 @@ if __name__ == "__main__":
             fund_list=test_fund_list,
             limit=test_limit,
             total_limit=test_total_limit,
+            index_heat_filter_enabled=index_heat_filter_enabled,
             hqb_ratio_limit_enabled=True,
         )
         

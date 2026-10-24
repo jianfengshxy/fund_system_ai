@@ -373,14 +373,6 @@ def increase_gold_funds(
                 logger.info(f"目标基金 {f_code} 存在在途交易，跳过初始化建仓")
                 continue
 
-            if not _passes_index_heat_filter(
-                fund_code=f_code,
-                fund_name=f_name,
-                fund_info=get_all_fund_info(user, f_code),
-                buy_context="初始化建仓",
-            ):
-                continue
-
             if not _can_submit_buy(f_code, f_name, f_amt):
                 continue
                 

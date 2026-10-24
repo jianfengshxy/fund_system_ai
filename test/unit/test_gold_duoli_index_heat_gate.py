@@ -259,7 +259,7 @@ def test_fund_level_heat_gate_overrides_portfolio_level(monkeypatch):
     assert commit_calls == [("sub-001", "000001", 2000.0)]
 
 
-def test_init_buy_respects_heat_gate(monkeypatch):
+def test_init_buy_ignores_heat_gate(monkeypatch):
     from src.service.黄金多利组合算法 import 黄金多利加仓 as service_module
 
     commit_calls = []
@@ -291,48 +291,6 @@ def test_init_buy_respects_heat_gate(monkeypatch):
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利初始化",
-        amount=2000.0,
-        init_amount=3000.0,
-        fund_list=[{"fund_code": "000001", "amount": 2000.0, "init_amount": 3000.0}],
-        index_heat_filter_enabled=True,
-    )
-
-    assert result is True
-    assert commit_calls == []
-
-
-def test_init_buy_allows_when_heat_passes(monkeypatch):
-    from src.service.黄金多利组合算法 import 黄金多利加仓 as service_module
-
-    commit_calls = []
-    monkeypatch.setattr(service_module, "getSubAccountNoByName", lambda user, sub_account_name: "sub-001")
-    monkeypatch.setattr(service_module, "get_sub_account_asset_by_name", lambda user, sub_account_name: [])
-    monkeypatch.setattr(service_module, "has_buy_submission_on_dates", lambda *args, **kwargs: False)
-    monkeypatch.setattr(service_module, "check_hqb_risk_allowed", lambda user, threshold=None: True)
-    monkeypatch.setattr(
-        service_module,
-        "get_all_fund_info",
-        lambda user, fund_code: _build_fund_info(fund_name="新仓指数基金"),
-    )
-    monkeypatch.setattr(
-        service_module,
-        "get_index_price_flow",
-        lambda user, index_code, range_type="w": SimpleNamespace(
-            success=True,
-            items=[SimpleNamespace(PDATE="2026-10-24", XLFLOW_SCORE=30.0)],
-        ),
-    )
-    monkeypatch.setattr(
-        service_module,
-        "commit_order",
-        lambda user, sub_account_no, fund_code, amount: commit_calls.append((sub_account_no, fund_code, amount))
-        or SimpleNamespace(amount=amount, busin_serial_no="order-init-002"),
-    )
-
-    user = SimpleNamespace(account="13918199137")
-    result = service_module.increase_gold_funds(
-        user=user,
-        sub_account_name="黄金多利初始化放行",
         amount=2000.0,
         init_amount=3000.0,
         fund_list=[{"fund_code": "000001", "amount": 2000.0, "init_amount": 3000.0}],

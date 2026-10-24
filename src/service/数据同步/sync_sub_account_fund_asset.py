@@ -34,6 +34,7 @@ def create_table_if_not_exists():
         fund_code VARCHAR(32) NOT NULL COMMENT '基金代码',
         fund_name VARCHAR(128) COMMENT '基金名称',
         fund_type VARCHAR(32) COMMENT '基金类型',
+        nav_date DATE NULL COMMENT '该基金自身净值日期（接口来源，可能滞后于 date）',
         asset_value DECIMAL(20, 4) COMMENT '资产市值',
         hold_profit DECIMAL(20, 4) COMMENT '持有收益',
         hold_profit_rate DECIMAL(10, 4) COMMENT '持有收益率(%)',
@@ -59,7 +60,15 @@ def create_table_if_not_exists():
         if not cursor.fetchone():
             cursor.execute("ALTER TABLE user_sub_account_fund_asset_daily ADD COLUMN sub_account_name VARCHAR(128) COMMENT '子账户名称' AFTER customer_no")
             logger.info("Added column sub_account_name to user_sub_account_fund_asset_daily")
-            
+
+        # Check and add nav_date column if missing (2026-09-17 新增)
+        # date = 本次同步的业务日（同一子账户本批记录统一）；nav_date = 该基金自身的净值日期，
+        # 二者可能相差一天（QDII / LOF 净值披露滞后），故分开存储。
+        cursor.execute("SHOW COLUMNS FROM user_sub_account_fund_asset_daily LIKE 'nav_date'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE user_sub_account_fund_asset_daily ADD COLUMN nav_date DATE NULL COMMENT '该基金自身净值日期（接口来源，可能滞后于 date）' AFTER fund_type")
+            logger.info("Added column nav_date to user_sub_account_fund_asset_daily")
+
         conn.commit()
         cursor.close()
         db.disconnect(conn)
@@ -141,7 +150,10 @@ def sync_sub_account_fund_asset_daily(user: User):
                         nav_date = parse_nav_date(asset.nav_date)
                         
                         record = {
+                            # date 稍后统一改写为"本子账户本次同步的业务日"；
+                            # 先暂存各基金自身的净值日期，见下方 biz_date 计算。
                             "date": nav_date,
+                            "nav_date": nav_date,
                             "customer_no": user.customer_no,
                             "sub_account_name": sub_account_name,
                             "sub_account_no": sub_account_no,
@@ -170,20 +182,44 @@ def sync_sub_account_fund_asset_daily(user: User):
             logger.warning("No sub-account fund asset records to save.")
             return
 
+        # ---- 统一业务日（2026-09-17 根因修复）----
+        # 旧实现把行 date 直接取该基金接口返回的 nav_date，而行主键是
+        # (date, customer_no, sub_account_no, fund_code)。一旦某只基金的 nav_date 滞后一天
+        # （QDII / LOF 净值披露滞后、新申购在途），ON DUPLICATE KEY UPDATE 就会把它写成
+        # **前一日的行** → 当日快照缺这只基金、前一日快照被"未来值"覆盖。实测影响 300 行 / 66 组，
+        # 全部集中在 QDII 与 LOF（如 019449 摩根日本精选(QDII)C 命中 244 次）。
+        # 修复：同一子账户本批记录统一用"业务日"= max(nav_date)。净值日期只会滞后不会超前，
+        #      故本批最大值即本次要快照的交易日；各基金自身 nav_date 另存一列以备追溯。
+        biz_by_sub = {}
+        for r in records:
+            k = r["sub_account_no"]
+            prev = biz_by_sub.get(k)
+            biz_by_sub[k] = r["nav_date"] if prev is None else max(prev, r["nav_date"])
+        lagged = 0
+        for r in records:
+            if r["nav_date"] != biz_by_sub[r["sub_account_no"]]:
+                lagged += 1
+            r["date"] = biz_by_sub[r["sub_account_no"]]
+        logger.info(
+            f"业务日统一: {len(biz_by_sub)} 个子账户, 业务日 "
+            f"{ {k: str(v) for k, v in biz_by_sub.items()} }, 其中 nav_date 滞后于业务日的记录 {lagged} 条"
+        )
+
         db = DatabaseConnection()
         conn = db.get_connection()
         cursor = conn.cursor()
         
         sql = """
         INSERT INTO user_sub_account_fund_asset_daily 
-        (date, customer_no, sub_account_name, sub_account_no, fund_code, fund_name, fund_type, asset_value, 
+        (date, customer_no, sub_account_name, sub_account_no, fund_code, fund_name, fund_type, nav_date, asset_value, 
          hold_profit, hold_profit_rate, constant_profit, constant_profit_rate, 
          daily_profit, total_profit, fund_nav, available_vol, on_way_count)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
         sub_account_name = VALUES(sub_account_name),
         fund_name = VALUES(fund_name),
         fund_type = VALUES(fund_type),
+        nav_date = VALUES(nav_date),
         asset_value = VALUES(asset_value),
         hold_profit = VALUES(hold_profit),
         hold_profit_rate = VALUES(hold_profit_rate),
@@ -207,6 +243,7 @@ def sync_sub_account_fund_asset_daily(user: User):
                 r["fund_code"],
                 r["fund_name"],
                 r["fund_type"],
+                r["nav_date"],
                 r["asset_value"],
                 r["hold_profit"],
                 r["hold_profit_rate"],

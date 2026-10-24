@@ -13,18 +13,43 @@ if root_dir not in sys.path:
 from src.domain.user.User import User
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
-from src.service.资产管理.get_fund_asset_detail import (
-    get_sub_account_asset_by_name,
-    get_fund_asset_detail,
-)
+from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
 from src.service.交易管理.购买基金 import commit_order
 from src.common.constant import DEFAULT_USER
-from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.trade_time_service import is_trading_time
 from src.common.logger import get_logger
+from src.service.公共服务.estimated_profit_service import calc_estimated_change
+from src.API.登录接口.login import ensure_user_fresh
 
 logger = get_logger(__name__)
+
+# 组合加仓策略参数
+DEFAULT_BUY_AMOUNT = 10000.0  # 未在入参 fund_list 指定金额时的默认单笔加仓金额（元）
+POSITION_RATIO_LIMIT_PCT = 15.0  # 单基金仓位占比上限（单基金市值/组合总市值 * 100）
+POSITION_RATIO_LIMIT_MIN_FUND_COUNT = 5  # 仅当组合持仓基金数达到该阈值时，才启用“仓位占比上限”拦截
+PORTFOLIO_FUND_COUNT_KEYS = (
+    "total_count",
+    "totalCount",
+    "TotalCount",
+    "HoldFundCount",
+    "FundCount",
+    "FundCnt",
+    "FundNum",
+    "HoldFundNum",
+)
+
+# 黑名单基金代码列表 - 这些基金将被跳过不加仓
+BLACKLIST_FUND_CODES = [
+    # 示例："000001",  # 基金名称
+    # "006105",  # 宏利印度股票
+    "020412",  # 永赢中证沪港深黄金产业股票ETF发起联接C
+    "011631",  # 东财有色增强C
+    "004433",  # 南方有色金属ETF联接C   
+    "012769",  # 华夏中证动漫游戏ETF发起联接C
+    "017193",  # 天弘中证工业有色金属主题ETF发起联接C
+    "013292" # 富国中证智能汽车(LOF)C 
+]
 
 
 def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] = None) -> bool:
@@ -49,12 +74,15 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 fund_config_map[code] = item
 
     # 获取组合资产，遍历持仓基金
-    asset_details = get_sub_account_asset_by_name(user, sub_account_name) or []
+    fresh_user = ensure_user_fresh(user, 600)
+    asset_details, asset_meta = get_asset_list_of_sub(fresh_user, sub_account_no, with_meta=True)
+    if not asset_details and isinstance(asset_meta, dict) and asset_meta.get("token_error"):
+        fresh_user = ensure_user_fresh(user, 600, True)
+        asset_details, asset_meta = get_asset_list_of_sub(fresh_user, sub_account_no, with_meta=True)
+    asset_details = asset_details or []
     if not asset_details:
         logger.info(f"组合 {sub_account_name} 无持仓，跳过加仓")
         return False
-        
-    logger.info(f"组合 {sub_account_name} 当前持有基金数: {len(asset_details)}")
 
     # 辅助：安全数值转换与 5 日均值门槛（无估值时用上一交易日净值）
     def _safe_float(v, default=0.0):
@@ -66,7 +94,33 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             return default
 
     success_count = 0
-    default_amount = 10000.0
+    summary = asset_meta.get("summary", {}) if isinstance(asset_meta, dict) else {}
+    sub_preview = summary.get("SubAssetPreview", {}) if isinstance(summary, dict) else {}
+    total_portfolio_asset_value = _safe_float(summary.get("TotalAssetValue") or sub_preview.get("AssetValue"), 0.0)
+
+    portfolio_fund_count = None
+    for k in PORTFOLIO_FUND_COUNT_KEYS:
+        v = None
+        if isinstance(sub_preview, dict):
+            v = sub_preview.get(k)
+        if v is None and isinstance(summary, dict):
+            v = summary.get(k)
+        if v is None:
+            continue
+        s = str(v).strip()
+        if s.isdigit():
+            portfolio_fund_count = int(s)
+            break
+    if portfolio_fund_count is None:
+        portfolio_fund_count = len(asset_details)
+
+    logger.info(f"组合 {sub_account_name} 当前持有基金数: {portfolio_fund_count}（明细条数={len(asset_details)}）")
+
+    if portfolio_fund_count < POSITION_RATIO_LIMIT_MIN_FUND_COUNT:
+        logger.info(
+            f"组合 {sub_account_name} 持仓基金数={portfolio_fund_count} < {POSITION_RATIO_LIMIT_MIN_FUND_COUNT}，"
+            f"单基金仓位占比 {POSITION_RATIO_LIMIT_PCT:.0f}% 拦截不启用"
+        )
 
     for asset in asset_details:
         try:
@@ -76,13 +130,18 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             if not fund_code:
                 continue
 
+            # 黑名单检查：如果基金在黑名单中，跳过加仓
+            if fund_code in BLACKLIST_FUND_CODES:
+                logger.info(f"跳过 {fund_name}({fund_code}): 该基金在黑名单中，被禁止加仓")
+                continue
+
             # 确定加仓金额
             config = fund_config_map.get(fund_code)
             if config:
-                fund_amount = config.get('amount', default_amount)
+                fund_amount = config.get('amount', DEFAULT_BUY_AMOUNT)
                 logger.info(f"基金 {fund_name}({fund_code}) 在输入列表中，使用指定金额: {fund_amount}")
             else:
-                fund_amount = default_amount
+                fund_amount = DEFAULT_BUY_AMOUNT
                 logger.info(f"基金 {fund_name}({fund_code}) 不在输入列表中，使用默认金额: {fund_amount}")
 
             if float(fund_amount) <= 0:
@@ -90,7 +149,9 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 continue
 
             fund_info = get_all_fund_info(user, fund_code)
-            # 更新 fund_name 以防 asset 中没有
+            if not fund_info:
+                logger.warning(f"未获取到基金信息，跳过该基金继续处理下一条: {fund_name}({fund_code})")
+                continue
             fund_name = getattr(fund_info, 'fund_name', fund_name)
             logger.info(f"基金信息：{fund_name}({fund_code})，可申购：{getattr(fund_info, 'can_purchase', None)}")
 
@@ -129,7 +190,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             filter_checks = []
 
             current_profit_rate = _safe_float(getattr(asset, 'constant_profit_rate', None), 0.0)
-            estimated_change = _safe_float(getattr(fund_info, 'estimated_change', None), 0.0)
+            estimated_change, label_est = calc_estimated_change(fund_info)
             estimated_profit_rate = current_profit_rate + estimated_change
             safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
             times = safe_asset_value / float(fund_amount)
@@ -176,6 +237,19 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 continue
             # 记录五日均值检查通过
             filter_checks.append("✓ 五日均值检查通过（估算净值 > 5日均值）")
+
+            if portfolio_fund_count >= POSITION_RATIO_LIMIT_MIN_FUND_COUNT and total_portfolio_asset_value > 0.0:
+                position_ratio = safe_asset_value / total_portfolio_asset_value * 100.0
+                if position_ratio > POSITION_RATIO_LIMIT_PCT:
+                    logger.info(
+                        f"跳过 {fund_name}({fund_code}): 单基金仓位占比过高 {position_ratio:.2f}% > {POSITION_RATIO_LIMIT_PCT:.2f}% "
+                        f"(单基金市值={safe_asset_value:,.2f}, 组合总市值={total_portfolio_asset_value:,.2f})"
+                    )
+                    filter_checks.append(f"✗ 单基金仓位占比拦截（{position_ratio:.2f}% > {POSITION_RATIO_LIMIT_PCT:.2f}%）")
+                    logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 未通过条件:")
+                    for check in filter_checks:
+                        logger.info(f"  {check}")
+                    continue
 
             # 回撤不足直接跳过（阈值：-1%）
             if estimated_profit_rate >= -1.0:
@@ -332,25 +406,25 @@ if __name__ == "__main__":
         # 测试1：海外基金组合
         increase_funds(
             DEFAULT_USER,
-            "海外基金组合",
+            "快速止盈",
             fund_list=[
                 # {"fund_code": "016702", "fund_name": "银华海外数字经济量化选股混合发起式(QDII)C", "amount": 5000.0},
                 # {"fund_code": "006105", "fund_name": "宏利印度股票(QDII)", "amount": 5000.0},
                 # {"fund_code": "161226", "fund_name": "国投瑞银白银期货(LOF)A", "amount": 5000.0},
                 # {"fund_code": "017873", "fund_name": "汇添富香港优势精选混合(QDII)C", "amount": 5000.0},
-                {"fund_code": "100055", "fund_name": "富国全球科技互联网股票(QDII)A", "amount": 5000.0}
+                # {"fund_code": "100055", "fund_name": "富国全球科技互联网股票(QDII)A", "amount": 5000.0}
             ]
         )
         
         # 测试2：快速止盈组合（针对用户反馈的鹏华空天军工）
         # 用户反馈：资产5000多，fund_amount=10000，应触发加仓
-        increase_funds(
-            DEFAULT_USER,
-            "快速止盈",
-            fund_list=[
-                {"fund_code": "010364", "fund_name": "鹏华空天军工指数(LOF)C", "amount": 10000.0}
-            ]
-        )
+        # increase_funds(
+        #     DEFAULT_USER,
+        #     "快速止盈",
+        #     fund_list=[
+        #         {"fund_code": "010364", "fund_name": "鹏华空天军工指数(LOF)C", "amount": 10000.0}
+        #     ]
+        # )
         
         logger.info(f"用户 {DEFAULT_USER.customer_name} 加仓操作完成")
     except Exception as e:

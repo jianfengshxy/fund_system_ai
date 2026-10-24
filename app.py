@@ -20,6 +20,7 @@ from src.API.基金信息.FundInfo import getFundInfo, updateFundEstimatedValue
 from src.API.基金信息.FundRank import get_fund_volatility, get_nav_rank
 from src.domain.fund.fund_info import FundInfo
 from src.API.登录接口.login import ensure_user_fresh
+from src.db.database_connection import DatabaseConnection
 
 # 初始化 Flask 应用
 app = Flask(__name__, static_folder='static', static_url_path='')
@@ -29,6 +30,7 @@ CORS(app)  # 开启跨域支持，允许 Vue 前端访问 API
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 _executor = ThreadPoolExecutor(max_workers=8)
 _cache = {}
+_db = DatabaseConnection()
 
 def _get_sub_accounts_cached():
     k = 'sub_accounts'
@@ -75,6 +77,70 @@ def _get_assets_cached(portfolio_name):
     _cache[k] = (time.time(), lst)
     return lst
 
+
+def _normalize_trade_date(value):
+    if hasattr(value, 'isoformat'):
+        return value.isoformat()
+    return value
+
+
+def _get_latest_index_snapshot(index_code=None, fund_code=None):
+    cache_key = f"index_snapshot:{index_code or ''}:{fund_code or ''}"
+    cached = _cache.get(cache_key)
+    if cached and cached[0] > time.time() - 30:
+        return cached[1]
+
+    snapshot = None
+    if index_code:
+        rows = _db.execute_query(
+            """
+            SELECT
+                s.index_code,
+                s.index_name,
+                d.trade_date,
+                d.heat_score
+            FROM market_index_static s
+            LEFT JOIN market_index_daily d
+              ON d.index_code = s.index_code
+             AND d.trade_date = (
+                SELECT MAX(d2.trade_date)
+                FROM market_index_daily d2
+                WHERE d2.index_code = s.index_code
+             )
+            WHERE s.index_code = %s
+            LIMIT 1
+            """,
+            (index_code,),
+        )
+        snapshot = rows[0] if rows else None
+
+    if snapshot is None and fund_code:
+        rows = _db.execute_query(
+            """
+            SELECT
+                s.index_code,
+                s.index_name,
+                d.trade_date,
+                d.heat_score
+            FROM market_index_static s
+            LEFT JOIN market_index_daily d
+              ON d.index_code = s.index_code
+             AND d.trade_date = (
+                SELECT MAX(d2.trade_date)
+                FROM market_index_daily d2
+                WHERE d2.index_code = s.index_code
+             )
+            WHERE s.track_fund_code = %s
+            ORDER BY (d.heat_score IS NOT NULL) DESC, d.trade_date DESC, s.index_code
+            LIMIT 1
+            """,
+            (fund_code,),
+        )
+        snapshot = rows[0] if rows else None
+
+    _cache[cache_key] = (time.time(), snapshot)
+    return snapshot
+
 @app.route('/', methods=['GET'])
 def index():
     return app.send_static_file('index.html')
@@ -105,15 +171,30 @@ def get_portfolio_details(portfolio_name):
             def _enrich(a):
                 fi = getFundInfo(DEFAULT_USER, a.fund_code)
                 if fi:
-                    # QDII 基金 (type='a') 或 名字包含 "QDII" 估值不准，直接设为 0.0
-                    if (hasattr(fi, 'fund_type') and fi.fund_type == 'a') or \
-                       (hasattr(fi, 'fund_name') and "QDII" in fi.fund_name.upper()):
+                    # 场内基金 (type='a') 估值不可靠，直接设为 0.0；
+                    # 其余基金（含 QDII/指数型）走统一估值入口，无重仓股估值时回退跟踪指数估算
+                    if hasattr(fi, 'fund_type') and fi.fund_type == 'a':
                         a.estimated_change = 0.0
                     else:
                         ufi = updateFundEstimatedValue(fi)
                         a.estimated_change = ufi.estimated_change if ufi else 0.0
+                    index_snapshot = _get_latest_index_snapshot(
+                        getattr(fi, 'index_code', None),
+                        a.fund_code,
+                    )
+                    if index_snapshot:
+                        a.tracked_index_code = index_snapshot.get('index_code')
+                        a.tracked_index_name = index_snapshot.get('index_name')
+                        a.latest_heat_score = index_snapshot.get('heat_score')
+                        a.latest_heat_trade_date = _normalize_trade_date(index_snapshot.get('trade_date'))
                 else:
                     a.estimated_change = 0.0
+                    index_snapshot = _get_latest_index_snapshot(fund_code=a.fund_code)
+                    if index_snapshot:
+                        a.tracked_index_code = index_snapshot.get('index_code')
+                        a.tracked_index_name = index_snapshot.get('index_name')
+                        a.latest_heat_score = index_snapshot.get('heat_score')
+                        a.latest_heat_trade_date = _normalize_trade_date(index_snapshot.get('trade_date'))
                 return a
 
             futures = [_executor.submit(_enrich, a) for a in asset_details_list]
@@ -183,9 +264,8 @@ def get_fund_detail_api(fund_code):
         if not fi:
             return jsonify({'error': '未找到基金信息'}), 404
         
-        # 获取实时估值信息
-        if not ((hasattr(fi, 'fund_type') and fi.fund_type == 'a') or \
-                (hasattr(fi, 'fund_name') and "QDII" in fi.fund_name.upper())):
+        # 获取实时估值信息（场内基金 type='a' 估值不可靠，跳过；QDII/指数型走统一估值入口）
+        if not (hasattr(fi, 'fund_type') and fi.fund_type == 'a'):
             updateFundEstimatedValue(fi)
         
         # 计算 5 日均值和波动率

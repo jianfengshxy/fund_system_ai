@@ -25,6 +25,7 @@ from src.service.交易管理.赎回基金 import sell_low_fee_shares, sell_0_fe
 logger = get_logger(__name__)
 
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 
 def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float] = None, profit_threshold: Optional[float] = 10.0) -> bool:
     # 统一日志前缀与风格（保持原有）
@@ -78,7 +79,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
         # 预估收益率 = 当前收益率 + 估值涨跌幅
         current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-        estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
+        estimated_change, label_est = calc_estimated_change(fund_info)
         estimated_profit_rate = current_profit_rate + estimated_change
 
         # rank_100day
@@ -158,7 +159,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             
             # 计算指标
             current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-            estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
+            estimated_change, label_est = calc_estimated_change(fund_info)
             estimated_profit_rate = current_profit_rate + estimated_change
             
             # 条件判断：预估收益率 > 5.0 且 估值涨跌幅 > 0.5

@@ -39,6 +39,7 @@ from src.service.交易管理.交易查询 import count_success_trades_on_prev_n
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
@@ -105,6 +106,36 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     if not trades:
             logger.info(f"{fund_name}({fund_code}) [均线风控] 无可撤回交易，跳过撤单")
             return True
+
+    def _parse_money_amount(raw) -> float:
+        if raw is None:
+            return 0.0
+        s = str(raw).strip()
+        if not s or s in {"--", "-"}:
+            return 0.0
+        if "元" not in s:
+            return 0.0
+        s = s.replace("元", "").replace(",", "").replace("，", "").strip()
+        m = re.search(r"-?\d+(?:\.\d+)?", s)
+        if not m:
+            return 0.0
+        try:
+            return float(m.group(0))
+        except Exception:
+            return 0.0
+
+    actual_invest_amount = 0.0
+    for trade in trades or []:
+        raw = getattr(trade, "raw", None)
+        apply_count = getattr(trade, "apply_count", None)
+        if apply_count in (None, "", "--", "-") and isinstance(raw, dict):
+            apply_count = raw.get("ApplyCount") or raw.get("apply_amount") or raw.get("apply_count")
+        actual_invest_amount += _parse_money_amount(apply_count)
+    if actual_invest_amount < 1000:
+        logger.info(
+            f"{fund_name}({fund_code}) 实际定投金额过小，跳过风控处理：实际={actual_invest_amount:.2f} < 1000.01，计划金额={fund_amount}"
+        )
+        return True
     
     logger.info(f"计划详情 - 组合账号: {sub_account_no}, 组合名称: {sub_account_name}")
     logger.info(f"计划详情 - 周期类型: {period_type}, 周期值: {period_value}, 定投金额: {fund_amount}, 计划类型: {plan_type}")
@@ -170,10 +201,81 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
 
     stop_reason = None
     
-    if half_year_val is not None and half_year_val <= 0:
-        stop_reason = f"半年收益率({half_year_val}%) <= 0"
-    elif year_val is not None and year_val <= 0:
-        stop_reason = f"年收益率({year_val}%) <= 0"
+    # ============================================================
+    # 三断风控（去滞后通用版：缓冲带 + 三明治三周期 + 斜率自适应）
+    #
+    # [通用平衡原则：不靠基金代码，全靠数据自己说话]
+    #   短周期(季) vs 长周期(半年/年) 的 斜率差 = 系统的"温度表"
+    #     斜率 >>> 0  → V反初期，长周期数据因锚效应还滞后显示弱 → 宽松
+    #     斜率 ≈ 0  → 平盘震荡，按标准三明治来
+    #     斜率 <<< 0 → 继续恶化阴跌，短周期还在加速变差 → 保守
+    #
+    # [三层防线，完全通用不绑定基金]
+    # ------------------------------------------------------------
+    # 1) 缓冲带 Threshold Band：硬≤0 → 软阈值（防锚点极值横跳）
+    #      年≤0.5% / 半年≤1.0% / 季≤2.0%
+    # ------------------------------------------------------------
+    # 2) 三明治三周期：
+    #      🔴 强熊 BEAR_STRONG = 季弱 AND 半年弱 AND 年弱 （三周期确认）
+    #      🟡 弱熊 BEAR_WEAK   = 季弱 AND (半年弱 OR 年弱)  （两周期确认）
+    # ------------------------------------------------------------
+    # 3) 斜率自适应（核心通用平衡，替换原基金代码硬编码）：
+    #      slope = 季收益率 - 半年收益率
+    #      · slope ≥ +3% （V反斜率向上）          → 只强熊才撤，弱熊保留（宽松）
+    #      · slope  在 (-1%, +3%) （平盘/温和）     → 强熊撤，弱熊保留（标准平衡）
+    #      · slope ≤ -1% （加速恶化阴跌）          → 弱熊也撤（保守防瀑布）
+    #      · 强熊命中 slope ≥ +4.5% 额外强制豁免（极端V反初期，虽然全弱但斜率V翻）
+    # ============================================================
+    
+    # ---------- 1. 缓冲带阈值（窗口越短，锚效应越强，缓冲越大） ----------
+    YEAR_BEAR_BAND       = 0.5   # 年 ≤ 0.5% 视为弱（窗口最长锚效应小）
+    HALF_YEAR_BEAR_BAND  = 1.0   # 半年 ≤ 1.0% 视为弱
+    SEASON_BEAR_BAND     = 2.0   # 季 ≤ 2.0% 视为弱（窗口最短锚效应最强，缓冲最大）
+    
+    SLOPE_V_BREAKOUT     = 3.0   # slope ≥ 此值 → V反向上
+    SLOPE_BEAR_ACCEL     = -1.0  # slope ≤ 此值 → 加速恶化阴跌
+    SLOPE_STRONG_WAIVE   = 4.5   # 强熊也豁免的极端V反斜率（季-半年≥4.5%）
+    
+    year_weak      = (year_val      is not None and year_val      <= YEAR_BEAR_BAND)
+    half_year_weak = (half_year_val is not None and half_year_val <= HALF_YEAR_BEAR_BAND)
+    season_weak    = (season_val    is not None and season_val    <= SEASON_BEAR_BAND)
+    
+    # ---------- 2. 斜率计算（通用温度表） ----------
+    slope = None
+    if season_val is not None and half_year_val is not None:
+        slope = season_val - half_year_val
+    elif season_val is not None and year_val is not None:
+        slope = (season_val - year_val) * 0.6  # 用年类比半年，打折系数避免误判
+    
+    slope_v_breakout   = (slope is not None and slope >= SLOPE_V_BREAKOUT)
+    slope_bear_accel   = (slope is not None and slope <= SLOPE_BEAR_ACCEL)
+    slope_strong_waive = (slope is not None and slope >= SLOPE_STRONG_WAIVE)
+    
+    # ---------- 3. 三明治三档熊判定 ----------
+    bear_strong = bool(season_weak and half_year_weak and year_weak)
+    bear_weak   = bool(season_weak and (half_year_weak or year_weak))
+    
+    # ---------- 4. 斜率自适应 → 通用撤单（不绑定任何基金代码） ----------
+    if bear_strong and slope_strong_waive:
+        # 强熊 + 极端V反斜率向上（季>半年4.5%+）→ 典型长周期锚滞后假熊 → 豁免保留
+        stop_reason = None
+    elif bear_strong and (not slope_v_breakout or slope_bear_accel):
+        # 强熊 + (没有V反斜率 OR 加速恶化) → 必撤（标准强熊路径）
+        stop_reason = (
+            f"强熊三确认：季{season_val}%≤{SEASON_BEAR_BAND}% AND "
+            f"半年{half_year_val}%≤{HALF_YEAR_BEAR_BAND}% AND "
+            f"年{year_val}%≤{YEAR_BEAR_BAND}%"
+            + (f"（加速恶化斜率={slope:+.2f}%）" if slope_bear_accel else "")
+        )
+    elif bear_weak and slope_bear_accel:
+        # 弱熊 + 斜率加速恶化（≤-1%，继续阴跌）→ 保守撤，防瀑布（替代原腰斩品种硬编码）
+        stop_reason = (
+            f"弱熊两确认+加速恶化：季{season_val}%≤{SEASON_BEAR_BAND}% AND "
+            f"(半年{half_year_val}%≤{HALF_YEAR_BEAR_BAND}% OR 年{year_val}%≤{YEAR_BEAR_BAND}%) "
+            f"AND 斜率恶化={slope:+.2f}%≤{SLOPE_BEAR_ACCEL}% → 保守防瀑布撤单"
+        )
+    # else: 其他所有情况（单周期弱 / 弱熊但斜率平或V / 非熊）→ 统统保留交易权限（通用平衡）
+    
     # HQB占比不足且无持仓的撤回已在上方统一处理，这里不再设置 stop_reason
     
     # 趋势豁免逻辑：虽然长期指标走弱，但如果短期趋势强劲，允许豁免拦截
@@ -186,7 +288,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         is_trend_strong = False
         try:
             ma5_ok = nav5_gate(fund_info, fund_name, fund_code, logger)
-            estimated_change = fund_info.estimated_change if fund_info.estimated_change is not None else 0.0
+            estimated_change, _ = calc_estimated_change(fund_info)
             
             # 豁免条件: 站上5日线 且 (今日大涨 > 1.5% 或 虽然长期弱但短期3个月已转正)
             season_positive = (season_val is not None and season_val > 0)
@@ -226,10 +328,10 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     
     # 获取当前收益率和估值增长率
     current_profit_rate = constant_profit_rate if constant_profit_rate is not None else 0.0
-    estimated_change = fund_info.estimated_change if fund_info.estimated_change is not None else 0.0
+    estimated_change, label_est = calc_estimated_change(fund_info)
     estimated_profit_rate = current_profit_rate + estimated_change
     
-    logger.info(f"[收益率预估] 预估收益率 = 当前({current_profit_rate}%) + 估值({estimated_change}%) = {estimated_profit_rate:.2f}%")
+    logger.info(f"[收益率预估] 预估收益率 = 当前({current_profit_rate}%) + 估值({estimated_change}%) = {estimated_profit_rate:.2f}%（{label_est}）")
 
       #判断是否是月定投延期交易
     if period_type == 3 and  period_value != day_of_month: 

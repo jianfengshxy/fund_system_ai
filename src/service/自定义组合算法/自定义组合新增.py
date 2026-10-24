@@ -142,9 +142,9 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 half_year_val = float(half_year_return) if isinstance(half_year_return, (int, float)) else None
                 
                 # 如果年收益率 <= 0 或 半年收益率 <= 0，则跳过
-                if (year_val is not None and year_val <= 0) or (half_year_val is not None and half_year_val <= 0):
-                    logger.info(f"基金1年收益率({year_val})或半年收益率({half_year_val})小于等于0，跳过候选：{fund_name}({fund_code})")
-                    continue
+                # if (year_val is not None and year_val <= 0) or (half_year_val is not None and half_year_val <= 0):
+                #     logger.info(f"基金1年收益率({year_val})或半年收益率({half_year_val})小于等于0，跳过候选：{fund_name}({fund_code})")
+                #     continue
 
                 # 增加条件：基金的100日净值排名 < 20 就 continue
                 rank_100 = getattr(fund_info, 'rank_100day', None)

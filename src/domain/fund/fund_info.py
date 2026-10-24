@@ -1,6 +1,15 @@
-from dataclasses import dataclass
-from typing import Optional
-from datetime import datetime
+from dataclasses import dataclass, field
+from typing import Optional, List
+
+from src.domain.fund.fund_detail import (
+    FundRelateTheme,
+    FundThemeInfo,
+    FundPeriodIncrease,
+    FundRiskMetrics,
+    FundHolderStructure,
+    FundCompanyInfo,
+    FundManagerBrief,
+)
 
 @dataclass
 class FundInfo:
@@ -40,9 +49,17 @@ class FundInfo:
     rank_100day: Optional[int]             # 近100日排名 RANK_100DAY
     rank_30day: Optional[int]              # 近30日排名 RANK_30DAY
     volatility: Optional[float]           # 波动率 VOLATILITY
-    # 新增：近5日平均净值（由历史净值计算得到，用于与当日估值净值比较）
-    nav_5day_avg: Optional[float] = None
+    nav_5day_avg: Optional[float] = None  # 近5日平均净值
     fund_sub_type: str = ''
+
+    # ── 基金详情页扩展字段（由 基金详情页 接口填充） ─────────────────────
+    relate_themes: List[FundRelateTheme] = field(default_factory=list)
+    theme_infos: List[FundThemeInfo] = field(default_factory=list)
+    period_increases: List[FundPeriodIncrease] = field(default_factory=list)
+    risk_metrics: Optional[FundRiskMetrics] = None
+    holder_structure: Optional[FundHolderStructure] = None
+    company_info: Optional[FundCompanyInfo] = None
+    current_managers: List[FundManagerBrief] = field(default_factory=list)
 
 
 
@@ -102,7 +119,11 @@ class FundInfo:
         # 格式化估值信息
         estimated_info = "暂无"
         if self.estimated_value:
-            estimated_info = f"{self.estimated_value} ({self.estimated_change}% {self.estimated_time})"
+            chg = round(self.estimated_change, 2) if self.estimated_change is not None else self.estimated_change
+            estimated_info = f"{self.estimated_value} ({chg}% {self.estimated_time})"
+        elif self.estimated_change is not None:
+            chg = round(self.estimated_change, 2)
+            estimated_info = f"估算涨跌幅: {chg}%（主题估值）"
         
         return (
             f"基金名称: {self.fund_name} ({self.fund_code})\n"

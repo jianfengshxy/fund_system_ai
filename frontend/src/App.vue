@@ -30,6 +30,10 @@ interface AssetDetail {
   constant_profit_rate: number
   estimated_change: number
   profit_value: number
+  tracked_index_code?: string | null
+  tracked_index_name?: string | null
+  latest_heat_score?: number | null
+  latest_heat_trade_date?: string | null
   [key: string]: any
 }
 
@@ -94,7 +98,7 @@ const sortOptions = [
   { label: '资产市值', value: 'asset_value' },
   { label: '持有收益', value: 'hold_profit' },
   { label: '收益率', value: 'constant_profit_rate' },
-  { label: '今日估值', value: 'estimated_change' },
+  { label: '今日涨跌', value: 'estimated_change' },
   { label: '基金名称', value: 'fund_name' }
 ]
 const totalAssets = ref(0)
@@ -112,6 +116,7 @@ const tasks = ref<ScheduledTask[]>([])
 const taskLoading = ref(false)
 const schedulerState = ref<Record<string, any>>({})
 const executingTaskIds = ref<number[]>([])
+const updatingTaskIds = ref<number[]>([])
 const executionDialogVisible = ref(false)
 const latestExecutionResult = ref<Record<string, any> | null>(null)
 const logDialogVisible = ref(false)
@@ -385,9 +390,27 @@ const formatNumber = (num: number) =>
     maximumFractionDigits: 2
   })
 
-const formatDateTime = (value: string | null) => {
+const formatDateTime = (value: string | null | undefined) => {
   if (!value) return '-'
   return value.replace('T', ' ').replace(/\.\d+/, '')
+}
+
+const getSyncTagType = (status?: string | null) => {
+  const normalized = String(status || '').toUpperCase()
+  if (normalized === 'OK') return 'success'
+  if (normalized === 'IMPORTED') return 'info'
+  if (normalized === 'ERROR') return 'danger'
+  if (!normalized) return 'warning'
+  return 'warning'
+}
+
+const formatSyncStatus = (status?: string | null) => {
+  const normalized = String(status || '').toUpperCase()
+  if (normalized === 'OK') return 'OK'
+  if (normalized === 'IMPORTED') return 'IMPORTED'
+  if (normalized === 'ERROR') return 'ERROR'
+  if (!normalized) return '-'
+  return normalized
 }
 
 const getStatusClass = (num: number) => {
@@ -397,6 +420,40 @@ const getStatusClass = (num: number) => {
 }
 
 const getPrefix = (num: number) => (num > 0 ? '+' : '')
+
+const todayStr = new Date().toLocaleDateString('sv-SE')
+
+const normalizeDate = (value: any) => {
+  if (!value) return ''
+  const raw = String(value).trim()
+  if (/^\d{2}-\d{2}$/.test(raw)) {
+    return `${new Date().getFullYear()}-${raw}`
+  }
+  return raw.slice(0, 10)
+}
+
+/** 展示用涨跌幅：今日净值已出则用 nav_change，否则用 estimated_change */
+const displayChange = (row: AssetDetail) => {
+  const navDate = normalizeDate(row.nav_date)
+  if (navDate && navDate === todayStr && row.nav_change !== null && row.nav_change !== undefined) {
+    return Number(row.nav_change || 0)
+  }
+  return Number(row.estimated_change || 0)
+}
+
+const calcPortfolioChangeRatio = (details: AssetDetail[]) => {
+  const total = details.reduce((acc, item) => acc + (Number(item.asset_value) || 0), 0)
+  if (!total) return 0
+  return details.reduce((acc, item) => {
+    const weight = (Number(item.asset_value) || 0) / total
+    return acc + weight * displayChange(item)
+  }, 0)
+}
+
+const hasIndexHeatInfo = (row: AssetDetail) =>
+  Boolean(row.tracked_index_name && row.latest_heat_score !== null && row.latest_heat_score !== undefined)
+
+const formatHeatScore = (value: number | null | undefined) => Number(value || 0).toFixed(2)
 
 const showFundDetail = async (fundCode: string) => {
   detailDialogVisible.value = true
@@ -472,7 +529,7 @@ const loadPortfolio = async (name: string) => {
       0
     )
     totalProfitValue.value = data.total_profit_value || 0
-    estimatedChangeRatio.value = data.estimated_portfolio_change_ratio || 0
+    estimatedChangeRatio.value = calcPortfolioChangeRatio(adaptedDetails)
     constantProfit.value = data.constant_profit || 0
     profitValue.value = data.profit_value || 0
   } catch (error) {
@@ -489,6 +546,12 @@ const refreshPortfolio = async () => {
     await axios.post('/api/cache/clear')
   }
   await loadPortfolio(selectedPortfolioName.value)
+}
+
+const handlePortfolioChange = async (name: string) => {
+  if (!name) return
+  selectedPortfolioName.value = name
+  await refreshPortfolio()
 }
 
 const fetchTasks = async () => {
@@ -645,16 +708,41 @@ const submitTask = async () => {
 }
 
 const updateTaskEnabled = async (task: ScheduledTask) => {
+  if (updatingTaskIds.value.includes(task.task_id)) {
+    return false
+  }
+  const nextValue = !task.is_enabled
   try {
-    await axios.put(`/api/scheduled-tasks/${task.task_id}`, {
-      is_enabled: task.is_enabled
+    updatingTaskIds.value = [...updatingTaskIds.value, task.task_id]
+    const res = await axios.put(`/api/scheduled-tasks/${task.task_id}`, {
+      is_enabled: nextValue
     })
-    await reloadTasks()
+    const updated: ScheduledTask | null = (res as any)?.data?.task || null
+    if (updated && updated.task_id != null) {
+      const idx = tasks.value.findIndex((item) => item.task_id === updated.task_id)
+      if (idx >= 0) {
+        tasks.value[idx] = { ...tasks.value[idx], ...updated }
+      } else {
+        tasks.value = [updated, ...tasks.value]
+      }
+    } else {
+      task.is_enabled = nextValue
+    }
+    fetchTasks().catch(() => null)
     ElMessage.success('启用状态已更新')
+    return true
   } catch (error) {
     console.error('Update task enabled error:', error)
-    task.is_enabled = !task.is_enabled
-    ElMessage.error('更新启用状态失败')
+    const serverMessage =
+      (error as any)?.response?.data?.error ||
+      (error as any)?.response?.data?.message ||
+      (error as any)?.message ||
+      '更新启用状态失败'
+    const title = String(serverMessage).includes('FC') ? 'FC 同步失败' : '更新失败'
+    await ElMessageBox.alert(String(serverMessage), title, { type: 'error' }).catch(() => null)
+    return false
+  } finally {
+    updatingTaskIds.value = updatingTaskIds.value.filter((id) => id !== task.task_id)
   }
 }
 
@@ -788,7 +876,24 @@ onMounted(async () => {
                 <el-table-column prop="cron_expression" label="Cron" min-width="240" show-overflow-tooltip />
                 <el-table-column label="启用" width="90" align="center">
                   <template #default="{ row }">
-                    <el-switch v-model="row.is_enabled" @change="updateTaskEnabled(row)" />
+                    <el-switch
+                      v-model="row.is_enabled"
+                      :loading="updatingTaskIds.includes(row.task_id)"
+                      :before-change="() => updateTaskEnabled(row)"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="同步" width="140">
+                  <template #default="{ row }">
+                    <el-tooltip v-if="row.sync_error_message" :content="row.sync_error_message" placement="top" :show-after="300">
+                      <el-tag size="small" :type="getSyncTagType(row.sync_status)">
+                        {{ formatSyncStatus(row.sync_status) }}
+                      </el-tag>
+                    </el-tooltip>
+                    <el-tag v-else size="small" :type="getSyncTagType(row.sync_status)">
+                      {{ formatSyncStatus(row.sync_status) }}
+                    </el-tag>
+                    <div class="text-xs text-gray-400">{{ formatDateTime(row.last_synced_at) }}</div>
                   </template>
                 </el-table-column>
                 <el-table-column label="优先级" width="100">
@@ -847,11 +952,32 @@ onMounted(async () => {
                     <div class="font-semibold break-all">{{ task.task_name }}</div>
                     <div class="text-sm text-gray-500 break-all">{{ task.policy }}</div>
                   </div>
-                  <el-switch v-model="task.is_enabled" @change="updateTaskEnabled(task)" />
+                  <el-switch
+                    v-model="task.is_enabled"
+                    :loading="updatingTaskIds.includes(task.task_id)"
+                    :before-change="() => updateTaskEnabled(task)"
+                  />
                 </div>
                 <div class="mt-3 text-sm text-gray-600 space-y-2">
                   <div><span class="text-gray-400">处理器</span> {{ task.display_handler || task.handler || '-' }}</div>
                   <div class="break-all"><span class="text-gray-400">Cron</span> {{ task.cron_expression }}</div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-gray-400">同步</span>
+                    <el-tooltip
+                      v-if="task.sync_error_message"
+                      :content="task.sync_error_message"
+                      placement="top"
+                      :show-after="300"
+                    >
+                      <el-tag size="small" :type="getSyncTagType(task.sync_status)">
+                        {{ formatSyncStatus(task.sync_status) }}
+                      </el-tag>
+                    </el-tooltip>
+                    <el-tag v-else size="small" :type="getSyncTagType(task.sync_status)">
+                      {{ formatSyncStatus(task.sync_status) }}
+                    </el-tag>
+                    <span class="text-xs text-gray-400">{{ formatDateTime(task.last_synced_at) }}</span>
+                  </div>
                   <div><span class="text-gray-400">优先级</span> {{ task.display_priority ?? 100 }}</div>
                   <div><span class="text-gray-400">下次执行</span> {{ formatDateTime(task.next_run_at) }}</div>
                   <div class="flex items-center gap-2 flex-wrap">
@@ -912,7 +1038,7 @@ onMounted(async () => {
             </el-col>
             <el-col :xs="24" :sm="12" :lg="6" class="mb-4 lg:mb-0">
               <el-card shadow="never" class="border-none">
-                <div class="text-xs text-gray-500 mb-1">今日估算收益 (元)</div>
+                <div class="text-xs text-gray-500 mb-1">今日收益 (元)</div>
                 <div class="text-2xl font-bold" :class="getStatusClass(estProfitValue)">
                   {{ getPrefix(estProfitValue) }}{{ formatNumber(estProfitValue) }}
                 </div>
@@ -920,7 +1046,7 @@ onMounted(async () => {
             </el-col>
             <el-col :xs="24" :sm="12" :lg="6">
               <el-card shadow="never" class="border-none">
-                <div class="text-xs text-gray-500 mb-1">整体估值增长率</div>
+                <div class="text-xs text-gray-500 mb-1">整体今日涨跌</div>
                 <div class="text-2xl font-bold" :class="getStatusClass(estimatedChangeRatio)">
                   {{ getPrefix(estimatedChangeRatio) }}{{ formatNumber(estimatedChangeRatio) }}%
                 </div>
@@ -940,7 +1066,7 @@ onMounted(async () => {
                       v-model="selectedPortfolioName"
                       placeholder="选择组合"
                       class="!w-full sm:!w-[260px]"
-                      @change="loadPortfolio"
+                      @change="handlePortfolioChange"
                     >
                       <el-option
                         v-for="portfolio in portfolios"
@@ -986,9 +1112,16 @@ onMounted(async () => {
               >
                 <el-table-column prop="fund_name" label="基金名称" min-width="180" sortable>
                   <template #default="{ row }">
-                    <el-link type="primary" :underline="false" @click="showFundDetail(row.fund_code)">
-                      {{ row.fund_name || '-' }}
-                    </el-link>
+                    <div>
+                      <el-link type="primary" :underline="false" @click="showFundDetail(row.fund_code)">
+                        {{ row.fund_name || '-' }}
+                      </el-link>
+                      <div v-if="hasIndexHeatInfo(row)" class="text-xs text-gray-500 mt-1">
+                        {{ row.tracked_index_name }}
+                        <span v-if="row.tracked_index_code">({{ row.tracked_index_code }})</span>
+                        · 热度 {{ formatHeatScore(row.latest_heat_score) }}
+                      </div>
+                    </div>
                   </template>
                 </el-table-column>
                 <el-table-column prop="fund_code" label="代码" width="100" sortable />
@@ -1011,10 +1144,10 @@ onMounted(async () => {
                     </span>
                   </template>
                 </el-table-column>
-                <el-table-column prop="estimated_change" label="今日估值" align="right" width="110" sortable>
+                <el-table-column label="今日涨跌" align="right" width="110" sortable>
                   <template #default="{ row }">
-                    <span :class="getStatusClass(row.estimated_change)">
-                      {{ getPrefix(row.estimated_change) }}{{ Number(row.estimated_change || 0).toFixed(2) }}%
+                    <span :class="getStatusClass(displayChange(row))">
+                      {{ getPrefix(displayChange(row)) }}{{ Number(displayChange(row)).toFixed(2) }}%
                     </span>
                   </template>
                 </el-table-column>
@@ -1029,6 +1162,11 @@ onMounted(async () => {
                       {{ row.fund_name || '-' }}
                     </el-link>
                     <div class="text-sm text-gray-500">{{ row.fund_code }}</div>
+                    <div v-if="hasIndexHeatInfo(row)" class="text-xs text-gray-500 mt-1">
+                      {{ row.tracked_index_name }}
+                      <span v-if="row.tracked_index_code">({{ row.tracked_index_code }})</span>
+                      · 热度 {{ formatHeatScore(row.latest_heat_score) }}
+                    </div>
                   </div>
                   <div class="text-right">
                     <div class="font-semibold">{{ formatNumber(row.asset_value) }}</div>
@@ -1049,9 +1187,9 @@ onMounted(async () => {
                     </div>
                   </div>
                   <div>
-                    <div class="text-gray-400">今日估值</div>
-                    <div :class="getStatusClass(row.estimated_change)">
-                      {{ getPrefix(row.estimated_change) }}{{ Number(row.estimated_change || 0).toFixed(2) }}%
+                    <div class="text-gray-400">今日涨跌</div>
+                    <div :class="getStatusClass(displayChange(row))">
+                      {{ getPrefix(displayChange(row)) }}{{ Number(displayChange(row)).toFixed(2) }}%
                     </div>
                   </div>
                 </div>

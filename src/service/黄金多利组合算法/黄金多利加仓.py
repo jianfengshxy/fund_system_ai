@@ -18,15 +18,23 @@ from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.service.交易管理.购买基金 import commit_order
 from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
 from src.service.基金信息.基金信息 import get_all_fund_info
+from src.service.公共服务.nav_gate_service import nav5_gate
+from src.service.公共服务.estimated_profit_service import calc_estimated_change
+from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 
 logger = get_logger(__name__)
+
+HQB_NEW_POSITION_THRESHOLD = 20.0
 
 def increase_gold_funds(
     user: User,
     sub_account_name: str,
     amount: float = 2000.0,
+    init_amount: Optional[float] = None,
     fund_list: Optional[List[Dict]] = None,
+    limit: Optional[float] = None,
     total_limit: Optional[float] = None,
+    hqb_ratio_limit_enabled: bool = True,
 ) -> bool:
     """
     黄金多利组合加仓逻辑：
@@ -61,6 +69,7 @@ def increase_gold_funds(
         logger.error(f"未找到组合 {sub_account_name} 的账号")
         return False
 
+    portfolio_limit = _normalize_limit(limit)
     normalized_funds: List[Dict] = []
     if isinstance(fund_list, list) and fund_list:
         for item in fund_list:
@@ -70,17 +79,48 @@ def increase_gold_funds(
             if not fund_code:
                 continue
             try:
-                # 获取基金买入金额，遵循优先级规则：
-                # 1. 基金级别的amount优先级最高（在item中配置）
-                # 2. 如果没有基金级别的amount，则使用组合级别的amount（函数参数amount）
+                # 加仓金额（amount）计算规则：
+                # - 优先使用基金级别 amount（fund_list 每个 item 内配置）
+                # - 若基金级别未配置，则使用组合级别 amount（函数入参 amount）
                 fund_amount = float(item.get("amount", amount))
             except Exception:
                 fund_amount = amount
+
+            # 初始化建仓金额（init_amount）计算规则（用于“未持有时的首次买入”）：
+            # 1) 基金级别 init_amount 优先（兼容键 init_amount / initAmount）
+            # 2) 若基金级别未配置，则使用组合级别 init_amount（函数入参 init_amount，来自 payload）
+            # 3) 若两者都未配置，为保持兼容：init_amount 取“最终生效的 amount”
+            #    - 即：基金级别 amount（如有）优先，否则组合级别 amount
+            if "init_amount" in item:
+                raw_init_amount = item.get("init_amount")
+            elif "initAmount" in item:
+                raw_init_amount = item.get("initAmount")
+            else:
+                raw_init_amount = None
+            if raw_init_amount not in (None, ""):
+                try:
+                    fund_init_amount = float(raw_init_amount)
+                except Exception:
+                    fund_init_amount = fund_amount
+            elif init_amount not in (None, ""):
+                try:
+                    fund_init_amount = float(init_amount)
+                except Exception:
+                    fund_init_amount = fund_amount
+            else:
+                fund_init_amount = fund_amount
+            # 单基金持仓上限（limit）优先级规则：
+            # 1) 基金级别 limit 优先（fund_list 每个 item 内配置）
+            # 2) 若基金级别未配置或解析失败，则使用组合级别 limit（函数入参 limit）
+            resolved_limit = portfolio_limit
+            if "limit" in item:
+                resolved_limit = _normalize_limit(item.get("limit"), portfolio_limit)
             normalized_funds.append({
                 "fund_code": str(fund_code),
                 "amount": fund_amount,
+                "init_amount": fund_init_amount,
                 # 没有配置limit时返回None，表示不做限制
-                "limit": _normalize_limit(item.get("limit"), None),
+                "limit": resolved_limit,
             })
 
     # if not normalized_funds:
@@ -141,9 +181,28 @@ def increase_gold_funds(
     fund_metric_dict = {f_code: _get_asset_limit_metric(asset) for f_code, asset in asset_dict.items()}
     total_metric = sum(fund_metric_dict.values())
 
+    def _get_effective_fund_limit(fund_code: str) -> Optional[float]:
+        fund_limit = payload_limit_dict.get(fund_code)
+        if fund_limit is not None:
+            return fund_limit
+        return portfolio_limit
+
     logger.info(
-        f"组合 {sub_account_name} 当前资产限制口径值: {total_metric:.2f}, total_limit={total_limit if total_limit is not None else '无限制'}"
+        f"组合 {sub_account_name} 当前资产限制口径值: {total_metric:.2f}, "
+        f"limit={portfolio_limit if portfolio_limit is not None else '无限制'}, "
+        f"total_limit={total_limit if total_limit is not None else '无限制'}"
     )
+
+    # 活期宝风控仅用于阻止首次开新仓，不影响已有持仓的后续加仓。
+    if hqb_ratio_limit_enabled:
+        hqb_new_position_allowed = check_hqb_risk_allowed(user, threshold=HQB_NEW_POSITION_THRESHOLD)
+        logger.info(
+            f"[黄金多利] 组合 {sub_account_name} 启用活期宝新仓限制，阈值={HQB_NEW_POSITION_THRESHOLD:.1f}% ，"
+            f"校验结果={'通过' if hqb_new_position_allowed else '未通过'}"
+        )
+    else:
+        hqb_new_position_allowed = True
+        logger.info(f"[黄金多利] 组合 {sub_account_name} 已关闭活期宝新仓限制，允许跳过活期宝占比校验")
 
     # 优先验证组合总资产是否已超过限制，超过则直接输出原因并返回
     if total_limit is not None and total_metric >= total_limit:
@@ -155,7 +214,7 @@ def increase_gold_funds(
 
         current_fund_metric = fund_metric_dict.get(fund_code, 0.0)
         # 只在有配置limit时进行检查，没有配置就不限制
-        fund_limit = payload_limit_dict.get(fund_code)
+        fund_limit = _get_effective_fund_limit(fund_code)
         projected_fund_metric = current_fund_metric + buy_amount
         projected_total_metric = total_metric + buy_amount
 
@@ -193,18 +252,25 @@ def increase_gold_funds(
     # 1. 遍历传过来的基金列表，如果未持有该基金，则执行该基金的初始化建仓
     for f in normalized_funds:
         f_code = f["fund_code"]
-        f_amt = f["amount"]
+        f_amt = f["init_amount"]
         f_name = _get_fund_name(f_code)
         
         # 最先校验单个基金的资产是否已超过限制，超过则跳过该基金
         current_fund_metric = fund_metric_dict.get(f_code, 0.0)
         # 只在有配置limit时进行检查，没有配置就不限制
-        fund_limit = payload_limit_dict.get(f_code)
+        fund_limit = _get_effective_fund_limit(f_code)
         if fund_limit is not None and current_fund_metric >= fund_limit:
             logger.info(f"基金 {f_name}({f_code}) 当前资产值 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过初始化建仓")
             continue
 
         if f_code not in asset_dict:
+            if not hqb_new_position_allowed:
+                logger.info(
+                    f"[黄金多利] 活期宝占比不足 {HQB_NEW_POSITION_THRESHOLD:.1f}%，"
+                    f"跳过新仓初始化建仓: {f_name}({f_code})，init_amount={f_amt}"
+                )
+                continue
+
             if _has_pending_trade(f_code):
                 logger.info(f"目标基金 {f_code} 存在在途交易，跳过初始化建仓")
                 continue
@@ -229,9 +295,9 @@ def increase_gold_funds(
         # 最先校验单个基金的资产是否已超过限制，超过则跳过该基金
         current_fund_metric = fund_metric_dict.get(f_code, 0.0)
         # 只在有配置limit时进行检查，没有配置就不限制
-        fund_limit = payload_limit_dict.get(f_code)
+        fund_limit = _get_effective_fund_limit(f_code)
         if fund_limit is not None and current_fund_metric >= fund_limit:
-            logger.info(f"持仓基金 {f_name}({fund_code}) 当前资产值 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过加仓")
+            logger.info(f"持仓基金 {f_name}({f_code}) 当前资产值 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过加仓")
             continue
 
         if _has_pending_trade(f_code):
@@ -241,10 +307,13 @@ def increase_gold_funds(
         # 计算预估收益率
         current_profit_rate = float(getattr(asset, "constant_profit_rate", 0.0) or 0.0)
         fund_info = get_all_fund_info(user, f_code)
-        estimated_change = fund_info.estimated_change if fund_info and fund_info.estimated_change is not None else 0.0
+        estimated_change, label_est = calc_estimated_change(fund_info)
         estimated_profit_rate = current_profit_rate + estimated_change
+
+        week_growth_rate = _safe_float(getattr(fund_info, "week_return", None) if fund_info else None, 0.0)
+        month_growth_rate = _safe_float(getattr(fund_info, "month_return", None) if fund_info else None, 0.0)
         
-        logger.info(f"持仓基金 {f_name}({f_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%")
+        logger.info(f"持仓基金 {f_name}({f_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%（{label_est}）")
 
         # 获取当前资产值和该基金的买入金额
         current_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
@@ -253,6 +322,7 @@ def increase_gold_funds(
         # 2. 如果没有基金级别的amount，则使用组合级别的amount（函数参数amount）
         # payload_amt_dict是从normalized_funds构建的，已经遵循了这个优先级
         base_amt = payload_amt_dict.get(f_code, amount)
+        min_asset_value_for_limited = base_amt * 0.95
         
         # 检查是否满足加仓条件：
         # 1. 如果当前资产值 <= 买入金额（可能是因为限购导致持仓不足），则允许加仓（忽略-1%过滤器）
@@ -260,10 +330,12 @@ def increase_gold_funds(
         should_increase = False
         increase_reason = ""
         
-        if current_asset_value <= base_amt:
+        if current_asset_value < min_asset_value_for_limited:
             # 持有资产小于或等于一次性买入量，可能是因为限购，允许加仓
             should_increase = True
-            increase_reason = f"持仓资产({current_asset_value:.2f}) <= 买入金额({base_amt:.2f})，可能因限购导致持仓不足"
+            increase_reason = (
+                f"持仓资产({current_asset_value:.2f}) < 买入金额*0.95({min_asset_value_for_limited:.2f})，可能因限购导致持仓不足"
+            )
         elif estimated_profit_rate < -1.0:
             # 满足原来的-1%过滤器条件
             should_increase = True
@@ -274,14 +346,77 @@ def increase_gold_funds(
             
             # 检查是否跌幅过大（小于-5.0%），如果是则跳过加仓，防止单边下跌
             if estimated_profit_rate < -5.0:
-                logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，跌幅过大，暂停加仓等待反弹")
-                continue
+                # 特殊豁免：如果基金被限购且限购金额 < 2000，说明持仓上不去，即使跌幅过大也继续加仓
+                _max_purchase = _safe_float(getattr(fund_info, 'max_purchase', 0.0) if fund_info else 0.0, 0.0)
+                if _max_purchase > 0 and _max_purchase < 2000:
+                    logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，但限购金额 {_max_purchase} < 2000，突破限购加仓")
+                else:
+                    # ---------- 深度回撤反弹加仓 ----------
+                    # 触发条件（两个必须同时成立）：
+                    #   1) is_deep_drawdown    : 回撤 > 5%（estimated_profit_rate < -5.0）
+                    #   2) has_reversal_signal : 周线 > 0、月线 > 0、持仓市值 > 0，且净值站上 5 日均线
+                    # 加仓额度：当前持仓市值 × 50%，但回撤超过 -10% 时放弃抄底
+                    is_deep_drawdown = estimated_profit_rate < -5.0
+                    has_reversal_signal = (
+                        week_growth_rate > 0.0
+                        and month_growth_rate > 0.0
+                        and current_asset_value > 0.0
+                        and nav5_gate(fund_info, f_name, f_code, logger)
+                    )
+
+                    if is_deep_drawdown and has_reversal_signal:
+                        if estimated_profit_rate >= -10.0:
+                            buy_ratio = 0.5
+                        else:
+                            logger.info(
+                                f"持仓基金 {f_name}({f_code}) 回撤 {estimated_profit_rate:.2f}% 超过 -20%，疑似基本面风险，放弃抄底"
+                            )
+                            continue
+
+                        buy_amount = float(current_asset_value) * buy_ratio
+                        logger.info(
+                            f"持仓基金 {f_name}({f_code}) 触发深度回撤反弹加仓："
+                            f"estimated_profit_rate={estimated_profit_rate:.2f}%, week={week_growth_rate:.2f}%, "
+                            f"month={month_growth_rate:.2f}%, buy_ratio={buy_ratio*100:.0f}%, buy_amount={buy_amount:.2f}"
+                        )
+                        if not _can_submit_buy(f_code, f_name, buy_amount):
+                            continue
+                        res = commit_order(user, sub_account_no, f_code, buy_amount)
+                        if res:
+                            actual_amount = getattr(res, "amount", buy_amount)
+                            logger.info(f"深度回撤反弹加仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
+                            _mark_buy_metric(f_code, _safe_float(actual_amount, buy_amount))
+                            buy_triggered = True
+                        else:
+                            logger.info(f"深度回撤反弹加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")
+                        continue
+
+                    # 深跌但无反弹信号 → 熔断，不抄底
+                    if is_deep_drawdown:
+                        logger.info(
+                            f"持仓基金 {f_name}({f_code}) 深度回撤 {estimated_profit_rate:.2f}% 但无反弹信号"
+                            f"(week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%)，继续熔断等待"
+                        )
+                    else:
+                        # 注意：此分支为 [-10%, -5%) 的「死区」——深跌分支的门槛是 < -10%，
+                        # 所以这一段够不到抄底通道，此时即便三信号全部转好也一律不买。
+                        logger.info(
+                            f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% 在 [-10%, -5%) 死区，"
+                            f"熔断暂停，等待回收至 -5% 以上或触发深度反弹信号"
+                        )
+                    continue
             
-            # 新的加仓逻辑：小于-1.0%加仓1份，小于-4.0%加仓2倍
+            # 加仓金额计算（统一处理）：
+            #   预估收益率: [-1%, -4%) → 1倍 base_amt
+            #               [-4%, -5%) → 2倍 base_amt
+            #               < -5%  → 已在上方跳过，不买入
+            # 注：base_amt 已遵循优先级: fund_list 中该基金的 amount > 组合默认 amount
             buy_multiplier = 2.0 if estimated_profit_rate < -4.0 else 1.0
             buy_amount = base_amt * buy_multiplier
-
-            logger.info(f"满足加仓条件，准备买入 {f_name}({f_code}) 金额: {buy_amount}")
+            logger.info(
+                f"满足加仓条件，准备买入 {f_name}({f_code}) "
+                f"金额: {buy_amount}（base_amt={base_amt}，倍率={buy_multiplier}，预估收益率 {estimated_profit_rate:.2f}%）"
+            )
 
             if not _can_submit_buy(f_code, f_name, buy_amount):
                 continue
@@ -295,7 +430,10 @@ def increase_gold_funds(
             else:
                 logger.info(f"加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")
         else:
-            logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% >= -1.0%，且持仓资产({current_asset_value:.2f}) > 买入金额({base_amt:.2f})，不满足加仓条件")
+            logger.info(
+                f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% >= -1.0%，"
+                f"且持仓资产({current_asset_value:.2f}) >= 买入金额*0.95({min_asset_value_for_limited:.2f})，不满足加仓条件"
+            )
 
 
     if not buy_triggered:
@@ -312,9 +450,10 @@ if __name__ == "__main__":
         test_user.password = "sWX15706"
         
         # 2. 设置测试参数
-        test_sub_account = "智投平台"
+        test_sub_account = "大数定律"
         test_amount = 10000.0
-        test_total_limit = 500000.0
+        test_limit = 100000.0
+        test_total_limit = 1000000.0
         test_fund_list = [ 
             { 
                 "fund_code": "011707", 
@@ -342,7 +481,9 @@ if __name__ == "__main__":
             sub_account_name=test_sub_account, 
             amount=test_amount, 
             fund_list=test_fund_list,
-            total_limit=test_total_limit
+            limit=test_limit,
+            total_limit=test_total_limit,
+            hqb_ratio_limit_enabled=True,
         )
         
         print(f"--- 测试结束 ---")

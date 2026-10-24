@@ -31,6 +31,92 @@ from src.common.constant import (
     SERVER_VERSION,
 )
 
+def _estimate_from_index(user, fund_info: FundInfo) -> bool:
+    """天天基金 FundValuationLast 对 QDII/指数基金不提供重仓股估值（GSZ=null）时，
+    回退用跟踪指数的真实涨跌幅估算。
+
+    Args:
+        user: User对象，包含用户认证信息
+        fund_info: FundInfo对象，将被回填估值信息
+
+    Returns:
+        True 表示已回填指数估值；False 表示无可回退数据。
+    """
+    index_code = getattr(fund_info, "index_code", None)
+    if not index_code:
+        return False
+
+    logger = get_logger("FundValuation")
+    extra = {
+        "account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None),
+        "action": "estimate_from_index",
+        "fund_code": fund_info.fund_code,
+    }
+    nav = fund_info.nav or 0.0
+
+    try:
+        from datetime import datetime
+        from src.common.third_party_index import is_third_party_index, fetch_valuation
+        if is_third_party_index(index_code):
+            tv = fetch_valuation(index_code)
+            if tv.success and tv.change_pct is not None:
+                fund_info.estimated_change = float(tv.change_pct)
+                fund_info.estimated_value = round(nav * (1 + float(tv.change_pct) / 100), 4) if nav > 0 else None
+                if tv.update_time:
+                    s = str(tv.update_time).strip()
+                    if len(s) >= 19 and ":" in s[11:]:
+                        fund_info.estimated_time = s[:19]
+                    else:
+                        fund_info.estimated_time = f"{s[:10]} {datetime.now().strftime('%H:%M:%S')}"
+                else:
+                    fund_info.estimated_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                logger.info(
+                    f"基金{fund_info.fund_code}第三方指数估值: [{index_code}] "
+                    f"价格={tv.price}{tv.currency}, 涨幅={fund_info.estimated_change:+.2f}%, 净值={fund_info.estimated_value}, "
+                    f"时间={fund_info.estimated_time}",
+                    extra=extra,
+                )
+                return True
+    except Exception as e:
+        logger.warning(f"第三方指数估值回退失败({index_code}): {e}", extra=extra)
+
+    # 天天基金指数详情（与 基金信息._refresh_estimate 口径一致）
+    try:
+        from src.API.市场指数.指数详情 import get_index_detail
+        from datetime import datetime
+        detail = get_index_detail(user, index_code)
+        chg = detail.get('NEWCHG')
+        if chg is None:
+            chg = detail.get('D')
+        if chg is not None:
+            chg_val = float(chg)
+            index_date = detail.get('NEWPRICEDATE') or detail.get('PDATE', '')
+            now_time = datetime.now().strftime("%H:%M:%S")
+            index_time = ""
+            if index_date:
+                index_date_str = str(index_date).strip()
+                if len(index_date_str) >= 19 and ":" in index_date_str[11:]:
+                    index_time = index_date_str[:19]
+                else:
+                    index_time = f"{index_date_str[:10]} {now_time}"
+            else:
+                index_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            index_name = detail.get('BKNAME') or detail.get('INDEXNAME', index_code) or index_code
+            fund_info.estimated_change = chg_val
+            fund_info.estimated_value = round(nav * (1 + chg_val / 100), 4) if nav > 0 else None
+            fund_info.estimated_time = index_time
+            logger.info(
+                f"基金{fund_info.fund_code}无重仓股估值，回退指数估值: "
+                f"[{index_name}]({index_code}) 涨幅={chg_val}%, 净值={fund_info.estimated_value}, 时间={index_time}",
+                extra=extra,
+            )
+            return True
+    except Exception as e:
+        logger.warning(f"指数估值回退失败({index_code}): {e}", extra=extra)
+
+    return False
+
+
 def update_fund_estimated_value(user, fund_info: FundInfo) -> FundInfo:
     """
     获取并更新基金的估值信息 (GSZ, GSZZL, GZTIME)
@@ -99,6 +185,7 @@ def update_fund_estimated_value(user, fund_info: FundInfo) -> FundInfo:
         data_list = json_data.get('data', [])
         if data_list and isinstance(data_list, list):
             data = data_list[0]
+            raw_gsz = data.get('GSZ')
             # 更新估值信息
             try:
                 fund_info.estimated_value = float(data.get('GSZ') or 0)  # GSZ - 估算净值
@@ -111,6 +198,10 @@ def update_fund_estimated_value(user, fund_info: FundInfo) -> FundInfo:
                 fund_info.estimated_change = 0.0
                 
             fund_info.estimated_time = data.get('GZTIME', '')  # GZTIME - 估算时间
+
+            # 天天基金对 QDII/指数基金不提供重仓股估值（GSZ=null），回退用跟踪指数估算
+            if raw_gsz is None or raw_gsz == '':
+                _estimate_from_index(user, fund_info)
             
             logger.info(f"基金{fund_info.fund_code}估值更新: 类型={fund_info.fund_type}, 净值={fund_info.estimated_value}, 涨跌幅={fund_info.estimated_change}%, 时间={fund_info.estimated_time}", extra=extra)
         else:
@@ -130,7 +221,7 @@ if __name__ == "__main__":
     # 设置日志级别为DEBUG
     logging.getLogger().setLevel(logging.DEBUG)
     
-    fund_code = "004433"
+    fund_code = "021540"
     
     print(f"正在获取基金 {fund_code} 的基础信息...")
     fund_info = getFundInfo(DEFAULT_USER, fund_code)

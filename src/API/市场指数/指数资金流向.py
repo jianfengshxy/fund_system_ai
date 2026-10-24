@@ -1,105 +1,58 @@
-import logging
-import requests
-from typing import Dict, Any, List, Optional, Union
+"""
+兼容旧版"指数资金流向"接口名。
+
+历史上业务层通过 `get_index_money_flow` 获取指数资金热度序列，
+后来底层实现迁移到 `指数资金热度与价格走势.py`，返回结构改成了
+`IndexPriceFlowResponse`。为避免老脚本批量失效，这里提供一个薄包装：
+
+- 继续暴露 `get_index_money_flow(user, index_code, range_type)`
+- 返回旧代码可直接消费的 `list[dict]`
+"""
+
+from __future__ import annotations
+
 import os
 import sys
+from typing import Any
 
-# Add root dir to path if running as script to allow src imports
+
 if __name__ == "__main__":
     root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     if root_dir not in sys.path:
         sys.path.insert(0, root_dir)
 
 from src.common.logger import get_logger
-from src.common.requests_session import session
 from src.domain.user.User import User
-from src.common.constant import DEFAULT_GTOKEN, DEVICE_ID, IOS_CLIENT_INFO, IOS_USER_AGENT, MOBILE_KEY, MP_VERSION_DEFAULT, PHONE_TYPE, PLATFORM, SERVER_VERSION
+from src.API.市场指数.指数资金热度与价格走势 import get_index_price_flow
 
-logger = get_logger("IndexMoneyFlow")
 
-def get_index_money_flow(user: User, index_code: str, range_type: str = "n") -> List[Dict[str, Any]]:
+logger = get_logger("IndexMoneyFlowCompat")
+
+
+def get_index_money_flow(user: User, index_code: str, range_type: str = "n") -> list[dict[str, Any]]:
     """
-    获取指数资金流向数据
+    兼容旧版接口：返回资金热度/价格序列的字典列表。
+
     Args:
-        user: User对象
-        index_code: 市场指数代码 (e.g. "399959")
-        range_type: 时间范围 (default "n")
+        user: User 对象
+        index_code: 指数代码
+        range_type: 时间范围，默认近 1 年
+
     Returns:
-        List[Dict[str, Any]]: 资金流向数据列表，包含日期、点位、涨跌幅、资金流向得分
+        list[dict]: 每条包含 PDATE / PERCENTPRICE / CHGRT / XLFLOW_SCORE
     """
-    url = "https://fundcomapi.tiantianfunds.com/mm/FundIndex/FundIndexPrice"
-    
-    headers = {
-        'Accept': '*/*',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Accept-Language': 'zh-Hans-CN;q=1',
-        'Connection': 'keep-alive',
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'GTOKEN': DEFAULT_GTOKEN,
-        'Host': 'fundcomapi.tiantianfunds.com',
-        'MP-VERSION': MP_VERSION_DEFAULT,
-        'Referer': 'https://mpservice.com/7d7b3460cd40444ba58cdabdfae34442/release/pages/index-detail/sub-pages/capital/index',
-        'User-Agent': IOS_USER_AGENT,
-        'clientInfo': IOS_CLIENT_INFO,
-        'traceparent': '00-daba033e0a1f4986b39426b61e0b3619-0000000000000000-01',
-        'tracestate': 'pid=0x105032130,taskid=0x157a9ef40',
-        'validmark': 'Li4RtWc+9LvmhgcBNN3qg3dzZjFUt4WiApOOGmkaVZL5BWm0DcGX9NZYIxjsAsZdSIrQ1Lx4ygfw5br2rQnUfMES8ernsO5lB/RKZKLdR3zD2KNQjemM+lwlJAhAHjbPa1Sl+8lg3dobsr1ny7eoGw=='
-    }
-    
-    data = {
-        'INDEXCODE': index_code,
-        'RANGE': range_type,
-        'ctoken': user.c_token,
-        'deviceid': DEVICE_ID,
-        'passportctoken': user.passport_ctoken or user.c_token,
-        'passportid': user.passport_id,
-        'passportutoken': user.passport_utoken or user.u_token,
-        'plat': PLATFORM,
-        'product': 'EFund',
-        'uid': user.customer_no,
-        'userid': user.customer_no,
-        'utoken': user.u_token,
-        'version': SERVER_VERSION
-    }
-    
-    try:
-        response = session.post(url, headers=headers, data=data, verify=False, timeout=30)
-        response.raise_for_status()
-        result = response.json()
-        
-        if result.get("success"):
-            return result.get("data", [])
-        else:
-            logger.error(f"获取指数资金流向失败: {result.get('message', 'Unknown error')}")
-            return []
-            
-    except Exception as e:
-        logger.error(f"获取指数资金流向异常: {e}")
+    resp = get_index_price_flow(user, index_code=index_code, range_type=range_type)
+    if not resp.success or not resp.items:
+        logger.warning(f"获取指数资金流向兼容数据失败: index_code={index_code}, error={resp.first_error}")
         return []
 
-if __name__ == "__main__":
-    from src.common.constant import DEFAULT_USER
-    from src.API.登录接口.login import ensure_user_fresh
-    
-    print("Refreshing user token...")
-    user = ensure_user_fresh(DEFAULT_USER)
-    
-    # Test with index code from example (399959 - 中证军工)
-    test_index_code = "399959" 
-    print(f"\n--- Testing Index Money Flow for {test_index_code} ---")
-    data = get_index_money_flow(user, index_code=test_index_code)
-    
-    if data:
-        print(f"Retrieved {len(data)} records.")
-        # Print first 3 and last 3 records
-        print("First 3 records:")
-        for item in data[:3]:
-            print(f"Date: {item.get('PDATE')}, Price: {item.get('PERCENTPRICE')}, Change: {item.get('CHGRT')}%, Flow Score: {item.get('XLFLOW_SCORE')}")
-        
-        if len(data) > 3:
-            print("...")
-            print("Last 3 records:")
-            for item in data[-3:]:
-                print(f"Date: {item.get('PDATE')}, Price: {item.get('PERCENTPRICE')}, Change: {item.get('CHGRT')}%, Flow Score: {item.get('XLFLOW_SCORE')}")
-    else:
-        print("Failed to get index money flow data.")
+    return [
+        {
+            "PDATE": item.PDATE,
+            "PERCENTPRICE": item.PERCENTPRICE,
+            "CHGRT": item.CHGRT,
+            "XLFLOW_SCORE": item.XLFLOW_SCORE,
+        }
+        for item in resp.items
+    ]
+

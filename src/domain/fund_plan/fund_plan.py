@@ -70,6 +70,23 @@ class FundPlan:
     def status(self) -> str:
         return f"{self.planState}-{self.planExtendStatus}" if self.planExtendStatus else str(self.planState)
     
+    @staticmethod
+    def period_type_label(period_type: int) -> str:
+        """
+        定投周期编码说明（天天基金API定义）:
+          1 = 周投 (每周扣款)
+          2 = 双周投 (每两周扣款)
+          3 = 月投 (每月扣款)
+          4 = 日投 (每日扣款)
+        """
+        _period_type_map = {
+            1: '周投',
+            2: '双周投',
+            3: '月投',
+            4: '日投',
+        }
+        return _period_type_map.get(period_type, f'未知周期类型({period_type})')
+
     def __str__(self) -> str:
         """返回定投计划的详细信息字符串表示"""
         profit_info = ""
@@ -94,6 +111,8 @@ class FundPlan:
         if self.retreatPercentage:
             target_info += f", 回撤比例: {self.retreatPercentage}"
         
+        period_label = self.period_type_label(self.periodType)
+        
         return f"""定投计划详情:
   计划ID: {self.planId}
   基金代码: {self.fundCode}
@@ -102,7 +121,7 @@ class FundPlan:
   计划状态: {self.status}
   计划类型: {self.planType}
   定投金额: {self.amount:.2f}元
-  定投周期: {self.periodType}({self.periodValue})
+  定投周期: {period_label}(periodType={self.periodType})
   子账户: {self.subAccountName}({self.subAccountNo})
   计划资产: {self.planAssets:.2f}元{profit_info}{profit_rate_info}{target_info}
   下次扣款: {self.nextDeductDate}

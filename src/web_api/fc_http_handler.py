@@ -18,12 +18,15 @@ from src.common.constant import DEFAULT_USER
 from src.domain.sub_account.sub_account import SubAccount
 from src.domain.user import ApiResponse
 from src.scheduled_task_manager import compute_next_run, get_scheduler
+from src.db.database_connection import DatabaseConnection
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
+from src.service.公共服务.estimated_profit_service import calc_estimated_change
 
 logger = get_logger(__name__)
 
 _executor = ThreadPoolExecutor(max_workers=8)
 _cache: dict[str, tuple[float, object]] = {}
+_db = DatabaseConnection()
 
 
 def _json_response(status_code: int, data: object | None = None, headers: dict | None = None):
@@ -36,7 +39,7 @@ def _json_response(status_code: int, data: object | None = None, headers: dict |
     }
     if headers:
         base_headers.update(headers)
-    body = "" if data is None else json.dumps(data, ensure_ascii=False)
+    body = "" if data is None else json.dumps(_jsonify(data), ensure_ascii=False)
     return {"statusCode": status_code, "headers": base_headers, "body": body}
 
 
@@ -44,6 +47,22 @@ def _ensure_datetime_string(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
     return value
+
+
+def _jsonify(value: Any) -> Any:
+    from dataclasses import asdict, is_dataclass
+
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if is_dataclass(value):
+        return _jsonify(asdict(value))
+    if isinstance(value, dict):
+        return {str(k): _jsonify(v) for k, v in value.items() if not callable(v)}
+    if isinstance(value, (list, tuple, set)):
+        return [_jsonify(v) for v in value]
+    return str(value)
 
 
 def _parse_event(event):
@@ -91,6 +110,70 @@ def _extract_json_body(event: dict[str, Any]) -> dict[str, Any]:
 def _extract_query_params(event: dict[str, Any]) -> dict[str, str]:
     params = event.get("queryParameters") or event.get("queryStringParameters") or {}
     return params if isinstance(params, dict) else {}
+
+
+def _normalize_trade_date(value: Any) -> Any:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def _get_latest_index_snapshot(index_code: str | None = None, fund_code: str | None = None):
+    cache_key = f"index_snapshot:{index_code or ''}:{fund_code or ''}"
+    cached = _cache.get(cache_key)
+    if cached and cached[0] > time.time() - 30:
+        return cached[1]
+
+    snapshot = None
+    if index_code:
+        rows = _db.execute_query(
+            """
+            SELECT
+                s.index_code,
+                s.index_name,
+                d.trade_date,
+                d.heat_score
+            FROM market_index_static s
+            LEFT JOIN market_index_daily d
+              ON d.index_code = s.index_code
+             AND d.trade_date = (
+                SELECT MAX(d2.trade_date)
+                FROM market_index_daily d2
+                WHERE d2.index_code = s.index_code
+             )
+            WHERE s.index_code = %s
+            LIMIT 1
+            """,
+            (index_code,),
+        )
+        snapshot = rows[0] if rows else None
+
+    if snapshot is None and fund_code:
+        rows = _db.execute_query(
+            """
+            SELECT
+                s.index_code,
+                s.index_name,
+                d.trade_date,
+                d.heat_score
+            FROM market_index_static s
+            LEFT JOIN market_index_daily d
+              ON d.index_code = s.index_code
+             AND d.trade_date = (
+                SELECT MAX(d2.trade_date)
+                FROM market_index_daily d2
+                WHERE d2.index_code = s.index_code
+             )
+            WHERE s.track_fund_code = %s
+            ORDER BY (d.heat_score IS NOT NULL) DESC, d.trade_date DESC, s.index_code
+            LIMIT 1
+            """,
+            (fund_code,),
+        )
+        snapshot = rows[0] if rows else None
+
+    _cache[cache_key] = (time.time(), snapshot)
+    return snapshot
 
 
 def _validate_scheduled_task_payload(data: Any, partial: bool = False) -> dict[str, Any]:
@@ -145,7 +228,12 @@ def _validate_scheduled_task_payload(data: Any, partial: bool = False) -> dict[s
     return normalized
 
 
-def _apply_fc_timer_trigger(task: dict[str, Any], *, old_task_name: str | None = None) -> FcOpenApiClient:
+def _apply_fc_timer_trigger(
+    task: dict[str, Any],
+    *,
+    old_task_name: str | None = None,
+    allow_create: bool = True,
+) -> FcOpenApiClient:
     function_name = str(task.get("policy") or "").strip()
     trigger_name = str(task.get("task_name") or "").strip()
     if not function_name or not trigger_name:
@@ -156,7 +244,9 @@ def _apply_fc_timer_trigger(task: dict[str, Any], *, old_task_name: str | None =
 
     enable = bool(task.get("is_enabled"))
     payload = task.get("payload")
-    client = FcOpenApiClient()
+    account_id = (str(task.get("fc_account_id") or "").strip() or None) if task.get("fc_account_id") is not None else None
+    region = (str(task.get("fc_region") or "").strip() or None) if task.get("fc_region") is not None else None
+    client = FcOpenApiClient(account_id=account_id, region=region)
     if old_task_name and old_task_name != trigger_name:
         client.create_timer_trigger(
             function_name=function_name,
@@ -179,6 +269,8 @@ def _apply_fc_timer_trigger(task: dict[str, Any], *, old_task_name: str | None =
         )
         return client
     except Exception:
+        if not allow_create:
+            raise
         client.create_timer_trigger(
             function_name=function_name,
             trigger_name=trigger_name,
@@ -287,6 +379,7 @@ def _handle_portfolio_details(portfolio_name: str):
     total_profit_value = 0.0
     portfolio_details = []
 
+    user = ensure_user_fresh(DEFAULT_USER, 600)
     sub_accounts_response = _get_sub_accounts_cached()
     selected_portfolio = None
     if getattr(sub_accounts_response, "Success", False) and getattr(sub_accounts_response, "Data", None):
@@ -299,17 +392,48 @@ def _handle_portfolio_details(portfolio_name: str):
     if asset_details_list:
 
         def _enrich(asset):
-            fund_info = getFundInfo(DEFAULT_USER, asset.fund_code)
-            if fund_info:
-                if (hasattr(fund_info, "fund_type") and fund_info.fund_type == "a") or (
-                    hasattr(fund_info, "fund_name") and "QDII" in fund_info.fund_name.upper()
-                ):
-                    asset.estimated_change = 0.0
-                else:
-                    updated_fund = updateFundEstimatedValue(fund_info)
-                    asset.estimated_change = updated_fund.estimated_change if updated_fund else 0.0
-            else:
+            from src.service.基金信息.基金信息 import get_all_fund_info
+
+            fund_info = get_all_fund_info(user, asset.fund_code)
+            if not fund_info:
                 asset.estimated_change = 0.0
+                asset.nav_change = None
+                asset.nav_date = getattr(asset, "nav_date", None)
+                index_snapshot = _get_latest_index_snapshot(fund_code=asset.fund_code)
+                if index_snapshot:
+                    asset.tracked_index_code = index_snapshot.get("index_code")
+                    asset.tracked_index_name = index_snapshot.get("index_name")
+                    asset.latest_heat_score = index_snapshot.get("heat_score")
+                    asset.latest_heat_trade_date = _normalize_trade_date(index_snapshot.get("trade_date"))
+                return asset
+
+            asset.fund_name = getattr(fund_info, "fund_name", getattr(asset, "fund_name", None))
+            asset.fund_type = getattr(fund_info, "fund_type", getattr(asset, "fund_type", None))
+            asset.fund_nav = getattr(fund_info, "nav", getattr(asset, "fund_nav", None))
+            asset.nav_date = getattr(fund_info, "nav_date", getattr(asset, "nav_date", None))
+            asset.nav_change = getattr(fund_info, "nav_change", None)
+            nav_date = str(getattr(fund_info, "nav_date", "") or "")[:10]
+            est_date = str(getattr(fund_info, "estimated_time", "") or "")[:10]
+            nav_change = getattr(fund_info, "nav_change", None)
+            fund_type = getattr(fund_info, "fund_type", None)
+            fund_name = getattr(fund_info, "fund_name", None)
+            is_qdii = (str(fund_type) == "a") or ("QDII" in str(fund_name or "").upper())
+            if is_qdii:
+                asset.estimated_change = float(getattr(fund_info, "estimated_change", None) or 0.0)
+            elif nav_date and est_date and nav_date == est_date and nav_change is not None:
+                asset.estimated_change = float(nav_change or 0.0)
+            else:
+                asset.estimated_change = float(getattr(fund_info, "estimated_change", None) or 0.0)
+            asset.estimated_time = getattr(fund_info, "estimated_time", None)
+            index_snapshot = _get_latest_index_snapshot(
+                getattr(fund_info, "index_code", None),
+                asset.fund_code,
+            )
+            if index_snapshot:
+                asset.tracked_index_code = index_snapshot.get("index_code")
+                asset.tracked_index_name = index_snapshot.get("index_name")
+                asset.latest_heat_score = index_snapshot.get("heat_score")
+                asset.latest_heat_trade_date = _normalize_trade_date(index_snapshot.get("trade_date"))
             return asset
 
         futures = [_executor.submit(_enrich, asset) for asset in asset_details_list]
@@ -359,28 +483,10 @@ def _handle_portfolios():
 
 def _handle_fund_detail(fund_code: str):
     user = ensure_user_fresh(DEFAULT_USER, 600)
-    fund_info = getFundInfo(user, fund_code)
+    from src.service.基金信息.基金信息 import get_all_fund_info
+    fund_info = get_all_fund_info(user, fund_code)
     if not fund_info:
         return None
-
-    if not (
-        (hasattr(fund_info, "fund_type") and fund_info.fund_type == "a")
-        or (hasattr(fund_info, "fund_name") and "QDII" in fund_info.fund_name.upper())
-    ):
-        updateFundEstimatedValue(fund_info)
-
-    vol_data_5 = get_fund_volatility(user, fund_info, 5)
-    if vol_data_5:
-        mean, _variance, _vol = vol_data_5
-        fund_info.nav_5day_avg = mean
-
-    vol_data_30 = get_fund_volatility(user, fund_info, 30)
-    if vol_data_30:
-        _mean, _variance, volatility = vol_data_30
-        fund_info.volatility = volatility * 100
-
-    fund_info.rank_30day = get_nav_rank(user, fund_info, 30)
-    fund_info.rank_100day = get_nav_rank(user, fund_info, 100)
 
     detail = {}
     for key in dir(fund_info):
@@ -625,9 +731,14 @@ def handler(event, _context):
                 merged["is_enabled"] = bool(task_payload.get("is_enabled"))
             new_task_name = str(merged.get("task_name") or "").strip()
             old_name_for_rename = old_task_name if old_task_name != new_task_name else None
+            enable_toggle_only = set(task_payload.keys()) == {"is_enabled"} and old_name_for_rename is None
 
             try:
-                client = _apply_fc_timer_trigger(merged, old_task_name=old_name_for_rename)
+                client = _apply_fc_timer_trigger(
+                    merged,
+                    old_task_name=old_name_for_rename,
+                    allow_create=not enable_toggle_only,
+                )
             except Exception as exc:
                 raise ValueError(f"FC 更新触发器失败，数据库未变更: {exc}")
 
@@ -663,7 +774,9 @@ def handler(event, _context):
                 return _json_response(404, {"error": "任务不存在"})
             function_name = str(current.get("policy") or "").strip()
             trigger_name = str(current.get("task_name") or "").strip()
-            client = FcOpenApiClient()
+            account_id = (str(current.get("fc_account_id") or "").strip() or None) if current.get("fc_account_id") is not None else None
+            region = (str(current.get("fc_region") or "").strip() or None) if current.get("fc_region") is not None else None
+            client = FcOpenApiClient(account_id=account_id, region=region)
             try:
                 client.delete_trigger(function_name, trigger_name)
             except Exception as exc:

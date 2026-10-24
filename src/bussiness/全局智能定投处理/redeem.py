@@ -2,7 +2,7 @@ import logging
 import yaml
 from random import vonmisesvariate
 import re
-from typing import Optional
+from typing import Dict, Optional
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import os
@@ -41,6 +41,7 @@ from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
 from src.service.大数据.加仓风向标服务 import get_fund_investment_indicators
 from src.API.资产管理.AssetManager import GetMyAssetMainPartAsync
 from src.service.公共服务.nav_gate_service import nav5_gate
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -59,7 +60,7 @@ def default_user_redeem_all_fund_plans():
     redeem_all_fund_plans(DEFAULT_USER)
     logger.info(f"{DEFAULT_USER.customer_name}所有定投计划止盈操作已执行")
 
-def redeem_all_fund_plans(user: User):
+def redeem_all_fund_plans(user: User, stop_rate_overrides: Optional[Dict[str, float]] = None):
     fund_plan_details = get_all_fund_plan_details(user)
     
     # 资产预过滤：按组合账号批量获取资产
@@ -100,7 +101,7 @@ def redeem_all_fund_plans(user: User):
         return
 
     with ThreadPoolExecutor(max_workers=1) as executor:
-        futures = [executor.submit(redeem, user, plan_detail, asset) 
+        futures = [executor.submit(redeem, user, plan_detail, asset, stop_rate_overrides)
                   for plan_detail, asset in redeemable_plans]
         
     results = [future.result() for future in futures]
@@ -108,7 +109,12 @@ def redeem_all_fund_plans(user: User):
     
 
 # 止盈算法实现
-def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Optional[AssetDetails] = None) -> bool:
+def redeem(
+    user: User,
+    plan_detail: FundPlanDetail,
+    pre_fetched_asset_detail: Optional[AssetDetails] = None,
+    stop_rate_overrides: Optional[Dict[str, float]] = None,
+) -> bool:
     """
     止盈算法实现
 
@@ -150,6 +156,9 @@ def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Op
     
     fund_amount = plan_detail.rationPlan.amount 
     stop_rate = 1.0
+    payload_stop_rate = None
+    if stop_rate_overrides:
+        payload_stop_rate = stop_rate_overrides.get(str(fund_code).strip())
     
     try:
         if pre_fetched_asset_detail is not None:
@@ -175,11 +184,11 @@ def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Op
     
     # 获取当前收益率和估值增长率
     current_profit_rate = constant_profit_rate if constant_profit_rate is not None else 0.0
-    estimated_change = fund_info.estimated_change if fund_info.estimated_change is not None else 0.0
+    estimated_change, label_est = calc_estimated_change(fund_info)
     estimated_profit_rate = current_profit_rate + estimated_change
     rank_100 = fund_info.rank_100day
     
-    logger.info(f"{fund_name}收益率计算：当前收益率{current_profit_rate}%，估值变化{estimated_change}%，预估收益率{estimated_profit_rate}%")
+    logger.info(f"{fund_name}收益率计算：当前收益率{current_profit_rate}%，估值变化{estimated_change}%，预估收益率{estimated_profit_rate}%（{label_est}）")
     logger.info(f"{fund_name}其他指标：波动率{volatility}%，100日排名{rank_100}，投资次数{times}")
    
     if asset_detail.available_vol <= 0.01:
@@ -207,9 +216,18 @@ def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Op
         logger.info(f"止盈趋势门槛检查：缺少用于对比的净值（estimated_value={est_nav}, prev_nav={prev_nav}, nav_5day_avg={nav5}），跳过止盈")
         return True
 
-    # 更新：止盈点 = 波动率，限制在3.0到10.0之间）
-    stop_rate = min(max(float(volatility), 3.0), 10.0)
-    logger.info(f"组合{sub_account_no}的{fund_name}{fund_code}波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（不低于3.0）")
+    # 基金级 payload 覆盖优先；未配置时回退到现有代码里的波动率动态止盈
+    if payload_stop_rate is not None:
+        stop_rate = float(payload_stop_rate)
+        logger.info(
+            f"组合{sub_account_no}的{fund_name}{fund_code}命中payload止盈率配置，设置止盈点={stop_rate:.2f}"
+        )
+    else:
+        stop_rate = min(max(float(volatility), 3.0), 10.0)
+        logger.info(
+            f"组合{sub_account_no}的{fund_name}{fund_code}未命中payload止盈率配置，"
+            f"波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（不低于3.0）"
+        )
 
     if asset_detail.fund_type == 'a' and estimated_profit_rate > 3.0:
         logger.info(f"{customer_name}的止盈操作开始：QDII基金{fund_name}{fund_code}预估收益{estimated_profit_rate},赎回0费率份额,实际止盈点:3.0")
@@ -257,9 +275,9 @@ def redeem(user: User, plan_detail: FundPlanDetail, pre_fetched_asset_detail: Op
     else:
         logger.info(f"【风控状态】活期宝占比{hqb_ratio_percent:.2f}% >= {HQB_RATIO_THRESHOLD}%阈值，启用波动率止盈模式。")
 
-    #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于PROFIT_THRESHOLD_FOR_LOW_BALANCE，且投资次数小于5.0次，且当日估值增长率大于0.5%，且100日排名大于90，立即卖出费率为0的份额
-    if estimated_profit_rate > PROFIT_THRESHOLD_FOR_LOW_BALANCE and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type == '000' and "QDII" not in fund_name and times <= 5.0 and estimated_change > 0.5 and rank_100 is not None and rank_100 > 90:
-        logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:{PROFIT_THRESHOLD_FOR_LOW_BALANCE},投资次数:{times},估值增长率:{estimated_change},100日排名:{rank_100}.")
+    #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于PROFIT_THRESHOLD_FOR_LOW_BALANCE，且投资次数小于5.0次，且当日估值增长率大于0.5%，立即卖出费率为0的份额（移除rank_100排名限制）
+    if estimated_profit_rate > PROFIT_THRESHOLD_FOR_LOW_BALANCE and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type == '000' and "QDII" not in fund_name and times <= 5.0 and estimated_change > 0.5:
+        logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:{PROFIT_THRESHOLD_FOR_LOW_BALANCE},投资次数:{times},估值增长率:{estimated_change}（无排名限制）")
         sell_0_fee_shares(user,sub_account_no,fund_code,get_shares_lazy())
         return True
     else:

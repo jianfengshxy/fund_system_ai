@@ -10,8 +10,11 @@ def increase(
     user: User,
     sub_account_name: str,
     amount: float = 2000.0,
+    init_amount: Optional[float] = None,
     fund_list: Optional[List[Dict]] = None,
+    limit: Optional[float] = None,
     total_limit: Optional[float] = None,
+    hqb_ratio_limit_enabled: bool = True,
 ) -> bool:
     """
     黄金多利组合加仓业务入口
@@ -21,6 +24,9 @@ def increase(
         user,
         sub_account_name,
         amount,
+        init_amount=init_amount,
         fund_list=fund_list,
+        limit=limit,
         total_limit=total_limit,
+        hqb_ratio_limit_enabled=hqb_ratio_limit_enabled,
     )

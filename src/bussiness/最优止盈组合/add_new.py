@@ -3,11 +3,10 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-if __package__ in {None, ""}:
-    project_root = Path(__file__).resolve().parents[3]
-    project_root_str = str(project_root)
-    if project_root_str not in sys.path:
-        sys.path.insert(0, project_root_str)
+project_root = Path(__file__).resolve().parents[3]
+project_root_str = str(project_root)
+if project_root_str not in sys.path:
+    sys.path.insert(0, project_root_str)
 
 from src.common.constant import DEFAULT_USER
 from src.common.logger import get_logger
@@ -65,12 +64,11 @@ def add_new_funds(user: User, sub_account_name: str = "最优止盈", total_budg
     return success
 
 if __name__ == "__main__":
-    # 测试 amount 不传的情况
     try:
-        success = add_new_funds(DEFAULT_USER, "飞龙在天", 1000000.0,fund_type='non_index')  # amount 不传，使用 None
+        success = add_new_funds(DEFAULT_USER, "飞龙在天", 1000000.0, fund_type='non_index', amount=10000.0)
         if success:
-            logging.info("测试成功（amount 未传）")
+            logging.info("测试成功（amount=10000.0）")
         else:
-            logging.info("测试失败（amount 未传）")
+            logging.info("测试失败（amount=10000.0）")
     except Exception as e:
         logging.error(f"测试用户处理失败：{str(e)}")

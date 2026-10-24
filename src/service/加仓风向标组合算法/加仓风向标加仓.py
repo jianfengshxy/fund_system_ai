@@ -25,6 +25,7 @@ from src.API.基金信息.FundRank import get_fund_growth_rate
 from src.service.交易管理.交易查询 import count_success_trades_on_prev_nav_day
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 # 新增导入 get_user_all_info
 from src.service.用户管理.用户信息 import get_user_all_info
 def _get_max_funds_threshold():
@@ -105,12 +106,12 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
                 return default
 
         current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-        estimated_change = _safe_float(getattr(fi, "estimated_change", 0.0), 0.0)
+        estimated_change, label_est = calc_estimated_change(fi)
         estimated_profit_rate = current_profit_rate + estimated_change
 
         # 公共前置过滤：仅保留跌幅足够的标的
         if estimated_profit_rate >= -1.0:
-            logger.info(f"[跳过] {fi.fund_name}({fund_code}) | 原因: 回撤不达标 estimated_profit_rate={estimated_profit_rate:.2f}%（阈值<-1.00%，current={current_profit_rate:.2f}%, change={estimated_change:.2f}%）")
+            logger.info(f"[跳过] {fi.fund_name}({fund_code}) | 原因: 回撤不达标 estimated_profit_rate={estimated_profit_rate:.2f}%（阈值<-1.00%，current={current_profit_rate:.2f}%, change={estimated_change:.2f}%, {label_est}）")
             continue
 
         in_wind_vane = (fi.fund_type != '000' and fund_code in wind_vane_codes) or (fi.fund_type == '000' and fi.index_code in wind_vane_indices)
@@ -181,13 +182,20 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             continue
         logger.info(f"[检查通过] 步骤3-百分位排名检查 ✓ (month={month_rank_rate:.2%}, season={season_rank_rate:.2%})")
 
-        # 检查步骤4: 单个基金资产限制（≤15%总预算）
+        # 检查步骤4: 单个基金仓位限制（≤15%组合资产）
         safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
-        budget_threshold = float(total_budget) * 0.15
-        if safe_asset_value > budget_threshold:
-            logger.info(f"[检查失败] 步骤4-单个基金资产超限 (持仓={safe_asset_value:.2f} > 15%预算={budget_threshold:.2f})")
-            continue
-        logger.info(f"[检查通过] 步骤4-单个基金资产限制 ✓ (持仓={safe_asset_value:.2f} ≤ 15%预算={budget_threshold:.2f})")
+        if current_total_asset > 0.0:
+            position_ratio = safe_asset_value / current_total_asset * 100.0
+            if position_ratio > 15.0:
+                logger.info(
+                    f"[检查失败] 步骤4-单个基金仓位占比过高 (占比={position_ratio:.2f}% > 15.00%，"
+                    f"单基金市值={safe_asset_value:.2f}，组合总市值={current_total_asset:.2f})"
+                )
+                continue
+            logger.info(
+                f"[检查通过] 步骤4-单个基金仓位限制 ✓ (占比={position_ratio:.2f}% ≤ 15.00%，"
+                f"单基金市值={safe_asset_value:.2f}，组合总市值={current_total_asset:.2f})"
+            )
 
         # 检查步骤5: 组合总资产限制（加仓后≤总预算）
         if current_total_asset + buy_amount > float(total_budget):
@@ -200,7 +208,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
         filter_checks.append("✓ 5日均值判定通过（估算净值 > 5日均值）")
         filter_checks.append("✓ 公共排名检查通过（20≤rank_100day≤90 且 rank_30day≥5）")
         filter_checks.append(f"✓ 百分位排名检查通过（month={month_rank_rate:.2%}, season={season_rank_rate:.2%} ≤ 75%）")
-        filter_checks.append(f"✓ 单个基金资产限制通过（持仓={safe_asset_value:.2f} ≤ 15%预算={budget_threshold:.2f}）")
+        filter_checks.append("✓ 单个基金仓位限制通过（单基金/组合 ≤ 15%）")
         filter_checks.append(f"✓ 组合总资产限制通过（当前={current_total_asset:.2f} + 加仓={buy_amount:.2f} ≤ 总预算={total_budget:.2f}）")
 
         # 打印过滤条件汇总信息

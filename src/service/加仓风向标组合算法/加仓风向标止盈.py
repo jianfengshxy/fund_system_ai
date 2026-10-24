@@ -28,6 +28,7 @@ from src.service.公共服务.nav_gate_service import nav5_gate, nav5_fall_gate
 logger = get_logger(__name__)
 
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 
 def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float] = None) -> bool:
     customer_name = user.customer_name
@@ -99,7 +100,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
         # 预估收益率
         current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-        estimated_change = _safe_float(getattr(fund_info, "estimated_change", 0.0), 0.0)
+        estimated_change, label_est = calc_estimated_change(fund_info)
         estimated_profit_rate = current_profit_rate + estimated_change
 
         # 波动率对齐
@@ -127,13 +128,10 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
         else:
             first_stop_condition_checks.append(f"✗ 估值增长率检查失败（{estimated_change:.2f}% 不满足条件）")
             
-        if rank_100 is not None and rank_100 > 90:
-            first_stop_condition_checks.append(f"✓ 100日排名检查通过（{rank_100} > 90）")
-        else:
-            rank_str = "未知" if rank_100 is None else str(rank_100)
-            first_stop_condition_checks.append(f"✗ 100日排名检查失败（{rank_str} ≤ 90）")
+        rank_str = "未知" if rank_100 is None else str(rank_100)
+        first_stop_condition_checks.append(f"✓ 100日排名记录（{rank_str}，不作为限制）")
         
-        if estimated_profit_rate > stop_rate and (estimated_change == 0.0 or estimated_change > 0.5) and rank_100 is not None and rank_100 > 90:
+        if estimated_profit_rate > stop_rate and (estimated_change == 0.0 or estimated_change > 0.5):
             # 打印过滤条件汇总
             logger.info(f"[过滤条件汇总] 基金 {fund_name}({fund_code}) 满足分层止盈条件:")
             for check in first_stop_condition_checks:
@@ -145,7 +143,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
                 zero_fee_shares = _safe_float(get_0_fee_shares(user, fund_code), 0.0)
                 if zero_fee_shares > 10.0:
                     logger.info(
-                        f"{user.customer_name} 分层止盈(rank_100>90)：{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% "
+                        f"{user.customer_name} 分层止盈：{fund_name}({fund_code}) 预估={estimated_profit_rate:.2f}% "
                         f"止盈点={stop_rate:.2f}% 波动率={volatility:.2f} 100日排名={rank_100} 0费率份额={zero_fee_shares:.2f}，执行卖出0费率份额"
                     )
                     redeem_ok = bool(sell_0_fee_shares(user, sub_account_no, fund_code, shares))

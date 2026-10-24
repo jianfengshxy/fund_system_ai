@@ -16,6 +16,7 @@ from src.API.组合管理.SubAccountMrg import getSubAccountNoByName
 from src.service.交易管理.赎回基金 import sell_0_fee_shares
 from src.service.基金信息.基金信息 import get_all_fund_info
 from src.API.交易管理.trade import get_bank_shares
+from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
 
 logger = get_logger(__name__)
 
@@ -48,12 +49,12 @@ def redeem_gold_dimension_funds(user: User, sub_account_name: str) -> bool:
 
             # 获取基金估值信息
             fund_info = get_all_fund_info(user, fund_code)
-            estimated_change = fund_info.estimated_change if fund_info and fund_info.estimated_change is not None else 0.0
+            estimated_change, label_est = calc_estimated_change(fund_info)
             
             # 计算预估收益率 = 当前收益率 + 估值涨跌幅
             estimated_profit_rate = current_profit_rate + estimated_change
             
-            logger.info(f"基金 {fund_name}({fund_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%")
+            logger.info(f"基金 {fund_name}({fund_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%（{label_est}）")
 
             if estimated_profit_rate > 1.0:
                 logger.info(f"基金 {fund_name}({fund_code}) 预估收益率 {estimated_profit_rate:.2f}% > 1.0%，尝试赎回0费率份额")

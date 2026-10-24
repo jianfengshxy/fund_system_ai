@@ -106,14 +106,22 @@ def sync_latest_snapshot(
         range_type=daily_range_type,
         limit=daily_limit,
     )
+    repair_result = svc.repair_recent_heat_score_gaps(
+        user,
+        range_type=daily_range_type,
+        lookback_days=7,
+        limit=daily_limit,
+    )
 
     stage_result = svc.sync_all_indices_stage_performance(user, limit=stage_limit)
 
-    result = {"daily": daily_result, "stage": stage_result}
+    result = {"daily": daily_result, "daily_repair": repair_result, "stage": stage_result}
     result["elapsed_min"] = round((time.time() - t0) / 60, 1)
     logger.info(
         f"最新快照完成: 日数据 {daily_result['synced']}/{daily_result['total']} "
         f"(失败 {daily_result['failed']}), "
+        f"热度回补 {repair_result['synced']}/{repair_result['total']} "
+        f"(失败 {repair_result['failed']}), "
         f"阶段指标 {stage_result['synced']}/{stage_result['total']} "
         f"(失败 {stage_result['failed']}, 无日数据 {stage_result['no_daily_data']}), "
         f"耗时 {result['elapsed_min']} 分钟"

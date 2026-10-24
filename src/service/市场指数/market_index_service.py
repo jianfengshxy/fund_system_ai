@@ -14,13 +14,13 @@
 
 import sys
 import os
+from datetime import timedelta
 
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
 import time
-import logging
 from typing import Optional, List, Dict
 
 from src.common.logger import get_logger
@@ -170,7 +170,7 @@ class MarketIndexService:
 
         # 合并 PETTM + PB 到日期字典
         merged: Dict[str, dict] = {}
-        for key, resp in [
+        for _, resp in [
             ("PETTM", get_index_valuation_trend(user, index_code, "PETTM", period)),
         ]:
             if resp.success and resp.items:
@@ -179,7 +179,7 @@ class MarketIndexService:
                         merged.setdefault(it.PDATE, {})["pe_ttm"] = it.PETTM
         time.sleep(0.2)
 
-        for key, resp in [
+        for _, resp in [
             ("PB", get_index_valuation_trend(user, index_code, "PB", period)),
         ]:
             if resp.success and resp.items:
@@ -224,7 +224,9 @@ class MarketIndexService:
             ") VALUES (%s, %s, %s, %s, %s) "
             "ON DUPLICATE KEY UPDATE "
             "price = VALUES(price), change_pct = VALUES(change_pct), "
-            "heat_score = VALUES(heat_score)"
+            # 上游偶发返回 '--' 时，XLFLOW_SCORE 会被解析为 None。
+            # 这里不允许用空值覆盖库里已有的热度，避免把已同步成功的数据冲掉。
+            "heat_score = COALESCE(VALUES(heat_score), heat_score)"
         )
         params = []
         for it in resp.items:
@@ -240,6 +242,70 @@ class MarketIndexService:
         count = self._db.insert_many(sql, params) if params else 0
         logger.info(f"[{index_code}] 价格+热度入库: {count} 条")
         return count
+
+    def repair_recent_heat_score_gaps(
+        self,
+        user: User,
+        *,
+        range_type: str = "y",
+        lookback_days: int = 7,
+        limit: Optional[int] = None,
+    ) -> dict:
+        """
+        回补近期 heat_score 缺口。
+
+        设计目标：
+          1. 只处理近期已有 price/change_pct，但 heat_score 为空的指数
+          2. 复用价格/热度同步接口回补最新窗口数据
+          3. 依赖 sync_daily_price_flow_batch 的 COALESCE 保护，避免空值反向覆盖
+
+        注意：
+          - 该方法只能修复“当前接口已经恢复提供热度”的近期缺口
+          - 对于上游接口历史上本来就返回 '--' 的日期，不会伪造热度值
+        """
+        latest_trade_rows = self._db.execute_query(
+            "SELECT MAX(trade_date) AS latest_trade_date FROM market_index_daily"
+        )
+        latest_trade_date = latest_trade_rows[0]["latest_trade_date"] if latest_trade_rows else None
+        if latest_trade_date is None:
+            return {"total": 0, "synced": 0, "failed": 0}
+
+        start_date = latest_trade_date - timedelta(days=lookback_days)
+        candidate_rows = self._db.execute_query(
+            "SELECT DISTINCT d.index_code, s.index_name "
+            "FROM market_index_daily d "
+            "JOIN market_index_static s ON s.index_code = d.index_code "
+            "WHERE s.type_name IN ('宽基','行业','主题','海外') "
+            "  AND d.trade_date >= %s "
+            "  AND d.price IS NOT NULL "
+            "  AND d.heat_score IS NULL "
+            "ORDER BY d.index_code",
+            (start_date,),
+        )
+
+        result = {"total": len(candidate_rows), "synced": 0, "failed": 0}
+        for idx in candidate_rows:
+            if limit and result["synced"] + result["failed"] >= limit:
+                break
+            code = idx["index_code"]
+            name = idx["index_name"]
+            try:
+                changed = self.sync_daily_price_flow_batch(user, code, range_type)
+                if changed:
+                    result["synced"] += 1
+                else:
+                    result["failed"] += 1
+                    logger.warning(f"[{code}] {name} 近期热度缺口回补无返回")
+            except Exception as e:
+                result["failed"] += 1
+                logger.error(f"[{code}] {name} 近期热度缺口回补失败: {e}")
+            time.sleep(0.1)
+
+        logger.info(
+            f"近期热度缺口回补完成: 成功 {result['synced']}/{result['total']}, "
+            f"失败 {result['failed']}, 回补窗口起始日 {start_date}"
+        )
+        return result
 
     def fill_period_changes(self, index_code: Optional[str] = None) -> int:
         """

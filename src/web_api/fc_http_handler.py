@@ -18,6 +18,7 @@ from src.common.constant import DEFAULT_USER
 from src.domain.sub_account.sub_account import SubAccount
 from src.domain.user import ApiResponse
 from src.scheduled_task_manager import compute_next_run, get_scheduler
+from src.db.database_connection import DatabaseConnection
 from src.service.资产管理.get_fund_asset_detail import get_sub_account_asset_by_name
 from src.service.公共服务.estimated_profit_service import calc_estimated_change
 
@@ -25,6 +26,7 @@ logger = get_logger(__name__)
 
 _executor = ThreadPoolExecutor(max_workers=8)
 _cache: dict[str, tuple[float, object]] = {}
+_db = DatabaseConnection()
 
 
 def _json_response(status_code: int, data: object | None = None, headers: dict | None = None):
@@ -108,6 +110,70 @@ def _extract_json_body(event: dict[str, Any]) -> dict[str, Any]:
 def _extract_query_params(event: dict[str, Any]) -> dict[str, str]:
     params = event.get("queryParameters") or event.get("queryStringParameters") or {}
     return params if isinstance(params, dict) else {}
+
+
+def _normalize_trade_date(value: Any) -> Any:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def _get_latest_index_snapshot(index_code: str | None = None, fund_code: str | None = None):
+    cache_key = f"index_snapshot:{index_code or ''}:{fund_code or ''}"
+    cached = _cache.get(cache_key)
+    if cached and cached[0] > time.time() - 30:
+        return cached[1]
+
+    snapshot = None
+    if index_code:
+        rows = _db.execute_query(
+            """
+            SELECT
+                s.index_code,
+                s.index_name,
+                d.trade_date,
+                d.heat_score
+            FROM market_index_static s
+            LEFT JOIN market_index_daily d
+              ON d.index_code = s.index_code
+             AND d.trade_date = (
+                SELECT MAX(d2.trade_date)
+                FROM market_index_daily d2
+                WHERE d2.index_code = s.index_code
+             )
+            WHERE s.index_code = %s
+            LIMIT 1
+            """,
+            (index_code,),
+        )
+        snapshot = rows[0] if rows else None
+
+    if snapshot is None and fund_code:
+        rows = _db.execute_query(
+            """
+            SELECT
+                s.index_code,
+                s.index_name,
+                d.trade_date,
+                d.heat_score
+            FROM market_index_static s
+            LEFT JOIN market_index_daily d
+              ON d.index_code = s.index_code
+             AND d.trade_date = (
+                SELECT MAX(d2.trade_date)
+                FROM market_index_daily d2
+                WHERE d2.index_code = s.index_code
+             )
+            WHERE s.track_fund_code = %s
+            ORDER BY (d.heat_score IS NOT NULL) DESC, d.trade_date DESC, s.index_code
+            LIMIT 1
+            """,
+            (fund_code,),
+        )
+        snapshot = rows[0] if rows else None
+
+    _cache[cache_key] = (time.time(), snapshot)
+    return snapshot
 
 
 def _validate_scheduled_task_payload(data: Any, partial: bool = False) -> dict[str, Any]:
@@ -333,6 +399,12 @@ def _handle_portfolio_details(portfolio_name: str):
                 asset.estimated_change = 0.0
                 asset.nav_change = None
                 asset.nav_date = getattr(asset, "nav_date", None)
+                index_snapshot = _get_latest_index_snapshot(fund_code=asset.fund_code)
+                if index_snapshot:
+                    asset.tracked_index_code = index_snapshot.get("index_code")
+                    asset.tracked_index_name = index_snapshot.get("index_name")
+                    asset.latest_heat_score = index_snapshot.get("heat_score")
+                    asset.latest_heat_trade_date = _normalize_trade_date(index_snapshot.get("trade_date"))
                 return asset
 
             asset.fund_name = getattr(fund_info, "fund_name", getattr(asset, "fund_name", None))
@@ -353,6 +425,15 @@ def _handle_portfolio_details(portfolio_name: str):
             else:
                 asset.estimated_change = float(getattr(fund_info, "estimated_change", None) or 0.0)
             asset.estimated_time = getattr(fund_info, "estimated_time", None)
+            index_snapshot = _get_latest_index_snapshot(
+                getattr(fund_info, "index_code", None),
+                asset.fund_code,
+            )
+            if index_snapshot:
+                asset.tracked_index_code = index_snapshot.get("index_code")
+                asset.tracked_index_name = index_snapshot.get("index_name")
+                asset.latest_heat_score = index_snapshot.get("heat_score")
+                asset.latest_heat_trade_date = _normalize_trade_date(index_snapshot.get("trade_date"))
             return asset
 
         futures = [_executor.submit(_enrich, asset) for asset in asset_details_list]

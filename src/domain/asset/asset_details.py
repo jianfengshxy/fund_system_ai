@@ -16,6 +16,10 @@ class AssetDetails:
         self.fund_nav = None
         self.nav_date = None
         self.nav_change = None      # 今日净值涨跌幅(%)
+        self.tracked_index_code = None
+        self.tracked_index_name = None
+        self.latest_heat_score = None
+        self.latest_heat_trade_date = None
         
     def to_dict(self):
         return {
@@ -36,6 +40,10 @@ class AssetDetails:
             'nav_date': self.nav_date,
             'estimated_change': getattr(self, 'estimated_change', 0.0), # 确保 estimated_change 存在
             'nav_change': getattr(self, 'nav_change', None),             # 今日净值涨跌幅(%)
+            'tracked_index_code': getattr(self, 'tracked_index_code', None),
+            'tracked_index_name': getattr(self, 'tracked_index_name', None),
+            'latest_heat_score': getattr(self, 'latest_heat_score', None),
+            'latest_heat_trade_date': getattr(self, 'latest_heat_trade_date', None),
         }
 
     def __str__(self):

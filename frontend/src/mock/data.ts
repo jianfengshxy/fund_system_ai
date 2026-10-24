@@ -10,6 +10,10 @@ export type MockAssetDetail = {
   constant_profit: number
   constant_profit_rate: number
   estimated_change: number
+  tracked_index_code?: string
+  tracked_index_name?: string
+  latest_heat_score?: number
+  latest_heat_trade_date?: string
 }
 
 export const mockPortfoliosResponse: {
@@ -32,7 +36,11 @@ const mockPortfolioDetailsByName: Record<string, MockAssetDetail[]> = {
       asset_value: 124_580.22,
       constant_profit: 4_280.12,
       constant_profit_rate: 3.56,
-      estimated_change: -0.48
+      estimated_change: -0.48,
+      tracked_index_code: 'NDX',
+      tracked_index_name: '纳斯达克100',
+      latest_heat_score: 18.23,
+      latest_heat_trade_date: '2026-07-11'
     },
     {
       fund_name: '华夏恒生科技ETF联接A',
@@ -40,7 +48,11 @@ const mockPortfolioDetailsByName: Record<string, MockAssetDetail[]> = {
       asset_value: 98_210.63,
       constant_profit: -1_820.55,
       constant_profit_rate: -1.82,
-      estimated_change: 1.26
+      estimated_change: 1.26,
+      tracked_index_code: 'HSTECH',
+      tracked_index_name: '恒生科技',
+      latest_heat_score: 22.48,
+      latest_heat_trade_date: '2026-07-11'
     },
     {
       fund_name: '易方达标普500ETF联接A',
@@ -48,7 +60,11 @@ const mockPortfolioDetailsByName: Record<string, MockAssetDetail[]> = {
       asset_value: 134_029.50,
       constant_profit: 6_112.80,
       constant_profit_rate: 4.78,
-      estimated_change: 0.32
+      estimated_change: 0.32,
+      tracked_index_code: 'SPX',
+      tracked_index_name: '标普500',
+      latest_heat_score: 16.75,
+      latest_heat_trade_date: '2026-07-11'
     }
   ],
   快速止盈: [
@@ -76,7 +92,11 @@ const mockPortfolioDetailsByName: Record<string, MockAssetDetail[]> = {
       asset_value: 210_300.33,
       constant_profit: -8_720.11,
       constant_profit_rate: -3.98,
-      estimated_change: 1.92
+      estimated_change: 1.92,
+      tracked_index_code: '930997',
+      tracked_index_name: '新能源电池',
+      latest_heat_score: 12.65,
+      latest_heat_trade_date: '2026-07-11'
     },
     {
       fund_name: '南方中证500ETF联接A',
@@ -84,7 +104,11 @@ const mockPortfolioDetailsByName: Record<string, MockAssetDetail[]> = {
       asset_value: 301_730.44,
       constant_profit: 12_180.23,
       constant_profit_rate: 4.21,
-      estimated_change: -0.73
+      estimated_change: -0.73,
+      tracked_index_code: '000905',
+      tracked_index_name: '中证500',
+      latest_heat_score: 9.31,
+      latest_heat_trade_date: '2026-07-11'
     }
   ]
 }
@@ -194,4 +218,3 @@ const mockFundDetailByCode: Record<string, Record<string, any>> = {
 export const getMockFundDetail = (fundCode: string) => {
   return mockFundDetailByCode[fundCode] ?? { fund_code: fundCode, fund_name: '未知基金' }
 }
-

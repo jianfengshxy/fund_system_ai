@@ -30,6 +30,10 @@ interface AssetDetail {
   constant_profit_rate: number
   estimated_change: number
   profit_value: number
+  tracked_index_code?: string | null
+  tracked_index_name?: string | null
+  latest_heat_score?: number | null
+  latest_heat_trade_date?: string | null
   [key: string]: any
 }
 
@@ -445,6 +449,11 @@ const calcPortfolioChangeRatio = (details: AssetDetail[]) => {
     return acc + weight * displayChange(item)
   }, 0)
 }
+
+const hasIndexHeatInfo = (row: AssetDetail) =>
+  Boolean(row.tracked_index_name && row.latest_heat_score !== null && row.latest_heat_score !== undefined)
+
+const formatHeatScore = (value: number | null | undefined) => Number(value || 0).toFixed(2)
 
 const showFundDetail = async (fundCode: string) => {
   detailDialogVisible.value = true
@@ -1103,9 +1112,16 @@ onMounted(async () => {
               >
                 <el-table-column prop="fund_name" label="基金名称" min-width="180" sortable>
                   <template #default="{ row }">
-                    <el-link type="primary" :underline="false" @click="showFundDetail(row.fund_code)">
-                      {{ row.fund_name || '-' }}
-                    </el-link>
+                    <div>
+                      <el-link type="primary" :underline="false" @click="showFundDetail(row.fund_code)">
+                        {{ row.fund_name || '-' }}
+                      </el-link>
+                      <div v-if="hasIndexHeatInfo(row)" class="text-xs text-gray-500 mt-1">
+                        {{ row.tracked_index_name }}
+                        <span v-if="row.tracked_index_code">({{ row.tracked_index_code }})</span>
+                        · 热度 {{ formatHeatScore(row.latest_heat_score) }}
+                      </div>
+                    </div>
                   </template>
                 </el-table-column>
                 <el-table-column prop="fund_code" label="代码" width="100" sortable />
@@ -1146,6 +1162,11 @@ onMounted(async () => {
                       {{ row.fund_name || '-' }}
                     </el-link>
                     <div class="text-sm text-gray-500">{{ row.fund_code }}</div>
+                    <div v-if="hasIndexHeatInfo(row)" class="text-xs text-gray-500 mt-1">
+                      {{ row.tracked_index_name }}
+                      <span v-if="row.tracked_index_code">({{ row.tracked_index_code }})</span>
+                      · 热度 {{ formatHeatScore(row.latest_heat_score) }}
+                    </div>
                   </div>
                   <div class="text-right">
                     <div class="font-semibold">{{ formatNumber(row.asset_value) }}</div>

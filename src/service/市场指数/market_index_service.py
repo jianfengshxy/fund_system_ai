@@ -29,6 +29,8 @@ from src.db.database_connection import DatabaseConnection
 
 logger = get_logger(__name__)
 
+SYNC_TYPE_NAMES = ("宽基", "行业", "主题", "海外", "策略")
+
 # 重点关注的指数：即使不在市场指数列表 API 中也要手动注册
 PRIORITY_INDICES: List[Dict] = [
     {
@@ -135,7 +137,8 @@ class MarketIndexService:
     ) -> dict:
         static_indices = self._db.execute_query(
             "SELECT index_code, index_name FROM market_index_static "
-            "WHERE type_name IN ('宽基','行业','主题','海外') ORDER BY index_code"
+            "WHERE type_name IN (%s,%s,%s,%s,%s) ORDER BY index_code",
+            SYNC_TYPE_NAMES,
         )
         result = {"total": len(static_indices), "synced": 0, "failed": 0}
 
@@ -275,12 +278,12 @@ class MarketIndexService:
             "SELECT DISTINCT d.index_code, s.index_name "
             "FROM market_index_daily d "
             "JOIN market_index_static s ON s.index_code = d.index_code "
-            "WHERE s.type_name IN ('宽基','行业','主题','海外') "
+            "WHERE s.type_name IN (%s,%s,%s,%s,%s) "
             "  AND d.trade_date >= %s "
             "  AND d.price IS NOT NULL "
             "  AND d.heat_score IS NULL "
             "ORDER BY d.index_code",
-            (start_date,),
+            (*SYNC_TYPE_NAMES, start_date),
         )
 
         result = {"total": len(candidate_rows), "synced": 0, "failed": 0}
@@ -418,14 +421,15 @@ class MarketIndexService:
         """
         为 static 表中所有指数同步阶段指标。
 
-        只处理 market_index_daily 中有日数据且在 target_types 中的指数。
+        只处理 market_index_daily 中有日数据且在同步类型口径中的指数。
 
         Returns:
             {"total": int, "synced": int, "failed": int, "no_daily_data": int}
         """
         static_indices = self._db.execute_query(
             "SELECT index_code, index_name FROM market_index_static "
-            "WHERE type_name IN ('宽基','行业','主题','海外') ORDER BY index_code"
+            "WHERE type_name IN (%s,%s,%s,%s,%s) ORDER BY index_code",
+            SYNC_TYPE_NAMES,
         )
         result = {"total": len(static_indices), "synced": 0,
                   "failed": 0, "no_daily_data": 0}

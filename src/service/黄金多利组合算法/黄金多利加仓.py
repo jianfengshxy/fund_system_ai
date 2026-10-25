@@ -29,6 +29,35 @@ HQB_NEW_POSITION_THRESHOLD = 20.0
 INDEX_HEAT_FILTER_MIN = 20.0
 INDEX_HEAT_FILTER_MAX = 100.0
 
+
+def _get_primary_theme(fund_info) -> Optional[tuple]:
+    """
+    提取主动型基金主主题，口径与已有主题去重逻辑保持一致：
+    1. 优先 theme_infos 中 isshow=True 的首个主题
+    2. 否则退回 relate_themes 中 corr_1y 最高的主题
+    """
+    if not fund_info:
+        return None
+
+    theme_infos = getattr(fund_info, "theme_infos", None) or []
+    show_themes = [theme for theme in theme_infos if getattr(theme, "isshow", False)]
+    if show_themes:
+        theme = show_themes[0]
+        sec_code = str(getattr(theme, "sec_code", "") or "").strip()
+        sec_name = str(getattr(theme, "sec_name", "") or "").strip()
+        if sec_code or sec_name:
+            return sec_code, sec_name
+
+    relate_themes = getattr(fund_info, "relate_themes", None) or []
+    if relate_themes:
+        theme = max(relate_themes, key=lambda item: float(getattr(item, "corr_1y", 0.0) or 0.0))
+        sec_code = str(getattr(theme, "sec_code", "") or "").strip()
+        sec_name = str(getattr(theme, "sec_name", "") or "").strip()
+        if sec_code or sec_name:
+            return sec_code, sec_name
+
+    return None
+
 def increase_gold_funds(
     user: User,
     sub_account_name: str,
@@ -80,6 +109,79 @@ def increase_gold_funds(
         # 只使用资产值进行上限检查，忽略浮动盈亏
         asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
         return asset_value
+
+    fund_info_cache: Dict[str, Optional[object]] = {}
+
+    def _get_cached_fund_info(fund_code: str):
+        if not fund_code:
+            return None
+        if fund_code not in fund_info_cache:
+            fund_info_cache[fund_code] = get_all_fund_info(user, fund_code)
+        return fund_info_cache[fund_code]
+
+    def _get_group_key_and_label(fund_info) -> tuple[Optional[str], Optional[str]]:
+        if not fund_info:
+            return None, None
+
+        fund_type = str(getattr(fund_info, "fund_type", "") or "").strip()
+        if fund_type == "000":
+            index_code = str(getattr(fund_info, "index_code", "") or "").strip()
+            if index_code:
+                return f"index:{index_code}", f"同指数({index_code})"
+            return None, None
+
+        theme = _get_primary_theme(fund_info)
+        if not theme:
+            return None, None
+
+        sec_code, sec_name = theme
+        if sec_code:
+            return f"theme_code:{sec_code}", f"同主题({sec_name or sec_code})"
+        if sec_name:
+            return f"theme_name:{sec_name}", f"同主题({sec_name})"
+        return None, None
+
+    def _calc_add_effect_score(current_asset_value: float, estimated_profit_rate: float, buy_amount: float) -> float:
+        """
+        计算“按当前黄金多利标准金额再加一笔后，预估收益率改善多少百分点”。
+        分值越高，说明当前这笔资金用在该基金上的降本效率越高。
+        """
+        asset_value = _safe_float(current_asset_value, 0.0)
+        buy = _safe_float(buy_amount, 0.0)
+        rate_pct = _safe_float(estimated_profit_rate, 0.0)
+        rate = rate_pct / 100.0
+
+        if asset_value <= 0.0 or buy <= 0.0 or rate >= 0.0 or rate <= -0.999:
+            return 0.0
+
+        current_cost = asset_value / (1.0 + rate)
+        if current_cost <= 0.0:
+            return 0.0
+
+        new_rate = ((asset_value + buy) / (current_cost + buy)) - 1.0
+        return (new_rate - rate) * 100.0
+
+    def _preview_efficiency_buy_amount(
+        *,
+        current_asset_value: float,
+        estimated_profit_rate: float,
+        base_amt: float,
+    ) -> float:
+        min_asset_value_for_limited = base_amt * 0.95
+        should_increase = (
+            current_asset_value < min_asset_value_for_limited
+            or estimated_profit_rate < -1.0
+        )
+        if not should_increase:
+            return 0.0
+
+        if estimated_profit_rate < -10.0:
+            return 0.0
+
+        if estimated_profit_rate < -4.0:
+            return base_amt * 2.0
+
+        return base_amt
 
     # 获取子账户编号
     sub_account_no = getSubAccountNoByName(user, sub_account_name)
@@ -149,7 +251,7 @@ def increase_gold_funds(
     #     normalized_funds = [{"fund_code": "021740", "amount": amount, "limit": None}]
 
     def _has_pending_trade(fund_code: str) -> bool:
-        fi = get_all_fund_info(user, fund_code)
+        fi = _get_cached_fund_info(fund_code)
         nav_date_str = getattr(fi, "nav_date", None) if fi else None
         if nav_date_str:
             try:
@@ -178,7 +280,7 @@ def increase_gold_funds(
         return False
         
     def _get_fund_name(fund_code: str) -> str:
-        fi = get_all_fund_info(user, fund_code)
+        fi = _get_cached_fund_info(fund_code)
         return getattr(fi, "fund_name", "") if fi else ""
 
     # 获取持仓并建立有效持仓索引
@@ -205,6 +307,7 @@ def increase_gold_funds(
     total_limit = _normalize_limit(total_limit)
     fund_metric_dict = {f_code: _get_asset_limit_metric(asset) for f_code, asset in asset_dict.items()}
     total_metric = sum(fund_metric_dict.values())
+    representative_candidates: Dict[str, Dict] = {}
     index_heat_cache: Dict[str, Optional[float]] = {}
 
     def _get_effective_fund_limit(fund_code: str) -> Optional[float]:
@@ -347,6 +450,62 @@ def increase_gold_funds(
         total_metric += actual_amount
         fund_metric_dict[fund_code] = fund_metric_dict.get(fund_code, 0.0) + actual_amount
 
+    for f_code, asset in asset_dict.items():
+        fund_info = _get_cached_fund_info(f_code)
+        group_key, group_label = _get_group_key_and_label(fund_info)
+        if not group_key:
+            continue
+
+        current_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
+        current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
+        estimated_change, _ = calc_estimated_change(fund_info)
+        estimated_profit_rate = current_profit_rate + estimated_change
+        base_amt = _safe_float(payload_amt_dict.get(f_code, amount), _safe_float(amount, 0.0))
+        preview_buy_amount = _preview_efficiency_buy_amount(
+            current_asset_value=current_asset_value,
+            estimated_profit_rate=estimated_profit_rate,
+            base_amt=base_amt,
+        )
+        effect_score = _calc_add_effect_score(
+            current_asset_value=current_asset_value,
+            estimated_profit_rate=estimated_profit_rate,
+            buy_amount=preview_buy_amount,
+        )
+        candidate = {
+            "fund_code": f_code,
+            "fund_name": getattr(asset, "fund_name", "") or _get_fund_name(f_code),
+            "group_label": group_label,
+            "effect_score": effect_score,
+            "estimated_profit_rate": estimated_profit_rate,
+            "asset_value": current_asset_value,
+            "preview_buy_amount": preview_buy_amount,
+        }
+        best = representative_candidates.get(group_key)
+        if (
+            best is None
+            or candidate["effect_score"] > best["effect_score"]
+            or (
+                abs(candidate["effect_score"] - best["effect_score"]) <= 1e-9
+                and candidate["estimated_profit_rate"] < best["estimated_profit_rate"]
+            )
+            or (
+                abs(candidate["effect_score"] - best["effect_score"]) <= 1e-9
+                and abs(candidate["estimated_profit_rate"] - best["estimated_profit_rate"]) <= 1e-9
+                and candidate["asset_value"] < best["asset_value"]
+            )
+        ):
+            representative_candidates[group_key] = candidate
+
+    for candidate in representative_candidates.values():
+        logger.info(
+            f"[同类优先] {candidate['group_label']} 当前仅保留 "
+            f"{candidate['fund_name']}({candidate['fund_code']}) 作为加仓代表，"
+            f"effect_score={candidate['effect_score']:.4f}pct, "
+            f"estimated_profit_rate={candidate['estimated_profit_rate']:.2f}%, "
+            f"asset_value={candidate['asset_value']:.2f}, "
+            f"preview_buy_amount={candidate['preview_buy_amount']:.2f}"
+        )
+
     # 1. 遍历传过来的基金列表，如果未持有该基金，则执行该基金的初始化建仓
     for f in normalized_funds:
         f_code = f["fund_code"]
@@ -388,7 +547,17 @@ def increase_gold_funds(
 
     # 2. 遍历组合内所有持有的基金，满足条件则加仓降低成本
     for f_code, asset in asset_dict.items():
+        fund_info = _get_cached_fund_info(f_code)
         f_name = getattr(asset, "fund_name", "") or _get_fund_name(f_code)
+        group_key, group_label = _get_group_key_and_label(fund_info)
+        representative = representative_candidates.get(group_key) if group_key else None
+        if representative and representative["fund_code"] != f_code:
+            logger.info(
+                f"[同类跳过] {f_name}({f_code}) 属于 {group_label}，"
+                f"当前优先处理 {representative['fund_name']}({representative['fund_code']}) "
+                f"(effect_score={representative['effect_score']:.4f}pct)"
+            )
+            continue
         
         # 最先校验单个基金的资产是否已超过限制，超过则跳过该基金
         current_fund_metric = fund_metric_dict.get(f_code, 0.0)
@@ -404,7 +573,6 @@ def increase_gold_funds(
             
         # 计算预估收益率
         current_profit_rate = float(getattr(asset, "constant_profit_rate", 0.0) or 0.0)
-        fund_info = get_all_fund_info(user, f_code)
         estimated_change, label_est = calc_estimated_change(fund_info)
         estimated_profit_rate = current_profit_rate + estimated_change
 

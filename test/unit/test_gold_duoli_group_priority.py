@@ -125,7 +125,7 @@ def test_same_index_only_best_efficiency_fund_increases(monkeypatch):
     ]
 
 
-def test_same_theme_only_best_efficiency_fund_increases(monkeypatch):
+def test_same_theme_only_best_post_add_profit_rate_fund_increases(monkeypatch):
     assets = [
         _build_asset(fund_code="ACT1", fund_name="主动甲", asset_value=12000.0, constant_profit_rate=-2.0),
         _build_asset(fund_code="ACT2", fund_name="主动乙", asset_value=12000.0, constant_profit_rate=-4.0),
@@ -170,6 +170,6 @@ def test_same_theme_only_best_efficiency_fund_increases(monkeypatch):
 
     assert result is True
     assert commit_calls == [
-        ("sub-001", "ACT2", 4000.0),
+        ("sub-001", "ACT1", 2000.0),
         ("sub-001", "IDX1", 2000.0),
     ]

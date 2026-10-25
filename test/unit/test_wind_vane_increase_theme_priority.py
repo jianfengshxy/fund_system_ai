@@ -116,7 +116,7 @@ def test_same_theme_prefers_smaller_position_when_loss_depth_equal(monkeypatch):
     ]
 
 
-def test_same_theme_prefers_deeper_loss_when_position_equal(monkeypatch):
+def test_same_theme_prefers_higher_post_add_profit_rate_when_position_equal(monkeypatch):
     assets = [
         _build_asset(fund_code="C1", fund_name="中亏算力", asset_value=10000.0, constant_profit_rate=-8.0),
         _build_asset(fund_code="C2", fund_name="深亏算力", asset_value=10000.0, constant_profit_rate=-16.0),
@@ -150,5 +150,45 @@ def test_same_theme_prefers_deeper_loss_when_position_equal(monkeypatch):
 
     assert result is True
     assert commit_calls == [
-        ("sub-001", "C2", 4000.0),
+        ("sub-001", "C1", 4000.0),
+    ]
+
+
+def test_same_index_prefers_higher_post_add_profit_rate(monkeypatch):
+    assets = [
+        _build_asset(fund_code="I1", fund_name="小仓新能车", asset_value=6000.0, constant_profit_rate=-12.0),
+        _build_asset(fund_code="I2", fund_name="大仓新能车", asset_value=18000.0, constant_profit_rate=-12.0),
+        _build_asset(fund_code="ZZ", fund_name="压舱基金", asset_value=100000.0, constant_profit_rate=0.0),
+    ]
+    wind_vane_funds = [
+        SimpleNamespace(fund_code="I1", fund_type="000"),
+        SimpleNamespace(fund_code="I2", fund_type="000"),
+    ]
+    fund_info_map = {
+        "I1": _build_fund_info(fund_code="I1", fund_name="小仓新能车", fund_type="000"),
+        "I2": _build_fund_info(fund_code="I2", fund_name="大仓新能车", fund_type="000"),
+        "ZZ": _build_fund_info(fund_code="ZZ", fund_name="压舱基金", theme_code="BK999", theme_name="其他", estimated_change=0.0),
+    }
+    fund_info_map["I1"].index_code = "930997"
+    fund_info_map["I2"].index_code = "930997"
+
+    service_module, user, commit_calls = _setup_module(
+        monkeypatch,
+        assets=assets,
+        wind_vane_funds=wind_vane_funds,
+        fund_info_map=fund_info_map,
+    )
+
+    result = service_module.increase_funds(
+        user=user,
+        sub_account_name="风向标同指数",
+        total_budget=200000.0,
+        amount=2000.0,
+        fund_num=5,
+        fund_type="index",
+    )
+
+    assert result is True
+    assert commit_calls == [
+        ("sub-001", "I1", 4000.0),
     ]

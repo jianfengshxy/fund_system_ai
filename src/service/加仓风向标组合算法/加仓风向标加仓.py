@@ -68,55 +68,51 @@ def _get_primary_theme(fund_info):
     return None
 
 
-def _get_non_index_theme_key(fund_info) -> Optional[str]:
-    """为主动型基金生成主题去重键。"""
-    if not fund_info or getattr(fund_info, "fund_type", None) == "000":
-        return None
+def _get_group_key_and_label(fund_info) -> tuple[Optional[str], str]:
+    """为基金生成同类分组键：指数基金按指数，主动基金按主题。"""
+    if not fund_info:
+        return None, "未知分组"
+
+    fund_type = str(getattr(fund_info, "fund_type", "") or "").strip()
+    if fund_type == "000":
+        index_code = str(getattr(fund_info, "index_code", "") or "").strip()
+        if index_code:
+            return f"index:{index_code}", f"同指数({index_code})"
+        return None, "未知分组"
 
     theme = _get_primary_theme(fund_info)
     if not theme:
-        return None
+        return None, "未知分组"
 
     sec_code, sec_name = theme
     if sec_code:
-        return f"sec_code:{sec_code}"
+        return f"sec_code:{sec_code}", f"同主题({sec_name or sec_code})"
     if sec_name:
-        return f"sec_name:{sec_name}"
-    return None
+        return f"sec_name:{sec_name}", f"同主题({sec_name})"
+    return None, "未知分组"
 
 
-def _format_theme_label(fund_info) -> str:
-    theme = _get_primary_theme(fund_info)
-    if not theme:
-        return "未知主题"
-
-    sec_code, sec_name = theme
-    if sec_name and sec_code:
-        return f"{sec_name}({sec_code})"
-    return sec_name or sec_code or "未知主题"
-
-
-def _calc_add_effect_score(current_asset_value: float, estimated_profit_rate: float, buy_amount: float) -> float:
+def _calc_post_add_profit_rate(current_asset_value: float, estimated_profit_rate: float, buy_amount: float) -> float:
     """
-    计算“同样一笔加仓后，亏损改善有多明显”。
-    直接模拟一次标准加仓前后的预估收益率改善值（百分点）：
-    - 亏损越深，改善空间越大
-    - 持仓越轻，同样金额的加仓摊薄效果越明显
+    计算“按当前标准金额加仓后，新的持有收益率是多少”。
+    分值越高（越接近 0 或转正），说明越可能更快靠近止盈线。
     """
     asset_value = _safe_float(current_asset_value, 0.0)
     buy = _safe_float(buy_amount, 0.0)
     rate_pct = _safe_float(estimated_profit_rate, 0.0)
     rate = rate_pct / 100.0
 
-    if asset_value <= 0.0 or buy <= 0.0 or rate >= 0.0 or rate <= -0.999:
-        return 0.0
+    if asset_value <= 0.0 or rate <= -0.999:
+        return rate_pct
+    if buy <= 0.0 or rate >= 0.0:
+        return rate_pct
 
     current_cost = asset_value / (1.0 + rate)
     if current_cost <= 0.0:
-        return 0.0
+        return rate_pct
 
     new_rate = ((asset_value + buy) / (current_cost + buy)) - 1.0
-    return (new_rate - rate) * 100.0
+    return new_rate * 100.0
 
 
 def _get_max_funds_threshold():
@@ -194,7 +190,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
 
     # 预筛选并打标，然后按“风向标优先”排序
     enriched = []
-    theme_best_candidates = {}
+    group_best_candidates = {}
     for asset in user_assets:
         fund_code = asset.fund_code
         fi = _get_cached_fund_info(fund_code)
@@ -213,41 +209,41 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
 
         in_wind_vane = (fi.fund_type != '000' and fund_code in wind_vane_codes) or (fi.fund_type == '000' and fi.index_code in wind_vane_indices)
         current_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
-        theme_key = _get_non_index_theme_key(fi)
-        add_effect_score = _calc_add_effect_score(current_asset_value, estimated_profit_rate, buy_amount)
-        enriched.append((asset, fi, in_wind_vane, estimated_profit_rate, theme_key, add_effect_score))
+        group_key, group_label = _get_group_key_and_label(fi)
+        post_add_profit_rate = _calc_post_add_profit_rate(current_asset_value, estimated_profit_rate, buy_amount)
+        enriched.append((asset, fi, in_wind_vane, estimated_profit_rate, group_key, group_label, post_add_profit_rate))
 
-        if theme_key:
-            candidate = theme_best_candidates.get(theme_key)
+        if group_key:
+            candidate = group_best_candidates.get(group_key)
             current_candidate = {
                 "fund_code": fund_code,
                 "fund_name": fi.fund_name,
-                "theme_label": _format_theme_label(fi),
-                "effect_score": add_effect_score,
+                "group_label": group_label,
+                "post_add_profit_rate": post_add_profit_rate,
                 "estimated_profit_rate": estimated_profit_rate,
                 "asset_value": current_asset_value,
                 "in_wind_vane": in_wind_vane,
             }
             if (
                 candidate is None
-                or current_candidate["effect_score"] > candidate["effect_score"]
+                or current_candidate["post_add_profit_rate"] > candidate["post_add_profit_rate"]
                 or (
-                    math.isclose(current_candidate["effect_score"], candidate["effect_score"], rel_tol=1e-9, abs_tol=1e-9)
-                    and current_candidate["estimated_profit_rate"] < candidate["estimated_profit_rate"]
+                    math.isclose(current_candidate["post_add_profit_rate"], candidate["post_add_profit_rate"], rel_tol=1e-9, abs_tol=1e-9)
+                    and current_candidate["estimated_profit_rate"] > candidate["estimated_profit_rate"]
                 )
                 or (
-                    math.isclose(current_candidate["effect_score"], candidate["effect_score"], rel_tol=1e-9, abs_tol=1e-9)
+                    math.isclose(current_candidate["post_add_profit_rate"], candidate["post_add_profit_rate"], rel_tol=1e-9, abs_tol=1e-9)
                     and math.isclose(current_candidate["estimated_profit_rate"], candidate["estimated_profit_rate"], rel_tol=1e-9, abs_tol=1e-9)
                     and current_candidate["asset_value"] < candidate["asset_value"]
                 )
             ):
-                theme_best_candidates[theme_key] = current_candidate
+                group_best_candidates[group_key] = current_candidate
 
     # 关键：风向标在前；组内按 estimated_profit_rate 升序（跌幅越大越优先）
-    for theme_key, candidate in theme_best_candidates.items():
+    for candidate in group_best_candidates.values():
         logger.info(
-            f"[同主题优先] 主题={candidate['theme_label']} 仅保留 {candidate['fund_name']}({candidate['fund_code']}) "
-            f"作为当前加仓代表，effect_score={candidate['effect_score']:.4f}pct, "
+            f"[同类优先] {candidate['group_label']} 仅保留 {candidate['fund_name']}({candidate['fund_code']}) "
+            f"作为当前加仓代表，post_add_profit_rate={candidate['post_add_profit_rate']:.4f}%, "
             f"estimated_profit_rate={candidate['estimated_profit_rate']:.2f}%, asset_value={candidate['asset_value']:.2f}"
         )
 
@@ -266,7 +262,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
     logger.info(f"[组合资产] 当前组合总资产={current_total_asset:.2f} | 总预算={total_budget:.2f}")
 
     # 加仓流程中风向标路径的判定替换
-    for asset, fi, in_wind_vane, estimated_profit_rate, theme_key, add_effect_score in enriched:
+    for asset, fi, in_wind_vane, estimated_profit_rate, group_key, group_label, post_add_profit_rate in enriched:
         if orders_made >= fund_num:
             logger.info(f"已达本次下单上限 {fund_num} 笔，提前结束")
             break
@@ -274,14 +270,14 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
         fund_code = asset.fund_code
         fund_name = fi.fund_name
 
-        if theme_key:
-            best_candidate = theme_best_candidates.get(theme_key)
+        if group_key:
+            best_candidate = group_best_candidates.get(group_key)
             if best_candidate and best_candidate["fund_code"] != fund_code:
                 logger.info(
-                    f"[同主题跳过] {fund_name}({fund_code}) | 主题={_format_theme_label(fi)} | "
-                    f"effect_score={add_effect_score:.4f}pct，当前优先处理 "
+                    f"[同类跳过] {fund_name}({fund_code}) | {group_label} | "
+                    f"post_add_profit_rate={post_add_profit_rate:.4f}%，当前优先处理 "
                     f"{best_candidate['fund_name']}({best_candidate['fund_code']}) "
-                    f"(effect_score={best_candidate['effect_score']:.4f}pct)"
+                    f"(post_add_profit_rate={best_candidate['post_add_profit_rate']:.4f}%)"
                 )
                 continue
 

@@ -141,25 +141,27 @@ def increase_gold_funds(
             return f"theme_name:{sec_name}", f"同主题({sec_name})"
         return None, None
 
-    def _calc_add_effect_score(current_asset_value: float, estimated_profit_rate: float, buy_amount: float) -> float:
+    def _calc_post_add_profit_rate(current_asset_value: float, estimated_profit_rate: float, buy_amount: float) -> float:
         """
-        计算“按当前黄金多利标准金额再加一笔后，预估收益率改善多少百分点”。
-        分值越高，说明当前这笔资金用在该基金上的降本效率越高。
+        计算“按当前黄金多利标准金额再加一笔后，新的持有收益率是多少”。
+        分值越高（越接近 0 或转正），说明越可能更快靠近止盈线。
         """
         asset_value = _safe_float(current_asset_value, 0.0)
         buy = _safe_float(buy_amount, 0.0)
         rate_pct = _safe_float(estimated_profit_rate, 0.0)
         rate = rate_pct / 100.0
 
-        if asset_value <= 0.0 or buy <= 0.0 or rate >= 0.0 or rate <= -0.999:
-            return 0.0
+        if asset_value <= 0.0 or rate <= -0.999:
+            return rate_pct
+        if buy <= 0.0 or rate >= 0.0:
+            return rate_pct
 
         current_cost = asset_value / (1.0 + rate)
         if current_cost <= 0.0:
-            return 0.0
+            return rate_pct
 
         new_rate = ((asset_value + buy) / (current_cost + buy)) - 1.0
-        return (new_rate - rate) * 100.0
+        return new_rate * 100.0
 
     def _preview_efficiency_buy_amount(
         *,
@@ -466,7 +468,7 @@ def increase_gold_funds(
             estimated_profit_rate=estimated_profit_rate,
             base_amt=base_amt,
         )
-        effect_score = _calc_add_effect_score(
+        post_add_profit_rate = _calc_post_add_profit_rate(
             current_asset_value=current_asset_value,
             estimated_profit_rate=estimated_profit_rate,
             buy_amount=preview_buy_amount,
@@ -475,7 +477,7 @@ def increase_gold_funds(
             "fund_code": f_code,
             "fund_name": getattr(asset, "fund_name", "") or _get_fund_name(f_code),
             "group_label": group_label,
-            "effect_score": effect_score,
+            "post_add_profit_rate": post_add_profit_rate,
             "estimated_profit_rate": estimated_profit_rate,
             "asset_value": current_asset_value,
             "preview_buy_amount": preview_buy_amount,
@@ -483,13 +485,13 @@ def increase_gold_funds(
         best = representative_candidates.get(group_key)
         if (
             best is None
-            or candidate["effect_score"] > best["effect_score"]
+            or candidate["post_add_profit_rate"] > best["post_add_profit_rate"]
             or (
-                abs(candidate["effect_score"] - best["effect_score"]) <= 1e-9
-                and candidate["estimated_profit_rate"] < best["estimated_profit_rate"]
+                abs(candidate["post_add_profit_rate"] - best["post_add_profit_rate"]) <= 1e-9
+                and candidate["estimated_profit_rate"] > best["estimated_profit_rate"]
             )
             or (
-                abs(candidate["effect_score"] - best["effect_score"]) <= 1e-9
+                abs(candidate["post_add_profit_rate"] - best["post_add_profit_rate"]) <= 1e-9
                 and abs(candidate["estimated_profit_rate"] - best["estimated_profit_rate"]) <= 1e-9
                 and candidate["asset_value"] < best["asset_value"]
             )
@@ -500,7 +502,7 @@ def increase_gold_funds(
         logger.info(
             f"[同类优先] {candidate['group_label']} 当前仅保留 "
             f"{candidate['fund_name']}({candidate['fund_code']}) 作为加仓代表，"
-            f"effect_score={candidate['effect_score']:.4f}pct, "
+            f"post_add_profit_rate={candidate['post_add_profit_rate']:.4f}%, "
             f"estimated_profit_rate={candidate['estimated_profit_rate']:.2f}%, "
             f"asset_value={candidate['asset_value']:.2f}, "
             f"preview_buy_amount={candidate['preview_buy_amount']:.2f}"
@@ -555,7 +557,7 @@ def increase_gold_funds(
             logger.info(
                 f"[同类跳过] {f_name}({f_code}) 属于 {group_label}，"
                 f"当前优先处理 {representative['fund_name']}({representative['fund_code']}) "
-                f"(effect_score={representative['effect_score']:.4f}pct)"
+                f"(post_add_profit_rate={representative['post_add_profit_rate']:.4f}%)"
             )
             continue
         

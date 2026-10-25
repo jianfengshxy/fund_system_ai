@@ -32,6 +32,67 @@ from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 logger = get_logger(__name__)
 
 
+def _get_primary_theme(fund_info) -> Optional[tuple]:
+    """
+    提取基金的主主题，口径与估值逻辑保持一致：
+    1. 优先取 theme_infos 中 isshow=True 的首个主题
+    2. 若没有展示主题，则退回 relate_themes 中 corr_1y 最高的主题
+    """
+    if not fund_info:
+        return None
+
+    theme_infos = getattr(fund_info, "theme_infos", None) or []
+    show_themes = [theme for theme in theme_infos if getattr(theme, "isshow", False)]
+    if show_themes:
+        theme = show_themes[0]
+        sec_code = str(getattr(theme, "sec_code", "") or "").strip()
+        sec_name = str(getattr(theme, "sec_name", "") or "").strip()
+        if sec_code or sec_name:
+            return sec_code, sec_name
+
+    relate_themes = getattr(fund_info, "relate_themes", None) or []
+    if relate_themes:
+        theme = max(relate_themes, key=lambda item: float(getattr(item, "corr_1y", 0.0) or 0.0))
+        sec_code = str(getattr(theme, "sec_code", "") or "").strip()
+        sec_name = str(getattr(theme, "sec_name", "") or "").strip()
+        if sec_code or sec_name:
+            return sec_code, sec_name
+
+    return None
+
+
+def _get_non_index_theme_key(fund_info) -> Optional[str]:
+    """
+    为混合/股票型基金生成主题去重键。
+    优先用主题代码，若无代码则退回主题名称。
+    """
+    if not fund_info or getattr(fund_info, "fund_type", None) == "000":
+        return None
+
+    theme = _get_primary_theme(fund_info)
+    if not theme:
+        return None
+
+    sec_code, sec_name = theme
+    if sec_code:
+        return f"sec_code:{sec_code}"
+    if sec_name:
+        return f"sec_name:{sec_name}"
+    return None
+
+
+def _format_theme_label(fund_info) -> str:
+    """格式化基金主主题，便于日志输出。"""
+    theme = _get_primary_theme(fund_info)
+    if not theme:
+        return "未知主题"
+
+    sec_code, sec_name = theme
+    if sec_name and sec_code:
+        return f"{sec_name}({sec_code})"
+    return sec_name or sec_code or "未知主题"
+
+
 def _check_wind_vane_hqb_risk(user: User, total_budget: float, threshold: float = 20.0) -> bool:
     """
     加仓风向标策略专用风控：
@@ -154,6 +215,14 @@ def add_new_funds(
 
     try:
         fee_cache: Dict[str, Dict] = {}
+        fund_info_cache: Dict[str, Optional[object]] = {}
+
+        def _get_cached_fund_info(fund_code: str):
+            if not fund_code:
+                return None
+            if fund_code not in fund_info_cache:
+                fund_info_cache[fund_code] = get_all_fund_info(user, fund_code)
+            return fund_info_cache[fund_code]
 
         # 1) 获取组合资产与持仓
         user_assets = get_sub_account_asset_by_name(user, sub_account_name)
@@ -163,15 +232,20 @@ def add_new_funds(
 
         user_fund_codes: Set[str] = set()
         user_index_codes: Set[str] = set()
+        user_theme_keys: Set[str] = set()
         for asset in user_assets:
             # 记录已持有基金代码
             if getattr(asset, 'fund_code', None):
                 user_fund_codes.add(asset.fund_code)
             # 如果是指数基金，记录其跟踪指数，避免重复
             try:
-                fund_info = get_all_fund_info(user, asset.fund_code)
+                fund_info = _get_cached_fund_info(getattr(asset, "fund_code", None))
                 if fund_info and getattr(fund_info, 'fund_type', None) == "000" and getattr(fund_info, 'index_code', None):
                     user_index_codes.add(fund_info.index_code)
+                else:
+                    theme_key = _get_non_index_theme_key(fund_info)
+                    if theme_key:
+                        user_theme_keys.add(theme_key)
             except Exception as e:
                 logger.warning(f"获取基金 {getattr(asset, 'fund_code', 'N/A')} 信息失败: {e}")
 
@@ -226,7 +300,7 @@ def add_new_funds(
 
             # 获取基金信息（用于指数去重与净值门槛）
             try:
-                info = get_all_fund_info(user, code)
+                info = _get_cached_fund_info(code)
             except Exception as e:
                 logger.warning(f"获取基金 {code} 信息失败，跳过该基金：{e}")
                 continue
@@ -246,6 +320,14 @@ def add_new_funds(
                         continue
                 except Exception as e:
                     logger.warning(f"获取指数基金 {code} 费率失败，跳过该基金：{e}")
+                    continue
+            else:
+                theme_key = _get_non_index_theme_key(info)
+                if theme_key and theme_key in user_theme_keys:
+                    logger.info(
+                        f"混合/股票型基金主题重复，跳过新增：{name}({code})，"
+                        f"主主题={_format_theme_label(info)} 已在当前持仓中存在"
+                    )
                     continue
 
             # 新增：候选阶段净值门槛
@@ -298,7 +380,7 @@ def add_new_funds(
             # 判断是否可申购（若可获取）
             info = None
             try:
-                info = get_all_fund_info(user, code)
+                info = _get_cached_fund_info(code)
                 if info and hasattr(info, 'can_purchase') and not info.can_purchase:
                     logger.warning(f"基金 {name}({code}) 当前不可申购，跳过")
                     # 打印过滤条件汇总（即使失败）

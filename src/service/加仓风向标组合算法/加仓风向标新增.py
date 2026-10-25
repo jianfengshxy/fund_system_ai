@@ -27,71 +27,12 @@ from src.service.公共服务.nav_gate_service import nav5_gate
 from src.API.交易管理.feeMrg import getFee
 from src.service.公共服务.redeem_fee_filter_service import is_high_frequency_index_fee_ok
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
+from src.service.公共服务.fund_theme_group_service import (
+    get_theme_group_key_and_label,
+)
 
 # 配置日志
 logger = get_logger(__name__)
-
-
-def _get_primary_theme(fund_info) -> Optional[tuple]:
-    """
-    提取基金的主主题，口径与估值逻辑保持一致：
-    1. 优先取 theme_infos 中 isshow=True 的首个主题
-    2. 若没有展示主题，则退回 relate_themes 中 corr_1y 最高的主题
-    """
-    if not fund_info:
-        return None
-
-    theme_infos = getattr(fund_info, "theme_infos", None) or []
-    show_themes = [theme for theme in theme_infos if getattr(theme, "isshow", False)]
-    if show_themes:
-        theme = show_themes[0]
-        sec_code = str(getattr(theme, "sec_code", "") or "").strip()
-        sec_name = str(getattr(theme, "sec_name", "") or "").strip()
-        if sec_code or sec_name:
-            return sec_code, sec_name
-
-    relate_themes = getattr(fund_info, "relate_themes", None) or []
-    if relate_themes:
-        theme = max(relate_themes, key=lambda item: float(getattr(item, "corr_1y", 0.0) or 0.0))
-        sec_code = str(getattr(theme, "sec_code", "") or "").strip()
-        sec_name = str(getattr(theme, "sec_name", "") or "").strip()
-        if sec_code or sec_name:
-            return sec_code, sec_name
-
-    return None
-
-
-def _get_non_index_theme_key(fund_info) -> Optional[str]:
-    """
-    为混合/股票型基金生成主题去重键。
-    优先用主题代码，若无代码则退回主题名称。
-    """
-    if not fund_info or getattr(fund_info, "fund_type", None) == "000":
-        return None
-
-    theme = _get_primary_theme(fund_info)
-    if not theme:
-        return None
-
-    sec_code, sec_name = theme
-    if sec_code:
-        return f"sec_code:{sec_code}"
-    if sec_name:
-        return f"sec_name:{sec_name}"
-    return None
-
-
-def _format_theme_label(fund_info) -> str:
-    """格式化基金主主题，便于日志输出。"""
-    theme = _get_primary_theme(fund_info)
-    if not theme:
-        return "未知主题"
-
-    sec_code, sec_name = theme
-    if sec_name and sec_code:
-        return f"{sec_name}({sec_code})"
-    return sec_name or sec_code or "未知主题"
-
 
 def _check_wind_vane_hqb_risk(user: User, total_budget: float, threshold: float = 20.0) -> bool:
     """
@@ -231,21 +172,16 @@ def add_new_funds(
             return False
 
         user_fund_codes: Set[str] = set()
-        user_index_codes: Set[str] = set()
-        user_theme_keys: Set[str] = set()
+        user_group_keys: Set[str] = set()
         for asset in user_assets:
             # 记录已持有基金代码
             if getattr(asset, 'fund_code', None):
                 user_fund_codes.add(asset.fund_code)
-            # 如果是指数基金，记录其跟踪指数，避免重复
             try:
                 fund_info = _get_cached_fund_info(getattr(asset, "fund_code", None))
-                if fund_info and getattr(fund_info, 'fund_type', None) == "000" and getattr(fund_info, 'index_code', None):
-                    user_index_codes.add(fund_info.index_code)
-                else:
-                    theme_key = _get_non_index_theme_key(fund_info)
-                    if theme_key:
-                        user_theme_keys.add(theme_key)
+                group_key, _ = get_theme_group_key_and_label(fund_info)
+                if group_key:
+                    user_group_keys.add(group_key)
             except Exception as e:
                 logger.warning(f"获取基金 {getattr(asset, 'fund_code', 'N/A')} 信息失败: {e}")
 
@@ -290,6 +226,7 @@ def add_new_funds(
 
         # 去除已持有的基金；指数基金避免重复跟踪同一指数；新增：在候选阶段应用净值门槛
         candidates = []
+        grouped_candidates: Dict[str, object] = {}
         for f in wind_vane_funds:
             code = getattr(f, 'fund_code', None)
             if not code or code in user_fund_codes:
@@ -305,11 +242,15 @@ def add_new_funds(
                 logger.warning(f"获取基金 {code} 信息失败，跳过该基金：{e}")
                 continue
 
-            # 指数基金：避免重复跟踪同一指数
+            group_key, group_label = get_theme_group_key_and_label(info)
+            if group_key and group_key in user_group_keys:
+                logger.info(
+                    f"主题重复，跳过新增：{name}({code})，"
+                    f"{group_label} 已在当前持仓中存在"
+                )
+                continue
+
             if ftype == '000':
-                idx_code = getattr(info, 'index_code', None)
-                if idx_code and idx_code in user_index_codes:
-                    continue
                 try:
                     key = str(code)
                     if key not in fee_cache:
@@ -320,14 +261,6 @@ def add_new_funds(
                         continue
                 except Exception as e:
                     logger.warning(f"获取指数基金 {code} 费率失败，跳过该基金：{e}")
-                    continue
-            else:
-                theme_key = _get_non_index_theme_key(info)
-                if theme_key and theme_key in user_theme_keys:
-                    logger.info(
-                        f"混合/股票型基金主题重复，跳过新增：{name}({code})，"
-                        f"主主题={_format_theme_label(info)} 已在当前持仓中存在"
-                    )
                     continue
 
             # 新增：候选阶段净值门槛
@@ -340,10 +273,30 @@ def add_new_funds(
             product_rank = getattr(f, 'product_rank', '未知')
             logger.info(f"成功通过净值门槛加入最终候选: {name}({code}) [fund_type={ftype}, rank_100day={rank_100}, product_rank={product_rank}]")
 
-            candidates.append(f)
+            if group_key:
+                existing = grouped_candidates.get(group_key)
+                current_rank = getattr(f, 'product_rank', float('inf'))
+                existing_rank = getattr(existing, 'product_rank', float('inf')) if existing else float('inf')
+                if existing is None or current_rank < existing_rank:
+                    if existing is not None:
+                        logger.info(
+                            f"主题去重保留更优候选：{name}({code}) 替换 "
+                            f"{getattr(existing, 'fund_name', 'N/A')}({getattr(existing, 'fund_code', 'N/A')})，"
+                            f"{group_label}，product_rank={current_rank}"
+                        )
+                    grouped_candidates[group_key] = f
+                else:
+                    logger.info(
+                        f"主题去重跳过候选：{name}({code})，"
+                        f"{group_label} 已保留更优基金 {getattr(existing, 'fund_name', 'N/A')}({getattr(existing, 'fund_code', 'N/A')})"
+                    )
+            else:
+                candidates.append(f)
+
+        candidates.extend(grouped_candidates.values())
 
         if not candidates:
-            logger.info("候选基金为空：风向标基金均已持有或重复指数，退出新增流程")
+            logger.info("候选基金为空：风向标基金均已持有或主题重复，退出新增流程")
             return True
 
         # 按产品排名升序（越小越优），无排名置于末尾

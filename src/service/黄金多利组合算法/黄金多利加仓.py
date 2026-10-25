@@ -22,6 +22,10 @@ from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.estimated_profit_service import calc_estimated_change
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 from src.API.市场指数.指数资金热度与价格走势 import get_index_price_flow
+from src.service.公共服务.fund_theme_group_service import (
+    get_primary_theme as _shared_get_primary_theme,
+    get_theme_group_key_and_label,
+)
 
 logger = get_logger(__name__)
 
@@ -31,32 +35,7 @@ INDEX_HEAT_FILTER_MAX = 100.0
 
 
 def _get_primary_theme(fund_info) -> Optional[tuple]:
-    """
-    提取主动型基金主主题，口径与已有主题去重逻辑保持一致：
-    1. 优先 theme_infos 中 isshow=True 的首个主题
-    2. 否则退回 relate_themes 中 corr_1y 最高的主题
-    """
-    if not fund_info:
-        return None
-
-    theme_infos = getattr(fund_info, "theme_infos", None) or []
-    show_themes = [theme for theme in theme_infos if getattr(theme, "isshow", False)]
-    if show_themes:
-        theme = show_themes[0]
-        sec_code = str(getattr(theme, "sec_code", "") or "").strip()
-        sec_name = str(getattr(theme, "sec_name", "") or "").strip()
-        if sec_code or sec_name:
-            return sec_code, sec_name
-
-    relate_themes = getattr(fund_info, "relate_themes", None) or []
-    if relate_themes:
-        theme = max(relate_themes, key=lambda item: float(getattr(item, "corr_1y", 0.0) or 0.0))
-        sec_code = str(getattr(theme, "sec_code", "") or "").strip()
-        sec_name = str(getattr(theme, "sec_name", "") or "").strip()
-        if sec_code or sec_name:
-            return sec_code, sec_name
-
-    return None
+    return _shared_get_primary_theme(fund_info)
 
 def increase_gold_funds(
     user: User,
@@ -120,26 +99,8 @@ def increase_gold_funds(
         return fund_info_cache[fund_code]
 
     def _get_group_key_and_label(fund_info) -> tuple[Optional[str], Optional[str]]:
-        if not fund_info:
-            return None, None
-
-        fund_type = str(getattr(fund_info, "fund_type", "") or "").strip()
-        if fund_type == "000":
-            index_code = str(getattr(fund_info, "index_code", "") or "").strip()
-            if index_code:
-                return f"index:{index_code}", f"同指数({index_code})"
-            return None, None
-
-        theme = _get_primary_theme(fund_info)
-        if not theme:
-            return None, None
-
-        sec_code, sec_name = theme
-        if sec_code:
-            return f"theme_code:{sec_code}", f"同主题({sec_name or sec_code})"
-        if sec_name:
-            return f"theme_name:{sec_name}", f"同主题({sec_name})"
-        return None, None
+        group_key, group_label = get_theme_group_key_and_label(fund_info)
+        return group_key, group_label
 
     def _calc_post_add_profit_rate(current_asset_value: float, estimated_profit_rate: float, buy_amount: float) -> float:
         """
@@ -507,12 +468,15 @@ def increase_gold_funds(
             f"asset_value={candidate['asset_value']:.2f}, "
             f"preview_buy_amount={candidate['preview_buy_amount']:.2f}"
         )
+    occupied_group_keys = set(representative_candidates.keys())
 
     # 1. 遍历传过来的基金列表，如果未持有该基金，则执行该基金的初始化建仓
     for f in normalized_funds:
         f_code = f["fund_code"]
         f_amt = f["init_amount"]
-        f_name = _get_fund_name(f_code)
+        fund_info = _get_cached_fund_info(f_code)
+        f_name = getattr(fund_info, "fund_name", "") or _get_fund_name(f_code)
+        group_key, group_label = _get_group_key_and_label(fund_info)
         
         # 最先校验单个基金的资产是否已超过限制，超过则跳过该基金
         current_fund_metric = fund_metric_dict.get(f_code, 0.0)
@@ -523,6 +487,9 @@ def increase_gold_funds(
             continue
 
         if f_code not in asset_dict:
+            if group_key and group_key in occupied_group_keys:
+                logger.info(f"[同类跳过] 初始化建仓 {f_name}({f_code}) 属于 {group_label}，当前组合已存在同主题代表，跳过新仓")
+                continue
             if not hqb_new_position_allowed:
                 logger.info(
                     f"[黄金多利] 活期宝占比不足 {HQB_NEW_POSITION_THRESHOLD:.1f}%，"
@@ -537,6 +504,8 @@ def increase_gold_funds(
             if not _can_submit_buy(f_code, f_name, f_amt):
                 continue
                 
+            if group_key:
+                occupied_group_keys.add(group_key)
             logger.info(f"基金 {f_name}({f_code}) 未持有，执行初始化建仓，准备下单金额: {f_amt}")
             res = commit_order(user, sub_account_no, f_code, f_amt)
             if res:

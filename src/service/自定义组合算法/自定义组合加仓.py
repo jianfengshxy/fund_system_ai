@@ -1,7 +1,7 @@
 # 顶部导入片段
 import os
 import sys
-from typing import Optional
+from typing import Dict, Optional
 
 # 获取项目根目录路径
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -21,6 +21,7 @@ from src.service.公共服务.trade_time_service import is_trading_time
 from src.common.logger import get_logger
 from src.service.公共服务.estimated_profit_service import calc_estimated_change
 from src.API.登录接口.login import ensure_user_fresh
+from src.service.公共服务.fund_theme_group_service import get_theme_group_key_and_label
 
 logger = get_logger(__name__)
 
@@ -73,6 +74,15 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             if code:
                 fund_config_map[code] = item
 
+    fund_info_cache: Dict[str, Optional[object]] = {}
+
+    def _get_cached_fund_info(fund_code: str):
+        if not fund_code:
+            return None
+        if fund_code not in fund_info_cache:
+            fund_info_cache[fund_code] = get_all_fund_info(user, fund_code)
+        return fund_info_cache[fund_code]
+
     # 获取组合资产，遍历持仓基金
     fresh_user = ensure_user_fresh(user, 600)
     asset_details, asset_meta = get_asset_list_of_sub(fresh_user, sub_account_no, with_meta=True)
@@ -92,6 +102,35 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             return float(v)
         except Exception:
             return default
+
+    def _calc_post_add_profit_rate(current_asset_value: float, estimated_profit_rate: float, buy_amount: float) -> float:
+        asset_value = _safe_float(current_asset_value, 0.0)
+        buy = _safe_float(buy_amount, 0.0)
+        rate_pct = _safe_float(estimated_profit_rate, 0.0)
+        rate = rate_pct / 100.0
+
+        if asset_value <= 0.0 or rate <= -0.999:
+            return rate_pct
+        if buy <= 0.0 or rate >= 0.0:
+            return rate_pct
+
+        current_cost = asset_value / (1.0 + rate)
+        if current_cost <= 0.0:
+            return rate_pct
+
+        new_rate = ((asset_value + buy) / (current_cost + buy)) - 1.0
+        return new_rate * 100.0
+
+    def _preview_total_buy_amount(current_asset_value: float, estimated_profit_rate: float, fund_amount: float) -> float:
+        if fund_amount <= 0.0:
+            return 0.0
+        times = current_asset_value / fund_amount if fund_amount else 0.0
+        if 0.0 < times < 0.95:
+            return fund_amount
+        preview = fund_amount
+        if estimated_profit_rate < -5.0:
+            preview += fund_amount
+        return preview
 
     success_count = 0
     summary = asset_meta.get("summary", {}) if isinstance(asset_meta, dict) else {}
@@ -122,6 +161,67 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             f"单基金仓位占比 {POSITION_RATIO_LIMIT_PCT:.0f}% 拦截不启用"
         )
 
+    group_best_candidates = {}
+    for asset in asset_details:
+        fund_code = getattr(asset, 'fund_code', None)
+        fund_name = getattr(asset, 'fund_name', fund_code)
+        if not fund_code or fund_code in BLACKLIST_FUND_CODES:
+            continue
+
+        config = fund_config_map.get(fund_code)
+        fund_amount = config.get('amount', DEFAULT_BUY_AMOUNT) if config else DEFAULT_BUY_AMOUNT
+        fund_amount = _safe_float(fund_amount, 0.0)
+        if fund_amount <= 0.0:
+            continue
+
+        fund_info = _get_cached_fund_info(fund_code)
+        if not fund_info:
+            continue
+
+        group_key, group_label = get_theme_group_key_and_label(fund_info)
+        if not group_key:
+            continue
+
+        current_profit_rate = _safe_float(getattr(asset, 'constant_profit_rate', None), 0.0)
+        estimated_change, _ = calc_estimated_change(fund_info)
+        estimated_profit_rate = current_profit_rate + estimated_change
+        safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
+        preview_buy_amount = _preview_total_buy_amount(safe_asset_value, estimated_profit_rate, fund_amount)
+        post_add_profit_rate = _calc_post_add_profit_rate(safe_asset_value, estimated_profit_rate, preview_buy_amount)
+
+        candidate = {
+            "fund_code": fund_code,
+            "fund_name": getattr(fund_info, "fund_name", fund_name),
+            "group_label": group_label,
+            "post_add_profit_rate": post_add_profit_rate,
+            "estimated_profit_rate": estimated_profit_rate,
+            "asset_value": safe_asset_value,
+        }
+        best = group_best_candidates.get(group_key)
+        if (
+            best is None
+            or candidate["post_add_profit_rate"] > best["post_add_profit_rate"]
+            or (
+                abs(candidate["post_add_profit_rate"] - best["post_add_profit_rate"]) <= 1e-9
+                and candidate["estimated_profit_rate"] > best["estimated_profit_rate"]
+            )
+            or (
+                abs(candidate["post_add_profit_rate"] - best["post_add_profit_rate"]) <= 1e-9
+                and abs(candidate["estimated_profit_rate"] - best["estimated_profit_rate"]) <= 1e-9
+                and candidate["asset_value"] < best["asset_value"]
+            )
+        ):
+            group_best_candidates[group_key] = candidate
+
+    for candidate in group_best_candidates.values():
+        logger.info(
+            f"[同类优先] {candidate['group_label']} 当前仅保留 "
+            f"{candidate['fund_name']}({candidate['fund_code']}) 作为加仓代表，"
+            f"post_add_profit_rate={candidate['post_add_profit_rate']:.4f}%, "
+            f"estimated_profit_rate={candidate['estimated_profit_rate']:.2f}%, "
+            f"asset_value={candidate['asset_value']:.2f}"
+        )
+
     for asset in asset_details:
         try:
             fund_code = getattr(asset, 'fund_code', None)
@@ -148,12 +248,22 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 logger.info(f"基金 {fund_code} 的 amount 无效，跳过")
                 continue
 
-            fund_info = get_all_fund_info(user, fund_code)
+            fund_info = _get_cached_fund_info(fund_code)
             if not fund_info:
                 logger.warning(f"未获取到基金信息，跳过该基金继续处理下一条: {fund_name}({fund_code})")
                 continue
             fund_name = getattr(fund_info, 'fund_name', fund_name)
             logger.info(f"基金信息：{fund_name}({fund_code})，可申购：{getattr(fund_info, 'can_purchase', None)}")
+            group_key, group_label = get_theme_group_key_and_label(fund_info)
+            if group_key:
+                best_candidate = group_best_candidates.get(group_key)
+                if best_candidate and best_candidate["fund_code"] != fund_code:
+                    logger.info(
+                        f"[同类跳过] {fund_name}({fund_code}) 属于 {group_label}，"
+                        f"当前优先处理 {best_candidate['fund_name']}({best_candidate['fund_code']}) "
+                        f"(post_add_profit_rate={best_candidate['post_add_profit_rate']:.4f}%)"
+                    )
+                    continue
 
             # 使用“上个交易日净值日(nav_date)”的守卫：任一天存在非撤的买入/定投则跳过
             from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
@@ -190,7 +300,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             filter_checks = []
 
             current_profit_rate = _safe_float(getattr(asset, 'constant_profit_rate', None), 0.0)
-            estimated_change, label_est = calc_estimated_change(fund_info)
+            estimated_change, _ = calc_estimated_change(fund_info)
             estimated_profit_rate = current_profit_rate + estimated_change
             safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
             times = safe_asset_value / float(fund_amount)

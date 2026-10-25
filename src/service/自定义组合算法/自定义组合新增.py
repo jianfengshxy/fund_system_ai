@@ -21,6 +21,7 @@ from src.service.交易管理.购买基金 import commit_order
 from src.common.constant import DEFAULT_USER
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
+from src.service.公共服务.fund_theme_group_service import get_theme_group_key_and_label
 
 logging.basicConfig(
     level=logging.INFO,
@@ -73,12 +74,28 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
         logger.info(f"未提供 fund_list 或格式不正确，跳过自定义组合新增")
         return False
 
+    fund_info_cache = {}
+
+    def _get_cached_fund_info(fund_code: str):
+        if not fund_code:
+            return None
+        if fund_code not in fund_info_cache:
+            fund_info_cache[fund_code] = get_all_fund_info(user, fund_code)
+        return fund_info_cache[fund_code]
+
     # 获取组合资产，构建已持有基金集合
     asset_details = get_sub_account_asset_by_name(user, sub_account_name) or []
     held_codes = {getattr(a, 'fund_code', '') for a in asset_details if getattr(a, 'fund_code', None)}
+    held_group_keys = set()
+    for asset in asset_details:
+        info = _get_cached_fund_info(getattr(asset, "fund_code", None))
+        group_key, _ = get_theme_group_key_and_label(info)
+        if group_key:
+            held_group_keys.add(group_key)
     logger.info(f"组合 {sub_account_name} 当前持有基金数: {len(held_codes)}")
 
     success_count = 0
+    selected_group_keys = set()
 
     # 新增：估算净值（无估值则用上一交易日净值）> 5 日均值门槛
     # 删除本地 _nav5_gate，改为调用公共方法
@@ -93,12 +110,22 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 logger.info(f"基金 {fund_code} 的 amount 缺失或无效，跳过该基金")
                 continue
 
-            fund_info = get_all_fund_info(user, fund_code)
+            fund_info = _get_cached_fund_info(fund_code)
+            if not fund_info:
+                logger.info(f"未获取到基金信息，跳过：{fund_code}")
+                continue
             fund_name = getattr(fund_info, 'fund_name', fund_code)
             logger.info(f"基金信息：{fund_name}({fund_code})，可申购：{getattr(fund_info, 'can_purchase', None)}")
+            group_key, group_label = get_theme_group_key_and_label(fund_info)
 
             # 若基金不在资产列表中，则直接购买（新增前加净值门槛）
             if fund_code not in held_codes:
+                if group_key and group_key in held_group_keys:
+                    logger.info(f"跳过新增：{fund_name}({fund_code})，{group_label} 已在当前持仓中存在")
+                    continue
+                if group_key and group_key in selected_group_keys:
+                    logger.info(f"跳过新增：{fund_name}({fund_code})，{group_label} 已在本次新增中保留其他基金")
+                    continue
 
                 # 检查限购金额：如果限购金额 < 2000，则无条件直接买入
                 max_purchase = getattr(fund_info, 'max_purchase', None)
@@ -114,6 +141,8 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                                 actual_amount = max_amount
                                 
                             try:
+                                if group_key:
+                                    selected_group_keys.add(group_key)
                                 res = commit_order(user, sub_account_no, fund_code, actual_amount)
                                 if res and getattr(res, 'busin_serial_no', None):
                                     success_count += 1
@@ -176,6 +205,8 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
 
                 logger.info(f"候选通过，准备购买：{fund_name}({fund_code}) [year_return={year_val}, half_year_return={half_year_val}, rank_100day={rank_100}, rank_30day={rank_30}]，金额: {fund_amount}")
                 try:
+                    if group_key:
+                        selected_group_keys.add(group_key)
                     res = commit_order(user, sub_account_no, fund_code, float(fund_amount))
                     if res and getattr(res, 'busin_serial_no', None):
                         success_count += 1

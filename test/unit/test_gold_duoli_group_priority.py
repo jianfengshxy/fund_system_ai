@@ -173,3 +173,50 @@ def test_same_theme_only_best_post_add_profit_rate_fund_increases(monkeypatch):
         ("sub-001", "ACT1", 2000.0),
         ("sub-001", "IDX1", 2000.0),
     ]
+
+
+def test_same_theme_across_different_indices_only_best_representative_increases(monkeypatch):
+    assets = [
+        _build_asset(fund_code="IDXA", fund_name="互联网指数", asset_value=6000.0, constant_profit_rate=-3.0),
+        _build_asset(fund_code="IDXB", fund_name="科技通信指数", asset_value=18000.0, constant_profit_rate=-3.0),
+    ]
+    fund_info_map = {
+        "IDXA": _build_fund_info(
+            fund_name="互联网指数",
+            fund_type="000",
+            index_code="H30535",
+            theme_infos=[_build_theme(sec_code="BK000388", sec_name="TMT", isshow=True)],
+        ),
+        "IDXB": _build_fund_info(
+            fund_name="科技通信指数",
+            fund_type="000",
+            index_code="H30318",
+            theme_infos=[_build_theme(sec_code="BK000388", sec_name="TMT", isshow=True)],
+        ),
+    }
+    estimated_change_map = {
+        "互联网指数": -1.5,
+        "科技通信指数": -1.5,
+    }
+
+    service_module, user, commit_calls = _setup_module(
+        monkeypatch,
+        assets=assets,
+        fund_info_map=fund_info_map,
+        estimated_change_map=estimated_change_map,
+    )
+
+    result = service_module.increase_gold_funds(
+        user=user,
+        sub_account_name="黄金多利同主题指数",
+        amount=2000.0,
+        fund_list=[
+            {"fund_code": "IDXA", "amount": 2000.0},
+            {"fund_code": "IDXB", "amount": 2000.0},
+        ],
+    )
+
+    assert result is True
+    assert commit_calls == [
+        ("sub-001", "IDXA", 4000.0),
+    ]

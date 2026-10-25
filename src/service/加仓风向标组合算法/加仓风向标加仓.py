@@ -26,6 +26,10 @@ from src.service.交易管理.交易查询 import count_success_trades_on_prev_n
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
 from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
+from src.service.公共服务.fund_theme_group_service import (
+    get_primary_theme as _shared_get_primary_theme,
+    get_theme_group_key_and_label,
+)
 # 新增导入 get_user_all_info
 from src.service.用户管理.用户信息 import get_user_all_info
 
@@ -40,56 +44,11 @@ def _safe_float(v, default=0.0):
 
 
 def _get_primary_theme(fund_info):
-    """
-    提取主动型基金主主题，口径与加仓风向标新增/估值逻辑一致：
-    1. 优先 theme_infos 中 isshow=True 的首个主题
-    2. 否则退回 relate_themes 中 corr_1y 最高的主题
-    """
-    if not fund_info:
-        return None
-
-    theme_infos = getattr(fund_info, "theme_infos", None) or []
-    show_themes = [theme for theme in theme_infos if getattr(theme, "isshow", False)]
-    if show_themes:
-        theme = show_themes[0]
-        sec_code = str(getattr(theme, "sec_code", "") or "").strip()
-        sec_name = str(getattr(theme, "sec_name", "") or "").strip()
-        if sec_code or sec_name:
-            return sec_code, sec_name
-
-    relate_themes = getattr(fund_info, "relate_themes", None) or []
-    if relate_themes:
-        theme = max(relate_themes, key=lambda item: _safe_float(getattr(item, "corr_1y", 0.0), 0.0))
-        sec_code = str(getattr(theme, "sec_code", "") or "").strip()
-        sec_name = str(getattr(theme, "sec_name", "") or "").strip()
-        if sec_code or sec_name:
-            return sec_code, sec_name
-
-    return None
+    return _shared_get_primary_theme(fund_info)
 
 
 def _get_group_key_and_label(fund_info) -> tuple[Optional[str], str]:
-    """为基金生成同类分组键：指数基金按指数，主动基金按主题。"""
-    if not fund_info:
-        return None, "未知分组"
-
-    fund_type = str(getattr(fund_info, "fund_type", "") or "").strip()
-    if fund_type == "000":
-        index_code = str(getattr(fund_info, "index_code", "") or "").strip()
-        if index_code:
-            return f"index:{index_code}", f"同指数({index_code})"
-        return None, "未知分组"
-
-    theme = _get_primary_theme(fund_info)
-    if not theme:
-        return None, "未知分组"
-
-    sec_code, sec_name = theme
-    if sec_code:
-        return f"sec_code:{sec_code}", f"同主题({sec_name or sec_code})"
-    if sec_name:
-        return f"sec_name:{sec_name}", f"同主题({sec_name})"
-    return None, "未知分组"
+    return get_theme_group_key_and_label(fund_info)
 
 
 def _calc_post_add_profit_rate(current_asset_value: float, estimated_profit_rate: float, buy_amount: float) -> float:

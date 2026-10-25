@@ -127,3 +127,40 @@ def test_non_index_candidate_allows_buy_when_theme_differs(monkeypatch):
 
     assert result is True
     assert commit_calls == [("sub-001", "CAND2", 2000.0)]
+
+
+def test_index_candidate_skipped_when_same_theme_already_held_with_different_index(monkeypatch):
+    holdings = [SimpleNamespace(fund_code="HOLD_IDX", asset_value=3000.0)]
+    candidates = [SimpleNamespace(fund_code="CAND_IDX", fund_name="科技通信指数", fund_type="000", product_rank=1)]
+    fund_info_map = {
+        "HOLD_IDX": _build_fund_info(
+            fund_name="已持有互联网指数",
+            fund_type="000",
+            index_code="H30535",
+            theme_infos=[_build_theme(sec_code="BK000388", sec_name="TMT", isshow=True)],
+        ),
+        "CAND_IDX": _build_fund_info(
+            fund_name="科技通信指数",
+            fund_type="000",
+            index_code="H30318",
+            theme_infos=[_build_theme(sec_code="BK000388", sec_name="TMT", isshow=True)],
+        ),
+    }
+
+    service_module, user, commit_calls = _setup_module(
+        monkeypatch,
+        holdings=holdings,
+        candidates=candidates,
+        fund_info_map=fund_info_map,
+    )
+
+    result = service_module.add_new_funds(
+        user=user,
+        sub_account_name="风向标主题去重",
+        total_budget=100000.0,
+        amount=2000.0,
+        fund_num=1,
+    )
+
+    assert result is True
+    assert commit_calls == []

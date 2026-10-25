@@ -192,3 +192,43 @@ def test_same_index_prefers_higher_post_add_profit_rate(monkeypatch):
     assert commit_calls == [
         ("sub-001", "I1", 4000.0),
     ]
+
+
+def test_same_theme_across_different_indices_prefers_higher_post_add_profit_rate(monkeypatch):
+    assets = [
+        _build_asset(fund_code="T1", fund_name="互联网指数", asset_value=6000.0, constant_profit_rate=-12.0),
+        _build_asset(fund_code="T2", fund_name="科技通信指数", asset_value=18000.0, constant_profit_rate=-12.0),
+        _build_asset(fund_code="ZZ", fund_name="压舱基金", asset_value=100000.0, constant_profit_rate=0.0),
+    ]
+    wind_vane_funds = [
+        SimpleNamespace(fund_code="T1", fund_type="000"),
+        SimpleNamespace(fund_code="T2", fund_type="000"),
+    ]
+    fund_info_map = {
+        "T1": _build_fund_info(fund_code="T1", fund_name="互联网指数", fund_type="000", theme_code="BK000388", theme_name="TMT"),
+        "T2": _build_fund_info(fund_code="T2", fund_name="科技通信指数", fund_type="000", theme_code="BK000388", theme_name="TMT"),
+        "ZZ": _build_fund_info(fund_code="ZZ", fund_name="压舱基金", theme_code="BK999", theme_name="其他", estimated_change=0.0),
+    }
+    fund_info_map["T1"].index_code = "H30535"
+    fund_info_map["T2"].index_code = "H30318"
+
+    service_module, user, commit_calls = _setup_module(
+        monkeypatch,
+        assets=assets,
+        wind_vane_funds=wind_vane_funds,
+        fund_info_map=fund_info_map,
+    )
+
+    result = service_module.increase_funds(
+        user=user,
+        sub_account_name="风向标同主题指数",
+        total_budget=200000.0,
+        amount=2000.0,
+        fund_num=5,
+        fund_type="index",
+    )
+
+    assert result is True
+    assert commit_calls == [
+        ("sub-001", "T1", 4000.0),
+    ]

@@ -14,6 +14,7 @@
 
 import sys
 import os
+from bisect import bisect_right, insort
 from datetime import timedelta
 
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -246,6 +247,260 @@ class MarketIndexService:
         logger.info(f"[{index_code}] 价格+热度入库: {count} 条")
         return count
 
+    def backfill_heat_score_history_batch(
+        self,
+        user: User,
+        index_code: str,
+        range_type: str = "n",
+    ) -> Dict[str, int]:
+        """
+        使用 get_index_money_flow 的历史序列回填资金热度。
+
+        设计目标：
+          1. 使用 range_type="n" 获取近 1 年价格/涨跌幅/资金热度序列
+          2. 将返回中“有值的 heat_score”写回 market_index_daily 对应日期
+          3. 若该日期此前尚无日频记录，则一并补入 price/change_pct，便于回测
+          4. 保持 COALESCE 保护，避免上游返回空值时冲掉库里已有热度
+        """
+        from src.API.市场指数.指数资金流向 import get_index_money_flow
+
+        flows = get_index_money_flow(user, index_code=index_code, range_type=range_type)
+        if not flows:
+            return {"rows": 0, "total_points": 0, "heat_points": 0}
+
+        sql = (
+            "INSERT INTO market_index_daily ("
+            "index_code, trade_date, price, change_pct, heat_score"
+            ") VALUES (%s, %s, %s, %s, %s) "
+            "ON DUPLICATE KEY UPDATE "
+            "price = VALUES(price), change_pct = VALUES(change_pct), "
+            "heat_score = COALESCE(VALUES(heat_score), heat_score)"
+        )
+
+        params = []
+        heat_points = 0
+        for it in flows:
+            trade_date = it.get("PDATE")
+            if not trade_date:
+                continue
+
+            heat_score = it.get("XLFLOW_SCORE")
+            if heat_score is not None:
+                heat_points += 1
+
+            params.append((
+                index_code,
+                trade_date,
+                it.get("PERCENTPRICE"),
+                it.get("CHGRT"),
+                heat_score,
+            ))
+
+        row_count = self._db.insert_many(sql, params) if params else 0
+        logger.info(
+            f"[{index_code}] 资金热度历史回填完成: "
+            f"序列 {len(params)} 条, 热度有值 {heat_points} 条, 入库影响 {row_count} 条"
+        )
+        return {
+            "rows": row_count,
+            "total_points": len(params),
+            "heat_points": heat_points,
+        }
+
+    def backfill_all_indices_heat_score_history(
+        self,
+        user: User,
+        *,
+        range_type: str = "n",
+        limit: Optional[int] = None,
+    ) -> dict:
+        """
+        为所有同步口径内指数回填近 1 年资金热度历史。
+
+        该方法专门服务回测：
+          - 通过 get_index_money_flow(range_type="n") 获取近 1 年序列
+          - 将数据库里对应指数/日期的 heat_score 回填到位
+          - 若 price/change_pct 缺失，也一并补齐
+        """
+        static_indices = self._db.execute_query(
+            "SELECT index_code, index_name FROM market_index_static "
+            "WHERE type_name IN (%s,%s,%s,%s,%s) ORDER BY index_code",
+            SYNC_TYPE_NAMES,
+        )
+        result = {
+            "total": len(static_indices),
+            "synced": 0,
+            "failed": 0,
+            "rows": 0,
+            "heat_points": 0,
+        }
+
+        for idx in static_indices:
+            if limit and result["synced"] + result["failed"] >= limit:
+                break
+
+            code = idx["index_code"]
+            name = idx["index_name"]
+            try:
+                changed = self.backfill_heat_score_history_batch(
+                    user,
+                    code,
+                    range_type=range_type,
+                )
+                result["rows"] += changed["rows"]
+                result["heat_points"] += changed["heat_points"]
+                if changed["total_points"] > 0:
+                    result["synced"] += 1
+                else:
+                    result["failed"] += 1
+                    logger.warning(f"[{code}] {name} 资金热度历史回填无返回")
+            except Exception as e:
+                result["failed"] += 1
+                logger.error(f"[{code}] {name} 资金热度历史回填失败: {e}")
+            time.sleep(0.1)
+
+        logger.info(
+            f"资金热度历史回填完成: 成功 {result['synced']}/{result['total']}, "
+            f"失败 {result['failed']}, 热度有值 {result['heat_points']} 条, "
+            f"入库影响 {result['rows']} 条"
+        )
+        return result
+
+    @staticmethod
+    def _build_expanding_percentile_by_date(rows: List[Dict], value_key: str) -> Dict:
+        """
+        基于历史可见值构建“截至当日”的扩展分位。
+
+        这里显式避免未来函数：
+          - 仅使用当前日期及之前的估值序列
+          - 当日值越高，分位越接近 100
+        """
+        history_values: List[float] = []
+        percentile_by_date: Dict = {}
+
+        for row in rows:
+            raw_value = row.get(value_key)
+            if raw_value is None:
+                continue
+            try:
+                current_value = float(raw_value)
+            except (TypeError, ValueError):
+                continue
+
+            insort(history_values, current_value)
+            percentile_by_date[row["trade_date"]] = round(
+                bisect_right(history_values, current_value) / len(history_values) * 100,
+                4,
+            )
+
+        return percentile_by_date
+
+    def backfill_daily_valuation_percentiles(self, index_code: str) -> Dict[str, int]:
+        """
+        回填单个指数的历史估值分位（pe_pct/pb_pct），用于回测。
+
+        数据来源不是外部快照接口，而是库中已有的 pe_ttm/pb 历史序列。
+        分位计算口径为“截至当日的历史扩展分位”，避免引入未来信息。
+        """
+        rows = self._db.execute_query(
+            "SELECT trade_date, pe_ttm, pb "
+            "FROM market_index_daily "
+            "WHERE index_code = %s "
+            "ORDER BY trade_date ASC, id ASC",
+            (index_code,),
+        )
+        if not rows:
+            return {"rows": 0, "total_points": 0, "pe_points": 0, "pb_points": 0}
+
+        pe_pct_by_date = self._build_expanding_percentile_by_date(rows, "pe_ttm")
+        pb_pct_by_date = self._build_expanding_percentile_by_date(rows, "pb")
+
+        sql = (
+            "INSERT INTO market_index_daily ("
+            "index_code, trade_date, pe_pct, pb_pct"
+            ") VALUES (%s, %s, %s, %s) "
+            "ON DUPLICATE KEY UPDATE "
+            "pe_pct = COALESCE(VALUES(pe_pct), pe_pct), "
+            "pb_pct = COALESCE(VALUES(pb_pct), pb_pct)"
+        )
+
+        params = []
+        pe_points = 0
+        pb_points = 0
+        for row in rows:
+            trade_date = row["trade_date"]
+            pe_pct = pe_pct_by_date.get(trade_date)
+            pb_pct = pb_pct_by_date.get(trade_date)
+            if pe_pct is None and pb_pct is None:
+                continue
+            if pe_pct is not None:
+                pe_points += 1
+            if pb_pct is not None:
+                pb_points += 1
+            params.append((index_code, trade_date, pe_pct, pb_pct))
+
+        row_count = self._db.insert_many(sql, params) if params else 0
+        logger.info(
+            f"[{index_code}] 历史估值分位回填完成: "
+            f"PE {pe_points} 条, PB {pb_points} 条, 入库影响 {row_count} 条"
+        )
+        return {
+            "rows": row_count,
+            "total_points": len(params),
+            "pe_points": pe_points,
+            "pb_points": pb_points,
+        }
+
+    def backfill_all_indices_daily_valuation_percentiles(
+        self,
+        *,
+        limit: Optional[int] = None,
+    ) -> dict:
+        """
+        为所有同步口径内指数回填历史估值分位，供回测直接使用。
+        """
+        static_indices = self._db.execute_query(
+            "SELECT index_code, index_name FROM market_index_static "
+            "WHERE type_name IN (%s,%s,%s,%s,%s) ORDER BY index_code",
+            SYNC_TYPE_NAMES,
+        )
+        result = {
+            "total": len(static_indices),
+            "synced": 0,
+            "failed": 0,
+            "rows": 0,
+            "pe_points": 0,
+            "pb_points": 0,
+        }
+
+        for idx in static_indices:
+            if limit and result["synced"] + result["failed"] >= limit:
+                break
+
+            code = idx["index_code"]
+            name = idx["index_name"]
+            try:
+                changed = self.backfill_daily_valuation_percentiles(code)
+                result["rows"] += changed["rows"]
+                result["pe_points"] += changed["pe_points"]
+                result["pb_points"] += changed["pb_points"]
+                if changed["total_points"] > 0:
+                    result["synced"] += 1
+                else:
+                    result["failed"] += 1
+                    logger.warning(f"[{code}] {name} 历史估值分位回填无有效数据")
+            except Exception as e:
+                result["failed"] += 1
+                logger.error(f"[{code}] {name} 历史估值分位回填失败: {e}")
+            time.sleep(0.05)
+
+        logger.info(
+            f"历史估值分位回填完成: 成功 {result['synced']}/{result['total']}, "
+            f"失败 {result['failed']}, PE {result['pe_points']} 条, "
+            f"PB {result['pb_points']} 条, 入库影响 {result['rows']} 条"
+        )
+        return result
+
     def repair_recent_heat_score_gaps(
         self,
         user: User,
@@ -465,6 +720,10 @@ class MarketIndexService:
         r["valuation"] = self.sync_daily_valuation_batch(user, index_code, "10n")
         time.sleep(0.3)
         r["price_flow"] = self.sync_daily_price_flow_batch(user, index_code, "3n")
+        time.sleep(0.2)
+        r["heat_backfill"] = self.backfill_heat_score_history_batch(user, index_code, "n")
+        r["valuation_percentiles"] = self.backfill_daily_valuation_percentiles(index_code)
+        r["period_changes"] = self.fill_period_changes(index_code)
         logger.info(f"=== [{index_code}] 同步完成: {r} ===")
         return r
 

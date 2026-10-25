@@ -453,7 +453,9 @@ def increase_gold_funds(
                     # 触发条件（两个必须同时成立）：
                     #   1) is_deep_drawdown    : 回撤 > 5%（estimated_profit_rate < -5.0）
                     #   2) has_reversal_signal : 周线 > 0、月线 > 0、持仓市值 > 0，且净值站上 5 日均线
-                    # 加仓额度：当前持仓市值 × 50%，但回撤超过 -10% 时放弃抄底
+                    # 加仓额度：固定为 base_amt 的 2 倍。
+                    # 这样若反弹持续，可通过连续 2 倍买入逐步降低成本；
+                    # 若反弹终止，则下一轮会立刻回到熔断等待，避免一次性消耗过多现金。
                     is_deep_drawdown = estimated_profit_rate < -5.0
                     has_reversal_signal = (
                         week_growth_rate > 0.0
@@ -464,18 +466,18 @@ def increase_gold_funds(
 
                     if is_deep_drawdown and has_reversal_signal:
                         if estimated_profit_rate >= -10.0:
-                            buy_ratio = 0.5
+                            buy_amount = float(base_amt) * 2.0
                         else:
                             logger.info(
-                                f"持仓基金 {f_name}({f_code}) 回撤 {estimated_profit_rate:.2f}% 超过 -20%，疑似基本面风险，放弃抄底"
+                                f"持仓基金 {f_name}({f_code}) 回撤 {estimated_profit_rate:.2f}% 低于 -10%，疑似基本面风险，放弃抄底"
                             )
                             continue
 
-                        buy_amount = float(current_asset_value) * buy_ratio
                         logger.info(
                             f"持仓基金 {f_name}({f_code}) 触发深度回撤反弹加仓："
                             f"estimated_profit_rate={estimated_profit_rate:.2f}%, week={week_growth_rate:.2f}%, "
-                            f"month={month_growth_rate:.2f}%, buy_ratio={buy_ratio*100:.0f}%, buy_amount={buy_amount:.2f}"
+                            f"month={month_growth_rate:.2f}%, base_amt={base_amt:.2f}, "
+                            f"buy_multiplier=2.0, buy_amount={buy_amount:.2f}"
                         )
                         if not _passes_index_heat_filter(
                             fund_code=f_code,

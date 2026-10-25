@@ -234,7 +234,7 @@ def test_index_fund_high_heat_allows_deep_rebound_increase(monkeypatch):
     )
 
     assert result is True
-    assert commit_calls == [("sub-001", "000001", 3000.0)]
+    assert commit_calls == [("sub-001", "000001", 4000.0)]
 
 
 def test_fund_level_heat_gate_overrides_portfolio_level(monkeypatch):

@@ -22,6 +22,7 @@ from src.common.constant import DEFAULT_USER
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
 from src.service.公共服务.fund_theme_group_service import get_theme_group_key_and_label
+from src.service.公共服务.index_heat_service import get_latest_realtime_index_heat
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +76,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
         return False
 
     fund_info_cache = {}
+    index_heat_cache = {}
 
     def _get_cached_fund_info(fund_code: str):
         if not fund_code:
@@ -82,6 +84,14 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
         if fund_code not in fund_info_cache:
             fund_info_cache[fund_code] = get_all_fund_info(user, fund_code)
         return fund_info_cache[fund_code]
+
+    def _get_init_heat_score(fund_info):
+        if getattr(fund_info, 'fund_type', None) != '000':
+            return None
+        index_code = getattr(fund_info, 'index_code', None)
+        if not index_code:
+            return None
+        return get_latest_realtime_index_heat(user, index_code, cache=index_heat_cache)
 
     # 获取组合资产，构建已持有基金集合
     asset_details = get_sub_account_asset_by_name(user, sub_account_name) or []
@@ -96,6 +106,58 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
 
     success_count = 0
     selected_group_keys = set()
+    selected_group_representatives = {}
+
+    for order_index, fund_item in enumerate(fund_list):
+        fund_code = (fund_item or {}).get('fund_code')
+        if not fund_code or fund_code in held_codes:
+            continue
+
+        fund_info = _get_cached_fund_info(fund_code)
+        if not fund_info:
+            continue
+
+        group_key, group_label = get_theme_group_key_and_label(fund_info)
+        if not group_key or group_key in held_group_keys:
+            continue
+
+        candidate = {
+            'fund_code': fund_code,
+            'fund_name': getattr(fund_info, 'fund_name', fund_code),
+            'group_key': group_key,
+            'group_label': group_label,
+            'order_index': order_index,
+            'fund_info': fund_info,
+            'heat_score': _get_init_heat_score(fund_info),
+            'is_index_fund': getattr(fund_info, 'fund_type', None) == '000' and bool(getattr(fund_info, 'index_code', None)),
+        }
+        existing = selected_group_representatives.get(group_key)
+        should_replace = False
+        if existing is None:
+            should_replace = True
+        elif candidate['is_index_fund'] and existing['is_index_fund']:
+            current_heat = candidate['heat_score']
+            existing_heat = existing['heat_score']
+            if current_heat is not None and existing_heat is not None and abs(current_heat - existing_heat) > 1e-9:
+                should_replace = current_heat > existing_heat
+            elif current_heat is not None and existing_heat is None:
+                should_replace = True
+            elif current_heat is None and existing_heat is not None:
+                should_replace = False
+            else:
+                should_replace = candidate['order_index'] < existing['order_index']
+        else:
+            should_replace = candidate['order_index'] < existing['order_index']
+
+        if should_replace:
+            selected_group_representatives[group_key] = candidate
+
+    for candidate in selected_group_representatives.values():
+        logger.info(
+            f"[同主题初始化优先] {candidate['group_label']} 当前仅保留 "
+            f"{candidate['fund_name']}({candidate['fund_code']})，"
+            f"heat_score={candidate['heat_score'] if candidate['heat_score'] is not None else '-'}"
+        )
 
     # 新增：估算净值（无估值则用上一交易日净值）> 5 日均值门槛
     # 删除本地 _nav5_gate，改为调用公共方法
@@ -123,9 +185,18 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
                 if group_key and group_key in held_group_keys:
                     logger.info(f"跳过新增：{fund_name}({fund_code})，{group_label} 已在当前持仓中存在")
                     continue
-                if group_key and group_key in selected_group_keys:
-                    logger.info(f"跳过新增：{fund_name}({fund_code})，{group_label} 已在本次新增中保留其他基金")
-                    continue
+                if group_key:
+                    representative = selected_group_representatives.get(group_key)
+                    if representative and representative['fund_code'] != fund_code:
+                        logger.info(
+                            f"跳过新增：{fund_name}({fund_code})，{group_label} 本次优先保留 "
+                            f"{representative['fund_name']}({representative['fund_code']}) "
+                            f"(heat_score={representative['heat_score'] if representative['heat_score'] is not None else '-'})"
+                        )
+                        continue
+                    if group_key in selected_group_keys:
+                        logger.info(f"跳过新增：{fund_name}({fund_code})，{group_label} 已在本次新增中保留其他基金")
+                        continue
 
                 # 检查限购金额：如果限购金额 < 2000，则无条件直接买入
                 max_purchase = getattr(fund_info, 'max_purchase', None)

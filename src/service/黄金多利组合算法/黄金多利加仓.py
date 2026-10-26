@@ -21,11 +21,11 @@ from src.service.基金信息.基金信息 import get_all_fund_info
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.estimated_profit_service import calc_estimated_change
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
-from src.API.市场指数.指数资金热度与价格走势 import get_index_price_flow
 from src.service.公共服务.fund_theme_group_service import (
     get_primary_theme as _shared_get_primary_theme,
     get_theme_group_key_and_label,
 )
+from src.service.公共服务.index_heat_service import get_latest_realtime_index_heat
 
 logger = get_logger(__name__)
 
@@ -286,25 +286,44 @@ def increase_gold_funds(
         return index_heat_filter_enabled
 
     def _get_latest_realtime_index_heat(index_code: str) -> Optional[float]:
-        if not index_code:
-            return None
-        if index_code in index_heat_cache:
-            return index_heat_cache[index_code]
-
         try:
-            resp = get_index_price_flow(user, index_code=index_code, range_type="w")
-            latest_score = None
-            if resp.success and resp.items:
-                for item in reversed(resp.items):
-                    if item.XLFLOW_SCORE is not None:
-                        latest_score = float(item.XLFLOW_SCORE)
-                        break
-            index_heat_cache[index_code] = latest_score
-            return latest_score
+            return get_latest_realtime_index_heat(user, index_code, cache=index_heat_cache)
         except Exception as exc:
             logger.warning(f"获取指数 {index_code} 实时资金热度失败: {exc}")
             index_heat_cache[index_code] = None
             return None
+
+    def _is_index_fund(fund_info) -> bool:
+        return getattr(fund_info, "fund_type", None) == "000" and bool(getattr(fund_info, "index_code", None))
+
+    def _build_init_candidate(fund_item: Dict, order_index: int) -> Dict:
+        fund_code = fund_item["fund_code"]
+        fund_info = _get_cached_fund_info(fund_code)
+        fund_name = getattr(fund_info, "fund_name", "") or _get_fund_name(fund_code)
+        group_key, group_label = _get_group_key_and_label(fund_info)
+        is_index_fund = _is_index_fund(fund_info)
+        heat_score = _get_latest_realtime_index_heat(getattr(fund_info, "index_code", None)) if is_index_fund else None
+        return {
+            "fund_code": fund_code,
+            "fund_name": fund_name,
+            "group_key": group_key,
+            "group_label": group_label,
+            "order_index": order_index,
+            "is_index_fund": is_index_fund,
+            "heat_score": heat_score,
+        }
+
+    def _should_replace_init_candidate(current: Dict, existing: Dict) -> bool:
+        if current["is_index_fund"] and existing["is_index_fund"]:
+            current_heat = current["heat_score"]
+            existing_heat = existing["heat_score"]
+            if current_heat is not None and existing_heat is not None and abs(current_heat - existing_heat) > 1e-9:
+                return current_heat > existing_heat
+            if current_heat is not None and existing_heat is None:
+                return True
+            if current_heat is None and existing_heat is not None:
+                return False
+        return current["order_index"] < existing["order_index"]
 
     def _passes_index_heat_filter(
         *,
@@ -469,6 +488,33 @@ def increase_gold_funds(
             f"preview_buy_amount={candidate['preview_buy_amount']:.2f}"
         )
     occupied_group_keys = set(representative_candidates.keys())
+    init_representative_candidates: Dict[str, Dict] = {}
+    for idx, fund_item in enumerate(normalized_funds):
+        f_code = fund_item["fund_code"]
+        if f_code in asset_dict:
+            continue
+        candidate = _build_init_candidate(fund_item, idx)
+        group_key = candidate["group_key"]
+        if not group_key or group_key in occupied_group_keys:
+            continue
+
+        existing = init_representative_candidates.get(group_key)
+        if existing is None or _should_replace_init_candidate(candidate, existing):
+            if existing is not None:
+                logger.info(
+                    f"[同主题初始化优先] {candidate['group_label']} 改为保留 "
+                    f"{candidate['fund_name']}({candidate['fund_code']})，替换 "
+                    f"{existing['fund_name']}({existing['fund_code']})，"
+                    f"heat_score={candidate['heat_score'] if candidate['heat_score'] is not None else '-'}"
+                )
+            init_representative_candidates[group_key] = candidate
+
+    for candidate in init_representative_candidates.values():
+        logger.info(
+            f"[同主题初始化优先] {candidate['group_label']} 当前仅保留 "
+            f"{candidate['fund_name']}({candidate['fund_code']}) 作为新仓代表，"
+            f"heat_score={candidate['heat_score'] if candidate['heat_score'] is not None else '-'}"
+        )
 
     # 1. 遍历传过来的基金列表，如果未持有该基金，则执行该基金的初始化建仓
     for f in normalized_funds:
@@ -490,6 +536,15 @@ def increase_gold_funds(
             if group_key and group_key in occupied_group_keys:
                 logger.info(f"[同类跳过] 初始化建仓 {f_name}({f_code}) 属于 {group_label}，当前组合已存在同主题代表，跳过新仓")
                 continue
+            if group_key:
+                init_representative = init_representative_candidates.get(group_key)
+                if init_representative and init_representative["fund_code"] != f_code:
+                    logger.info(
+                        f"[同类跳过] 初始化建仓 {f_name}({f_code}) 属于 {group_label}，"
+                        f"当前优先处理 {init_representative['fund_name']}({init_representative['fund_code']}) "
+                        f"(heat_score={init_representative['heat_score'] if init_representative['heat_score'] is not None else '-'})"
+                    )
+                    continue
             if not hqb_new_position_allowed:
                 logger.info(
                     f"[黄金多利] 活期宝占比不足 {HQB_NEW_POSITION_THRESHOLD:.1f}%，"

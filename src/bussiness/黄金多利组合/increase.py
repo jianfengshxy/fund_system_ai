@@ -15,6 +15,7 @@ def increase(
     limit: Optional[float] = None,
     total_limit: Optional[float] = None,
     hqb_ratio_limit_enabled: bool = True,
+    index_heat_filter_enabled: bool = False,
 ) -> bool:
     """
     黄金多利组合加仓业务入口
@@ -29,4 +30,5 @@ def increase(
         limit=limit,
         total_limit=total_limit,
         hqb_ratio_limit_enabled=hqb_ratio_limit_enabled,
+        index_heat_filter_enabled=index_heat_filter_enabled,
     )

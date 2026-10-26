@@ -51,6 +51,8 @@ def _setup_module(monkeypatch, *, holdings, candidates, fund_info_map):
     monkeypatch.setattr(service_module, "get_sub_account_asset_by_name", lambda *args, **kwargs: holdings)
     monkeypatch.setattr(service_module, "get_fund_investment_indicators", lambda *args, **kwargs: candidates)
     monkeypatch.setattr(service_module, "get_all_fund_info", lambda _user, fund_code: fund_info_map.get(fund_code))
+    monkeypatch.setattr(service_module, "getFee", lambda *args, **kwargs: {})
+    monkeypatch.setattr(service_module, "is_high_frequency_index_fee_ok", lambda *args, **kwargs: (True, "ok"))
     monkeypatch.setattr(service_module, "nav5_gate", lambda *args, **kwargs: True)
     monkeypatch.setattr(service_module, "getSubAccountNoByName", lambda *args, **kwargs: "sub-001")
     monkeypatch.setattr(
@@ -164,3 +166,45 @@ def test_index_candidate_skipped_when_same_theme_already_held_with_different_ind
 
     assert result is True
     assert commit_calls == []
+
+
+def test_index_candidates_same_theme_prefer_higher_heat_on_init(monkeypatch):
+    holdings = []
+    candidates = [
+        SimpleNamespace(fund_code="LOW", fund_name="低热度TMT指数", fund_type="000", product_rank=1),
+        SimpleNamespace(fund_code="HIGH", fund_name="高热度TMT指数", fund_type="000", product_rank=9),
+    ]
+    fund_info_map = {
+        "LOW": _build_fund_info(
+            fund_name="低热度TMT指数",
+            fund_type="000",
+            index_code="IDX_LOW",
+            theme_infos=[_build_theme(sec_code="BK000388", sec_name="TMT", isshow=True)],
+        ),
+        "HIGH": _build_fund_info(
+            fund_name="高热度TMT指数",
+            fund_type="000",
+            index_code="IDX_HIGH",
+            theme_infos=[_build_theme(sec_code="BK000388", sec_name="TMT", isshow=True)],
+        ),
+    }
+    heat_map = {"IDX_LOW": 21.0, "IDX_HIGH": 66.0}
+
+    service_module, user, commit_calls = _setup_module(
+        monkeypatch,
+        holdings=holdings,
+        candidates=candidates,
+        fund_info_map=fund_info_map,
+    )
+    monkeypatch.setattr(service_module, "get_latest_realtime_index_heat", lambda _user, index_code, cache=None: heat_map.get(index_code))
+
+    result = service_module.add_new_funds(
+        user=user,
+        sub_account_name="风向标主题去重",
+        total_budget=100000.0,
+        amount=2000.0,
+        fund_num=1,
+    )
+
+    assert result is True
+    assert commit_calls == [("sub-001", "HIGH", 2000.0)]

@@ -25,15 +25,8 @@ def _setup_common_monkeypatch(
     monkeypatch.setattr(service_module, "check_hqb_risk_allowed", lambda user, threshold=None: True)
     monkeypatch.setattr(
         service_module,
-        "get_index_price_flow",
-        lambda user, index_code, range_type="w": SimpleNamespace(
-            success=True,
-            items=[
-                SimpleNamespace(PDATE="2026-10-24", XLFLOW_SCORE=latest_heat_score),
-            ] if latest_heat_score is not None else [
-                SimpleNamespace(PDATE="2026-10-24", XLFLOW_SCORE=None),
-            ],
-        ),
+        "get_latest_realtime_index_heat",
+        lambda user, index_code, cache=None, range_type="w": latest_heat_score,
     )
     monkeypatch.setattr(
         service_module,
@@ -70,6 +63,8 @@ def _build_fund_info(
     week_return=1.5,
     month_return=2.5,
     max_purchase=5000.0,
+    theme_infos=None,
+    relate_themes=None,
 ):
     return SimpleNamespace(
         fund_name=fund_name,
@@ -79,6 +74,17 @@ def _build_fund_info(
         week_return=week_return,
         month_return=month_return,
         max_purchase=max_purchase,
+        theme_infos=theme_infos or [],
+        relate_themes=relate_themes or [],
+    )
+
+
+def _build_theme(*, sec_code: str, sec_name: str, isshow: bool = True, corr_1y: float = 0.0):
+    return SimpleNamespace(
+        sec_code=sec_code,
+        sec_name=sec_name,
+        isshow=isshow,
+        corr_1y=corr_1y,
     )
 
 
@@ -274,11 +280,8 @@ def test_init_buy_ignores_heat_gate(monkeypatch):
     )
     monkeypatch.setattr(
         service_module,
-        "get_index_price_flow",
-        lambda user, index_code, range_type="w": SimpleNamespace(
-            success=True,
-            items=[SimpleNamespace(PDATE="2026-10-24", XLFLOW_SCORE=1.0)],
-        ),
+        "get_latest_realtime_index_heat",
+        lambda user, index_code, cache=None, range_type="w": 1.0,
     )
     monkeypatch.setattr(
         service_module,
@@ -299,3 +302,55 @@ def test_init_buy_ignores_heat_gate(monkeypatch):
 
     assert result is True
     assert commit_calls == [("sub-001", "000001", 3000.0)]
+
+
+def test_init_buy_same_theme_prefers_higher_heat_index(monkeypatch):
+    from src.service.黄金多利组合算法 import 黄金多利加仓 as service_module
+
+    commit_calls = []
+    heat_map = {"IDX_LOW": 18.0, "IDX_HIGH": 58.0}
+    fund_info_map = {
+        "LOW": _build_fund_info(
+            fund_name="低热度TMT指数",
+            index_code="IDX_LOW",
+            theme_infos=[_build_theme(sec_code="BK000388", sec_name="TMT", isshow=True)],
+        ),
+        "HIGH": _build_fund_info(
+            fund_name="高热度TMT指数",
+            index_code="IDX_HIGH",
+            theme_infos=[_build_theme(sec_code="BK000388", sec_name="TMT", isshow=True)],
+        ),
+    }
+
+    monkeypatch.setattr(service_module, "getSubAccountNoByName", lambda user, sub_account_name: "sub-001")
+    monkeypatch.setattr(service_module, "get_sub_account_asset_by_name", lambda user, sub_account_name: [])
+    monkeypatch.setattr(service_module, "has_buy_submission_on_dates", lambda *args, **kwargs: False)
+    monkeypatch.setattr(service_module, "check_hqb_risk_allowed", lambda user, threshold=None: True)
+    monkeypatch.setattr(service_module, "get_all_fund_info", lambda user, fund_code: fund_info_map[fund_code])
+    monkeypatch.setattr(
+        service_module,
+        "get_latest_realtime_index_heat",
+        lambda user, index_code, cache=None, range_type="w": heat_map.get(index_code),
+    )
+    monkeypatch.setattr(
+        service_module,
+        "commit_order",
+        lambda user, sub_account_no, fund_code, amount: commit_calls.append((sub_account_no, fund_code, amount))
+        or SimpleNamespace(amount=amount, busin_serial_no=f"order-{len(commit_calls):03d}"),
+    )
+
+    user = SimpleNamespace(account="13918199137")
+    result = service_module.increase_gold_funds(
+        user=user,
+        sub_account_name="黄金多利初始化热度优先",
+        amount=2000.0,
+        init_amount=3000.0,
+        fund_list=[
+            {"fund_code": "LOW", "amount": 2000.0, "init_amount": 3000.0},
+            {"fund_code": "HIGH", "amount": 2000.0, "init_amount": 3000.0},
+        ],
+        index_heat_filter_enabled=True,
+    )
+
+    assert result is True
+    assert commit_calls == [("sub-001", "HIGH", 3000.0)]

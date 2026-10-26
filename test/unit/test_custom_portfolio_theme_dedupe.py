@@ -77,3 +77,41 @@ def test_custom_add_skips_same_theme_index_with_different_index_code(monkeypatch
     assert commit_calls == [
         ("sub-001", "NEW2", 2000.0),
     ]
+
+
+def test_custom_add_init_prefers_higher_heat_index_with_same_theme(monkeypatch):
+    service_module = importlib.import_module("src.service.自定义组合算法.自定义组合新增")
+    commit_calls = []
+
+    user = SimpleNamespace(customer_name="测试用户")
+    fund_info_map = {
+        "LOW": _build_fund_info(fund_name="低热度TMT指数", index_code="IDX_LOW", theme_code="BK000388", theme_name="TMT"),
+        "HIGH": _build_fund_info(fund_name="高热度TMT指数", index_code="IDX_HIGH", theme_code="BK000388", theme_name="TMT"),
+    }
+    heat_map = {"IDX_LOW": 25.0, "IDX_HIGH": 62.0}
+
+    monkeypatch.setattr(service_module, "check_hqb_risk_allowed", lambda *args, **kwargs: True)
+    monkeypatch.setattr(service_module, "get_sub_account_asset_by_name", lambda *args, **kwargs: [])
+    monkeypatch.setattr(service_module, "getSubAccountNoByName", lambda *args, **kwargs: "sub-001")
+    monkeypatch.setattr(service_module, "get_all_fund_info", lambda _user, fund_code: fund_info_map.get(fund_code))
+    monkeypatch.setattr(service_module, "get_latest_realtime_index_heat", lambda _user, index_code, cache=None: heat_map.get(index_code))
+    monkeypatch.setattr(service_module, "nav5_gate", lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        service_module,
+        "commit_order",
+        lambda _user, sub_account_no, fund_code, amount: commit_calls.append((sub_account_no, fund_code, amount))
+        or SimpleNamespace(amount=amount, busin_serial_no=f"order-{len(commit_calls):03d}"),
+    )
+
+    result = service_module.increase_funds(
+        user=user,
+        sub_account_name="自定义新增",
+        total_budget=100000.0,
+        fund_list=[
+            {"fund_code": "LOW", "amount": 2000.0},
+            {"fund_code": "HIGH", "amount": 2000.0},
+        ],
+    )
+
+    assert result is True
+    assert commit_calls == [("sub-001", "HIGH", 2000.0)]

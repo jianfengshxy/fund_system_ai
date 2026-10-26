@@ -27,6 +27,7 @@ from src.service.公共服务.fund_theme_group_service import (
 )
 from src.service.公共服务.index_heat_service import (
     get_latest_realtime_index_heat,
+    get_index_main_net_inflow_filter_snapshot,
     get_latest_realtime_index_main_net_inflow,
 )
 
@@ -35,6 +36,9 @@ logger = get_logger(__name__)
 HQB_NEW_POSITION_THRESHOLD = 20.0
 INDEX_HEAT_FILTER_MIN = 20.0
 INDEX_HEAT_FILTER_MAX = 100.0
+INDEX_MAIN_NET_INFLOW_POSITIVE_DAYS_WINDOW = 10
+INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS = 5
+INDEX_MAIN_NET_INFLOW_SUM_WINDOW = 3
 
 
 def _get_primary_theme(fund_info) -> Optional[tuple]:
@@ -276,6 +280,7 @@ def increase_gold_funds(
     representative_candidates: Dict[str, Dict] = {}
     index_heat_cache: Dict[str, Optional[float]] = {}
     index_main_net_inflow_cache: Dict[str, Optional[float]] = {}
+    index_main_net_inflow_snapshot_cache: Dict[str, Dict] = {}
 
     def _get_effective_fund_limit(fund_code: str) -> Optional[float]:
         fund_limit = payload_limit_dict.get(fund_code)
@@ -307,6 +312,21 @@ def increase_gold_funds(
         except Exception as exc:
             logger.warning(f"获取指数 {index_code} 实时主力净流入失败: {exc}")
             index_main_net_inflow_cache[index_code] = None
+            return None
+
+    def _get_index_main_net_inflow_filter_snapshot(index_code: str) -> Optional[Dict]:
+        try:
+            return get_index_main_net_inflow_filter_snapshot(
+                user,
+                index_code,
+                cache=index_main_net_inflow_snapshot_cache,
+                positive_days_window=INDEX_MAIN_NET_INFLOW_POSITIVE_DAYS_WINDOW,
+                min_positive_days=INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS,
+                inflow_sum_window=INDEX_MAIN_NET_INFLOW_SUM_WINDOW,
+            )
+        except Exception as exc:
+            logger.warning(f"获取指数 {index_code} 净流入趋势快照失败: {exc}")
+            index_main_net_inflow_snapshot_cache[index_code] = None
             return None
 
     def _is_index_fund(fund_info) -> bool:
@@ -366,6 +386,7 @@ def increase_gold_funds(
 
         latest_heat_score = _get_latest_realtime_index_heat(index_code)
         latest_main_net_inflow = _get_latest_realtime_index_main_net_inflow(index_code)
+        inflow_snapshot = _get_index_main_net_inflow_filter_snapshot(index_code)
 
         if latest_main_net_inflow is not None and latest_main_net_inflow <= 0:
             logger.info(
@@ -375,12 +396,54 @@ def increase_gold_funds(
             )
             return False
 
+        if inflow_snapshot and latest_main_net_inflow is not None and latest_main_net_inflow > 0:
+            positive_days_available = bool(inflow_snapshot.get("positive_days_available"))
+            positive_days_count = int(inflow_snapshot.get("positive_days_count") or 0)
+            positive_days_window = int(
+                inflow_snapshot.get("positive_days_window") or INDEX_MAIN_NET_INFLOW_POSITIVE_DAYS_WINDOW
+            )
+            min_positive_days = int(
+                inflow_snapshot.get("min_positive_days") or INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS
+            )
+            if positive_days_available and positive_days_count < min_positive_days:
+                logger.info(
+                    f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过净流入趋势过滤："
+                    f"index_code={index_code}, "
+                    f"最近{positive_days_window}个交易日净流入为正天数={positive_days_count} < {min_positive_days}"
+                )
+                return False
+
+            inflow_sum_available = bool(inflow_snapshot.get("inflow_sum_available"))
+            recent_inflow_sum = inflow_snapshot.get("recent_inflow_sum")
+            inflow_sum_window = int(
+                inflow_snapshot.get("inflow_sum_window") or INDEX_MAIN_NET_INFLOW_SUM_WINDOW
+            )
+            if inflow_sum_available and recent_inflow_sum is not None and float(recent_inflow_sum) <= 0:
+                logger.info(
+                    f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过净流入趋势过滤："
+                    f"index_code={index_code}, "
+                    f"最近{inflow_sum_window}个交易日主力净流入合计={float(recent_inflow_sum):.2f} <= 0"
+                )
+                return False
+
         if latest_heat_score is None:
             if latest_main_net_inflow is not None and latest_main_net_inflow > 0:
+                trend_parts = []
+                if inflow_snapshot and inflow_snapshot.get("positive_days_available"):
+                    trend_parts.append(
+                        f"最近{inflow_snapshot['positive_days_window']}日正流入天数="
+                        f"{inflow_snapshot['positive_days_count']}"
+                    )
+                if inflow_snapshot and inflow_snapshot.get("inflow_sum_available"):
+                    trend_parts.append(
+                        f"最近{inflow_snapshot['inflow_sum_window']}日净流入合计="
+                        f"{float(inflow_snapshot['recent_inflow_sum']):.2f}"
+                    )
+                trend_suffix = f", {', '.join(trend_parts)}" if trend_parts else ""
                 logger.info(
                     f"持仓基金 {fund_name}({fund_code}) {buy_context} 通过净流入风控放行："
                     f"index_code={index_code}, main_net_inflow={latest_main_net_inflow:.2f}, "
-                    f"heat_score=-"
+                    f"heat_score=-{trend_suffix}"
                 )
                 return True
 
@@ -391,6 +454,18 @@ def increase_gold_funds(
             return True
 
         if INDEX_HEAT_FILTER_MIN <= latest_heat_score <= INDEX_HEAT_FILTER_MAX:
+            trend_parts = []
+            if inflow_snapshot and inflow_snapshot.get("positive_days_available"):
+                trend_parts.append(
+                    f"最近{inflow_snapshot['positive_days_window']}日正流入天数="
+                    f"{inflow_snapshot['positive_days_count']}"
+                )
+            if inflow_snapshot and inflow_snapshot.get("inflow_sum_available"):
+                trend_parts.append(
+                    f"最近{inflow_snapshot['inflow_sum_window']}日净流入合计="
+                    f"{float(inflow_snapshot['recent_inflow_sum']):.2f}"
+                )
+            trend_suffix = f", {', '.join(trend_parts)}" if trend_parts else ""
             logger.info(
                 f"持仓基金 {fund_name}({fund_code}) {buy_context} 通过资金热度过滤："
                 f"index_code={index_code}, heat_score={latest_heat_score:.2f}, "
@@ -398,6 +473,11 @@ def increase_gold_funds(
                 if latest_main_net_inflow is not None
                 else f"index_code={index_code}, heat_score={latest_heat_score:.2f}, main_net_inflow=-"
             )
+            if trend_suffix:
+                logger.info(
+                    f"持仓基金 {fund_name}({fund_code}) {buy_context} 净流入趋势确认："
+                    f"index_code={index_code}{trend_suffix}"
+                )
             return True
 
         logger.info(

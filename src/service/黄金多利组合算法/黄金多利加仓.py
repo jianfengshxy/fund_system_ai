@@ -25,7 +25,10 @@ from src.service.公共服务.fund_theme_group_service import (
     get_primary_theme as _shared_get_primary_theme,
     get_theme_group_key_and_label,
 )
-from src.service.公共服务.index_heat_service import get_latest_realtime_index_heat
+from src.service.公共服务.index_heat_service import (
+    get_latest_realtime_index_heat,
+    get_latest_realtime_index_main_net_inflow,
+)
 
 logger = get_logger(__name__)
 
@@ -272,6 +275,7 @@ def increase_gold_funds(
     total_metric = sum(fund_metric_dict.values())
     representative_candidates: Dict[str, Dict] = {}
     index_heat_cache: Dict[str, Optional[float]] = {}
+    index_main_net_inflow_cache: Dict[str, Optional[float]] = {}
 
     def _get_effective_fund_limit(fund_code: str) -> Optional[float]:
         fund_limit = payload_limit_dict.get(fund_code)
@@ -291,6 +295,18 @@ def increase_gold_funds(
         except Exception as exc:
             logger.warning(f"获取指数 {index_code} 实时资金热度失败: {exc}")
             index_heat_cache[index_code] = None
+            return None
+
+    def _get_latest_realtime_index_main_net_inflow(index_code: str) -> Optional[float]:
+        try:
+            return get_latest_realtime_index_main_net_inflow(
+                user,
+                index_code,
+                cache=index_main_net_inflow_cache,
+            )
+        except Exception as exc:
+            logger.warning(f"获取指数 {index_code} 实时主力净流入失败: {exc}")
+            index_main_net_inflow_cache[index_code] = None
             return None
 
     def _is_index_fund(fund_info) -> bool:
@@ -349,23 +365,50 @@ def increase_gold_funds(
             return True
 
         latest_heat_score = _get_latest_realtime_index_heat(index_code)
+        latest_main_net_inflow = _get_latest_realtime_index_main_net_inflow(index_code)
+
+        if latest_main_net_inflow is not None and latest_main_net_inflow <= 0:
+            logger.info(
+                f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过资金热度过滤："
+                f"index_code={index_code}, "
+                f"main_net_inflow={latest_main_net_inflow:.2f} <= 0"
+            )
+            return False
+
         if latest_heat_score is None:
+            if latest_main_net_inflow is not None and latest_main_net_inflow > 0:
+                logger.info(
+                    f"持仓基金 {fund_name}({fund_code}) {buy_context} 通过净流入风控放行："
+                    f"index_code={index_code}, main_net_inflow={latest_main_net_inflow:.2f}, "
+                    f"heat_score=-"
+                )
+                return True
+
             logger.info(
                 f"持仓基金 {fund_name}({fund_code}) 跟踪指数 {index_code} 当前无资金热度值，"
-                f"跳过资金热度过滤"
+                f"且主力净流入也为空，跳过资金热度过滤"
             )
             return True
 
         if INDEX_HEAT_FILTER_MIN <= latest_heat_score <= INDEX_HEAT_FILTER_MAX:
             logger.info(
                 f"持仓基金 {fund_name}({fund_code}) {buy_context} 通过资金热度过滤："
-                f"index_code={index_code}, heat_score={latest_heat_score:.2f}"
+                f"index_code={index_code}, heat_score={latest_heat_score:.2f}, "
+                f"main_net_inflow={latest_main_net_inflow:.2f}"
+                if latest_main_net_inflow is not None
+                else f"index_code={index_code}, heat_score={latest_heat_score:.2f}, main_net_inflow=-"
             )
             return True
 
         logger.info(
             f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过资金热度过滤："
             f"index_code={index_code}, heat_score={latest_heat_score:.2f}, "
+            f"main_net_inflow={latest_main_net_inflow:.2f}, "
+            f"要求范围=[{INDEX_HEAT_FILTER_MIN:.0f}, {INDEX_HEAT_FILTER_MAX:.0f}]"
+            if latest_main_net_inflow is not None
+            else
+            f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过资金热度过滤："
+            f"index_code={index_code}, heat_score={latest_heat_score:.2f}, main_net_inflow=-, "
             f"要求范围=[{INDEX_HEAT_FILTER_MIN:.0f}, {INDEX_HEAT_FILTER_MAX:.0f}]"
         )
         return False

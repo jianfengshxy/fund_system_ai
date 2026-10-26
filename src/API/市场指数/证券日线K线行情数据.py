@@ -21,7 +21,7 @@
 
 代码前缀   market 前缀  标的类型                         示例      正确 secid
 000xxxx    1           上交所指数（000001 等）            000001    1.000001
-399xxxx    0           深交所指数（399998 中证煤炭）      399998    0.399998
+399/97/98  0           深市/国证系列指数                 399998    0.399998
 930/931/H  2           中证沪港深跨市场指数              H11059    2.H11059 / 2.931238
 30xxxx     2           创业板个股                         300750    2.300750
 60/68xxxx  1           沪主板 / 科创板个股                600030    1.600030
@@ -140,6 +140,12 @@ def guess_secid_from_code(code: str) -> str:
         return ""
 
     u = code.upper()
+    # 特殊指数需要显式映射，避免被通用前缀规则误判。
+    if u == "899050":
+        return "0.899050"
+    if u == "950125":
+        return "2.950125"
+
     if u.startswith("BK"):
         return f"90.{code}"
 
@@ -158,7 +164,7 @@ def guess_secid_from_code(code: str) -> str:
     if len(code) >= 2 and code[:2] == "00":
         return f"0.{code}"
 
-    if len(code) >= 2 and code[:2] == "97":
+    if len(code) >= 2 and code[:2] in ("97", "98"):
         return f"0.{code}"
 
     if len(code) >= 3 and code[:3] == "399":
@@ -865,5 +871,3 @@ if __name__ == "__main__":
             print(f"    主力净={main_net:+,.2f}  散户净={retail_net:+,.2f}  总计净={main_net+retail_net:+,.2f}")
         else:
             print("    资金流: 无(fflow 无此日期数据)")
-
-

@@ -32,6 +32,8 @@ interface AssetDetail {
   profit_value: number
   tracked_index_code?: string | null
   tracked_index_name?: string | null
+  primary_theme_code?: string | null
+  primary_theme_name?: string | null
   latest_heat_score?: number | null
   latest_heat_trade_date?: string | null
   [key: string]: any
@@ -85,8 +87,15 @@ const sortedPortfolioDetails = computed(() => {
   const field = sortField.value as keyof AssetDetail
   const order = sortOrder.value === 'asc' ? 1 : -1
   data.sort((a, b) => {
-    const va = a[field] ?? 0
-    const vb = b[field] ?? 0
+    const rawA = a[field]
+    const rawB = b[field]
+    const aMissing = rawA === null || rawA === undefined || rawA === ''
+    const bMissing = rawB === null || rawB === undefined || rawB === ''
+    if (aMissing && !bMissing) return 1
+    if (!aMissing && bMissing) return -1
+    if (aMissing && bMissing) return 0
+    const va = rawA as string | number
+    const vb = rawB as string | number
     if (typeof va === 'string' && typeof vb === 'string') {
       return order * va.localeCompare(vb, 'zh-CN')
     }
@@ -99,6 +108,7 @@ const sortOptions = [
   { label: '持有收益', value: 'hold_profit' },
   { label: '收益率', value: 'constant_profit_rate' },
   { label: '今日涨跌', value: 'estimated_change' },
+  { label: '资金热度', value: 'latest_heat_score' },
   { label: '基金名称', value: 'fund_name' }
 ]
 const totalAssets = ref(0)
@@ -452,6 +462,8 @@ const calcPortfolioChangeRatio = (details: AssetDetail[]) => {
 
 const hasIndexHeatInfo = (row: AssetDetail) =>
   Boolean(row.tracked_index_name && row.latest_heat_score !== null && row.latest_heat_score !== undefined)
+
+const hasPrimaryThemeInfo = (row: AssetDetail) => Boolean(row.primary_theme_name || row.primary_theme_code)
 
 const formatHeatScore = (value: number | null | undefined) => Number(value || 0).toFixed(2)
 
@@ -1116,6 +1128,10 @@ onMounted(async () => {
                       <el-link type="primary" :underline="false" @click="showFundDetail(row.fund_code)">
                         {{ row.fund_name || '-' }}
                       </el-link>
+                      <div v-if="hasPrimaryThemeInfo(row)" class="text-xs text-gray-500 mt-1">
+                        主题 {{ row.primary_theme_name || '-' }}
+                        <span v-if="row.primary_theme_code">({{ row.primary_theme_code }})</span>
+                      </div>
                       <div v-if="hasIndexHeatInfo(row)" class="text-xs text-gray-500 mt-1">
                         {{ row.tracked_index_name }}
                         <span v-if="row.tracked_index_code">({{ row.tracked_index_code }})</span>
@@ -1162,6 +1178,10 @@ onMounted(async () => {
                       {{ row.fund_name || '-' }}
                     </el-link>
                     <div class="text-sm text-gray-500">{{ row.fund_code }}</div>
+                    <div v-if="hasPrimaryThemeInfo(row)" class="text-xs text-gray-500 mt-1">
+                      主题 {{ row.primary_theme_name || '-' }}
+                      <span v-if="row.primary_theme_code">({{ row.primary_theme_code }})</span>
+                    </div>
                     <div v-if="hasIndexHeatInfo(row)" class="text-xs text-gray-500 mt-1">
                       {{ row.tracked_index_name }}
                       <span v-if="row.tracked_index_code">({{ row.tracked_index_code }})</span>

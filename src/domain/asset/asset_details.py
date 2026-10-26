@@ -18,6 +18,8 @@ class AssetDetails:
         self.nav_change = None      # 今日净值涨跌幅(%)
         self.tracked_index_code = None
         self.tracked_index_name = None
+        self.primary_theme_code = None
+        self.primary_theme_name = None
         self.latest_heat_score = None
         self.latest_heat_trade_date = None
         
@@ -42,6 +44,8 @@ class AssetDetails:
             'nav_change': getattr(self, 'nav_change', None),             # 今日净值涨跌幅(%)
             'tracked_index_code': getattr(self, 'tracked_index_code', None),
             'tracked_index_name': getattr(self, 'tracked_index_name', None),
+            'primary_theme_code': getattr(self, 'primary_theme_code', None),
+            'primary_theme_name': getattr(self, 'primary_theme_name', None),
             'latest_heat_score': getattr(self, 'latest_heat_score', None),
             'latest_heat_trade_date': getattr(self, 'latest_heat_trade_date', None),
         }

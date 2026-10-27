@@ -136,10 +136,18 @@ def _get_latest_index_snapshot(index_code: str | None = None, fund_code: str | N
             FROM market_index_static s
             LEFT JOIN market_index_daily d
               ON d.index_code = s.index_code
-             AND d.trade_date = (
-                SELECT MAX(d2.trade_date)
-                FROM market_index_daily d2
-                WHERE d2.index_code = s.index_code
+             AND d.trade_date = COALESCE(
+                (
+                    SELECT MAX(d2.trade_date)
+                    FROM market_index_daily d2
+                    WHERE d2.index_code = s.index_code
+                      AND d2.heat_score IS NOT NULL
+                ),
+                (
+                    SELECT MAX(d3.trade_date)
+                    FROM market_index_daily d3
+                    WHERE d3.index_code = s.index_code
+                )
              )
             WHERE s.index_code = %s
             LIMIT 1
@@ -159,10 +167,18 @@ def _get_latest_index_snapshot(index_code: str | None = None, fund_code: str | N
             FROM market_index_static s
             LEFT JOIN market_index_daily d
               ON d.index_code = s.index_code
-             AND d.trade_date = (
-                SELECT MAX(d2.trade_date)
-                FROM market_index_daily d2
-                WHERE d2.index_code = s.index_code
+             AND d.trade_date = COALESCE(
+                (
+                    SELECT MAX(d2.trade_date)
+                    FROM market_index_daily d2
+                    WHERE d2.index_code = s.index_code
+                      AND d2.heat_score IS NOT NULL
+                ),
+                (
+                    SELECT MAX(d3.trade_date)
+                    FROM market_index_daily d3
+                    WHERE d3.index_code = s.index_code
+                )
              )
             WHERE s.track_fund_code = %s
             ORDER BY (d.heat_score IS NOT NULL) DESC, d.trade_date DESC, s.index_code

@@ -514,6 +514,39 @@ def get_bank_balance_threshold():
 
 BANK_BALANCE_THRESHOLD = get_bank_balance_threshold()
 
+def get_small_invest_amount_threshold():
+    """
+    读取小额定投/限购阈值：
+    - 优先读取环境变量 SMALL_INVEST_AMOUNT_THRESHOLD
+    - 其次尝试读取本地 s.yaml 配置文件
+    - 非法或未设置时回退为 1000.0
+    """
+    env_val = os.environ.get('SMALL_INVEST_AMOUNT_THRESHOLD')
+    if env_val:
+        try:
+            val = float(env_val)
+            logger.info(f"Loaded SMALL_INVEST_AMOUNT_THRESHOLD from environment variable: {val}")
+            return val
+        except ValueError:
+            logger.warning(f"环境变量 SMALL_INVEST_AMOUNT_THRESHOLD 非法值: {env_val}，尝试从配置文件读取")
+
+    try:
+        yaml_path = os.path.join(root_dir, 's.yaml')
+        if os.path.exists(yaml_path):
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+                val = config.get('vars', {}).get('common', {}).get('props', {}).get('environmentVariables', {}).get('SMALL_INVEST_AMOUNT_THRESHOLD')
+                if val:
+                    logger.info(f"Loaded SMALL_INVEST_AMOUNT_THRESHOLD from s.yaml: {val}")
+                    return float(val)
+    except Exception as e:
+        logger.warning(f"Failed to load s.yaml: {e}")
+
+    logger.info("Using default SMALL_INVEST_AMOUNT_THRESHOLD: 1000.0")
+    return 1000.0
+
+SMALL_INVEST_AMOUNT_THRESHOLD = get_small_invest_amount_threshold()
+
 def get_profit_threshold_for_low_balance():
     """
     读取低余额止盈收益率阈值：

@@ -137,12 +137,7 @@ def increase_gold_funds(
         estimated_profit_rate: float,
         base_amt: float,
     ) -> float:
-        min_asset_value_for_limited = base_amt * 0.95
-        should_increase = (
-            current_asset_value < min_asset_value_for_limited
-            or estimated_profit_rate < -1.0
-        )
-        if not should_increase:
+        if estimated_profit_rate >= -1.0:
             return 0.0
 
         if estimated_profit_rate < -10.0:
@@ -737,98 +732,68 @@ def increase_gold_funds(
         # 2. 如果没有基金级别的amount，则使用组合级别的amount（函数参数amount）
         # payload_amt_dict是从normalized_funds构建的，已经遵循了这个优先级
         base_amt = payload_amt_dict.get(f_code, amount)
-        min_asset_value_for_limited = base_amt * 0.95
-        
-        # 检查是否满足加仓条件：
-        # 1. 如果当前资产值 <= 买入金额（可能是因为限购导致持仓不足），则允许加仓（忽略-1%过滤器）
-        # 2. 否则，需要满足预估收益率 < -1.0% 的条件
-        should_increase = False
-        increase_reason = ""
-        
-        if current_asset_value < min_asset_value_for_limited:
-            # 持有资产小于或等于一次性买入量，可能是因为限购，允许加仓
-            should_increase = True
-            increase_reason = (
-                f"持仓资产({current_asset_value:.2f}) < 买入金额*0.95({min_asset_value_for_limited:.2f})，可能因限购导致持仓不足"
-            )
-        elif estimated_profit_rate < -1.0:
-            # 满足原来的-1%过滤器条件
-            should_increase = True
-            increase_reason = f"预估收益率({estimated_profit_rate:.2f}%) < -1.0%"
+        should_increase = estimated_profit_rate < -1.0
+        increase_reason = f"预估收益率({estimated_profit_rate:.2f}%) < -1.0%"
         
         if should_increase:
             logger.info(f"持仓基金 {f_name}({f_code}) {increase_reason}，触发加仓判定")
             
             # 检查是否跌幅过大（小于-5.0%），如果是则跳过加仓，防止单边下跌
             if estimated_profit_rate < -5.0:
-                # 特殊豁免：如果基金被限购且限购金额 < 2000，说明持仓上不去，即使跌幅过大也继续加仓
-                _max_purchase = _safe_float(getattr(fund_info, 'max_purchase', 0.0) if fund_info else 0.0, 0.0)
-                if _max_purchase > 0 and _max_purchase < 2000:
-                    logger.info(f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% < -5.0%，但限购金额 {_max_purchase} < 2000，突破限购加仓")
-                else:
-                    # ---------- 深度回撤反弹加仓 ----------
-                    # 触发条件（两个必须同时成立）：
-                    #   1) is_deep_drawdown    : 回撤 > 5%（estimated_profit_rate < -5.0）
-                    #   2) has_reversal_signal : 周线 > 0、月线 > 0、持仓市值 > 0，且净值站上 5 日均线
-                    # 加仓额度：固定为 base_amt 的 2 倍。
-                    # 这样若反弹持续，可通过连续 2 倍买入逐步降低成本；
-                    # 若反弹终止，则下一轮会立刻回到熔断等待，避免一次性消耗过多现金。
-                    is_deep_drawdown = estimated_profit_rate < -5.0
-                    has_reversal_signal = (
-                        week_growth_rate > 0.0
-                        and month_growth_rate > 0.0
-                        and current_asset_value > 0.0
-                        and nav5_gate(fund_info, f_name, f_code, logger)
-                    )
+                # ---------- 深度回撤反弹加仓 ----------
+                # 触发条件（两个必须同时成立）：
+                #   1) is_deep_drawdown    : 回撤 > 5%（estimated_profit_rate < -5.0）
+                #   2) has_reversal_signal : 周线 > 0、月线 > 0、持仓市值 > 0，且净值站上 5 日均线
+                # 加仓额度：固定为 base_amt 的 2 倍。
+                # 这样若反弹持续，可通过连续 2 倍买入逐步降低成本；
+                # 若反弹终止，则下一轮会立刻回到熔断等待，避免一次性消耗过多现金。
+                is_deep_drawdown = estimated_profit_rate < -5.0
+                has_reversal_signal = (
+                    week_growth_rate > 0.0
+                    and month_growth_rate > 0.0
+                    and current_asset_value > 0.0
+                    and nav5_gate(fund_info, f_name, f_code, logger)
+                )
 
-                    if is_deep_drawdown and has_reversal_signal:
-                        if estimated_profit_rate >= -10.0:
-                            buy_amount = float(base_amt) * 2.0
-                        else:
-                            logger.info(
-                                f"持仓基金 {f_name}({f_code}) 回撤 {estimated_profit_rate:.2f}% 低于 -10%，疑似基本面风险，放弃抄底"
-                            )
-                            continue
-
+                if is_deep_drawdown and has_reversal_signal:
+                    if estimated_profit_rate >= -10.0:
+                        buy_amount = float(base_amt) * 2.0
+                    else:
                         logger.info(
-                            f"持仓基金 {f_name}({f_code}) 触发深度回撤反弹加仓："
-                            f"estimated_profit_rate={estimated_profit_rate:.2f}%, week={week_growth_rate:.2f}%, "
-                            f"month={month_growth_rate:.2f}%, base_amt={base_amt:.2f}, "
-                            f"buy_multiplier=2.0, buy_amount={buy_amount:.2f}"
+                            f"持仓基金 {f_name}({f_code}) 回撤 {estimated_profit_rate:.2f}% 低于 -10%，疑似基本面风险，放弃抄底"
                         )
-                        if not _passes_index_heat_filter(
-                            fund_code=f_code,
-                            fund_name=f_name,
-                            fund_info=fund_info,
-                            buy_context="深度回撤反弹加仓",
-                        ):
-                            continue
-                        if not _can_submit_buy(f_code, f_name, buy_amount):
-                            continue
-                        res = commit_order(user, sub_account_no, f_code, buy_amount)
-                        if res:
-                            actual_amount = getattr(res, "amount", buy_amount)
-                            logger.info(f"深度回撤反弹加仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
-                            _mark_buy_metric(f_code, _safe_float(actual_amount, buy_amount))
-                            buy_triggered = True
-                        else:
-                            logger.info(f"深度回撤反弹加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")
                         continue
 
-                    # 深跌但无反弹信号 → 熔断，不抄底
-                    if is_deep_drawdown:
-                        logger.info(
-                            f"持仓基金 {f_name}({f_code}) 深度回撤 {estimated_profit_rate:.2f}% 但无反弹信号"
-                            f"(week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%)，继续熔断等待"
-                        )
+                    logger.info(
+                        f"持仓基金 {f_name}({f_code}) 触发深度回撤反弹加仓："
+                        f"estimated_profit_rate={estimated_profit_rate:.2f}%, week={week_growth_rate:.2f}%, "
+                        f"month={month_growth_rate:.2f}%, base_amt={base_amt:.2f}, "
+                        f"buy_multiplier=2.0, buy_amount={buy_amount:.2f}"
+                    )
+                    if not _passes_index_heat_filter(
+                        fund_code=f_code,
+                        fund_name=f_name,
+                        fund_info=fund_info,
+                        buy_context="深度回撤反弹加仓",
+                    ):
+                        continue
+                    if not _can_submit_buy(f_code, f_name, buy_amount):
+                        continue
+                    res = commit_order(user, sub_account_no, f_code, buy_amount)
+                    if res:
+                        actual_amount = getattr(res, "amount", buy_amount)
+                        logger.info(f"深度回撤反弹加仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
+                        _mark_buy_metric(f_code, _safe_float(actual_amount, buy_amount))
+                        buy_triggered = True
                     else:
-                        # 注意：此分支为 [-10%, -5%) 的「死区」——深跌分支的门槛是 < -10%，
-                        # 所以这一段够不到抄底通道，此时即便三信号全部转好也一律不买。
-                        logger.info(
-                            f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% 在 [-10%, -5%) 死区，"
-                            f"熔断暂停，等待回收至 -5% 以上或触发深度反弹信号"
-                        )
+                        logger.info(f"深度回撤反弹加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")
                     continue
+
+                logger.info(
+                    f"持仓基金 {f_name}({f_code}) 深度回撤 {estimated_profit_rate:.2f}% 但无反弹信号"
+                    f"(week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%)，继续熔断等待"
+                )
+                continue
             
             # 加仓金额计算（统一处理）：
             #   预估收益率: [-1%, -4%) → 1倍 base_amt
@@ -863,8 +828,7 @@ def increase_gold_funds(
                 logger.info(f"加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")
         else:
             logger.info(
-                f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% >= -1.0%，"
-                f"且持仓资产({current_asset_value:.2f}) >= 买入金额*0.95({min_asset_value_for_limited:.2f})，不满足加仓条件"
+                f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% >= -1.0%，不满足加仓条件"
             )
 
 

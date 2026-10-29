@@ -25,7 +25,7 @@ from src.API.交易管理.trade import get_trades_list
 from src.API.交易管理.revokMrg import revoke_order
 from src.service.交易管理.购买基金 import commit_order
 from src.domain.trade.TradeResult import TradeResult
-from src.common.constant import DEFAULT_USER
+from src.common.constant import DEFAULT_USER, SMALL_INVEST_AMOUNT_THRESHOLD
 from src.API.资产管理.getAssetListOfSub import get_asset_list_of_sub
 from src.service.资产管理.get_fund_asset_detail import get_fund_asset_detail
 import datetime
@@ -131,9 +131,13 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         if apply_count in (None, "", "--", "-") and isinstance(raw, dict):
             apply_count = raw.get("ApplyCount") or raw.get("apply_amount") or raw.get("apply_count")
         actual_invest_amount += _parse_money_amount(apply_count)
-    if actual_invest_amount < 1000:
+    max_purchase = float(getattr(fund_info, "max_purchase", 0.0) or 0.0)
+    small_invest_threshold = float(SMALL_INVEST_AMOUNT_THRESHOLD)
+    if actual_invest_amount < small_invest_threshold or (0 < max_purchase < small_invest_threshold):
         logger.info(
-            f"{fund_name}({fund_code}) 实际定投金额过小，跳过风控处理：实际={actual_invest_amount:.2f} < 1000.01，计划金额={fund_amount}"
+            f"{fund_name}({fund_code}) 实际定投金额或限购金额过小，跳过风控处理："
+            f"实际={actual_invest_amount:.2f}，限购={max_purchase:.2f}，计划金额={fund_amount}，"
+            f"阈值={small_invest_threshold:.2f}"
         )
         return True
     

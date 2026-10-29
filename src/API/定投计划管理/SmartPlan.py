@@ -667,6 +667,21 @@ def getPlanDetailPro(plan_id, user) -> ApiResponse[FundPlanDetail]:
                 raise ValidationError('Data为空')
 
             ration_plan_data = data.get('rationPlan', {})
+            sub_account_no = (
+                ration_plan_data.get('subAccountNo')
+                or ration_plan_data.get('subAcctId')
+                or data.get('subAccountNo')
+                or data.get('subAcctId')
+                or ''
+            )
+            sub_account_name = (
+                ration_plan_data.get('subAccountName')
+                or ration_plan_data.get('subAcctName')
+                or data.get('subAccountName')
+                or data.get('subAcctName')
+                or ''
+            )
+
             ration_plan = FundPlan(
                 planId=ration_plan_data.get('planId', ''),
                 fundCode=ration_plan_data.get('fundCode', ''),
@@ -682,8 +697,8 @@ def getPlanDetailPro(plan_id, user) -> ApiResponse[FundPlanDetail]:
                 amount=float(str(ration_plan_data.get('amount', 0)).replace(',', '')),
                 bankAccountNo=ration_plan_data.get('bankAccountNo', ''),
                 payType=parse_int(ration_plan_data.get('payType', 0)),
-                subAccountNo=ration_plan_data.get('subAccountNo', ''),
-                subAccountName=ration_plan_data.get('subAccountName', ''),
+                subAccountNo=sub_account_no,
+                subAccountName=sub_account_name,
                 currentDay=ration_plan_data.get('currentDay', ''),
                 buyStrategy=str(ration_plan_data.get('buyStrategy', '')),
                 redeemStrategy=str(ration_plan_data.get('redeemStrategy', '')),

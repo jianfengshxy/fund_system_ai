@@ -133,7 +133,7 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
         actual_invest_amount += _parse_money_amount(apply_count)
     max_purchase = float(getattr(fund_info, "max_purchase", 0.0) or 0.0)
     small_invest_threshold = float(SMALL_INVEST_AMOUNT_THRESHOLD)
-    if actual_invest_amount < small_invest_threshold or (0 < max_purchase < small_invest_threshold):
+    if actual_invest_amount <= small_invest_threshold or (0 < max_purchase <= small_invest_threshold):
         logger.info(
             f"{fund_name}({fund_code}) 实际定投金额或限购金额过小，跳过风控处理："
             f"实际={actual_invest_amount:.2f}，限购={max_purchase:.2f}，计划金额={fund_amount}，"

@@ -109,44 +109,51 @@ def increase_gold_funds(
         group_key, group_label = get_theme_group_key_and_label(fund_info)
         return group_key, group_label
 
-    def _calc_post_add_profit_rate(current_asset_value: float, estimated_profit_rate: float, buy_amount: float) -> float:
-        """
-        计算“按当前黄金多利标准金额再加一笔后，新的持有收益率是多少”。
-        分值越高（越接近 0 或转正），说明越可能更快靠近止盈线。
-        """
-        asset_value = _safe_float(current_asset_value, 0.0)
-        buy = _safe_float(buy_amount, 0.0)
-        rate_pct = _safe_float(estimated_profit_rate, 0.0)
-        rate = rate_pct / 100.0
-
-        if asset_value <= 0.0 or rate <= -0.999:
-            return rate_pct
-        if buy <= 0.0 or rate >= 0.0:
-            return rate_pct
-
-        current_cost = asset_value / (1.0 + rate)
-        if current_cost <= 0.0:
-            return rate_pct
-
-        new_rate = ((asset_value + buy) / (current_cost + buy)) - 1.0
-        return new_rate * 100.0
-
-    def _preview_efficiency_buy_amount(
+    def _resolve_buy_amount(
         *,
-        current_asset_value: float,
+        fund_code: str,
+        fund_name: str,
+        fund_info,
         estimated_profit_rate: float,
         base_amt: float,
+        buy_context: str,
     ) -> float:
+        # 新分段口径：
+        # 1) (-1, -5]   -> 1 倍
+        # 2) (-5, -10]  -> 2 倍
+        # 3) < -10      -> 仅当资金热度过滤开关开启、通过三层净流入过滤，且站上 5 日均线时 3 倍
         if estimated_profit_rate >= -1.0:
             return 0.0
 
-        if estimated_profit_rate < -10.0:
+        if estimated_profit_rate >= -5.0:
+            return float(base_amt)
+
+        if estimated_profit_rate >= -10.0:
+            return float(base_amt) * 2.0
+
+        if not _get_effective_index_heat_filter_enabled(fund_code):
+            logger.info(
+                f"持仓基金 {fund_name}({fund_code}) 回撤 {estimated_profit_rate:.2f}% 低于 -10%，"
+                f"但资金热度过滤器未开启，放弃 3 倍加仓"
+            )
             return 0.0
 
-        if estimated_profit_rate < -4.0:
-            return base_amt * 2.0
+        if not nav5_gate(fund_info, fund_name, fund_code, logger):
+            logger.info(
+                f"持仓基金 {fund_name}({fund_code}) 回撤 {estimated_profit_rate:.2f}% 低于 -10%，"
+                f"但未站上 5 日均线，继续等待"
+            )
+            return 0.0
 
-        return base_amt
+        if not _passes_index_heat_filter(
+            fund_code=fund_code,
+            fund_name=fund_name,
+            fund_info=fund_info,
+            buy_context=buy_context,
+        ):
+            return 0.0
+
+        return float(base_amt) * 3.0
 
     # 获取子账户编号
     sub_account_no = getSubAccountNoByName(user, sub_account_name)
@@ -214,8 +221,11 @@ def increase_gold_funds(
 
     # if not normalized_funds:
     #     normalized_funds = [{"fund_code": "021740", "amount": amount, "limit": None}]
+    normalized_fund_map = {item["fund_code"]: item for item in normalized_funds}
 
     def _has_pending_trade(fund_code: str) -> bool:
+        if fund_code in pending_trade_cache:
+            return pending_trade_cache[fund_code]
         fi = _get_cached_fund_info(fund_code)
         nav_date_str = getattr(fi, "nav_date", None) if fi else None
         if nav_date_str:
@@ -231,6 +241,7 @@ def increase_gold_funds(
         if prev_trade_record:
             state = getattr(prev_trade_record, "app_state_text", None) or getattr(prev_trade_record, "status", None)
             logger.info(f"[在途检查] 基金 {fund_code} 上一个交易日({nav_date_str})已有有效交易（状态={state}），跳过加仓")
+            pending_trade_cache[fund_code] = True
             return True
         
         # 步骤2: 检查今天是否有有效买入/定投（当日不重复交易）
@@ -239,9 +250,11 @@ def increase_gold_funds(
         if today_trade_record:
             state = getattr(today_trade_record, "app_state_text", None) or getattr(today_trade_record, "status", None)
             logger.info(f"[在途检查] 基金 {fund_code} 今日({today})已有有效交易（状态={state}），跳过加仓")
+            pending_trade_cache[fund_code] = True
             return True
         
         logger.info(f"[在途检查] 基金 {fund_code} nav_date={nav_date_str}, prev_trade_day={prev_trade_day}, 查询结果: 无交易")
+        pending_trade_cache[fund_code] = False
         return False
         
     def _get_fund_name(fund_code: str) -> str:
@@ -272,7 +285,7 @@ def increase_gold_funds(
     total_limit = _normalize_limit(total_limit)
     fund_metric_dict = {f_code: _get_asset_limit_metric(asset) for f_code, asset in asset_dict.items()}
     total_metric = sum(fund_metric_dict.values())
-    representative_candidates: Dict[str, Dict] = {}
+    pending_trade_cache: Dict[str, bool] = {}
     index_heat_cache: Dict[str, Optional[float]] = {}
     index_main_net_inflow_cache: Dict[str, Optional[float]] = {}
     index_main_net_inflow_snapshot_cache: Dict[str, Dict] = {}
@@ -327,34 +340,58 @@ def increase_gold_funds(
     def _is_index_fund(fund_info) -> bool:
         return getattr(fund_info, "fund_type", None) == "000" and bool(getattr(fund_info, "index_code", None))
 
+    def _get_candidate_heat_score(fund_info) -> Optional[float]:
+        if not _is_index_fund(fund_info):
+            return None
+        index_code = getattr(fund_info, "index_code", None)
+        if not index_code:
+            return None
+        return _get_latest_realtime_index_heat(index_code)
+
     def _build_init_candidate(fund_item: Dict, order_index: int) -> Dict:
         fund_code = fund_item["fund_code"]
         fund_info = _get_cached_fund_info(fund_code)
         fund_name = getattr(fund_info, "fund_name", "") or _get_fund_name(fund_code)
         group_key, group_label = _get_group_key_and_label(fund_info)
-        is_index_fund = _is_index_fund(fund_info)
-        heat_score = _get_latest_realtime_index_heat(getattr(fund_info, "index_code", None)) if is_index_fund else None
+        heat_score = _get_candidate_heat_score(fund_info)
         return {
             "fund_code": fund_code,
             "fund_name": fund_name,
             "group_key": group_key,
             "group_label": group_label,
             "order_index": order_index,
-            "is_index_fund": is_index_fund,
             "heat_score": heat_score,
         }
 
-    def _should_replace_init_candidate(current: Dict, existing: Dict) -> bool:
-        if current["is_index_fund"] and existing["is_index_fund"]:
-            current_heat = current["heat_score"]
-            existing_heat = existing["heat_score"]
-            if current_heat is not None and existing_heat is not None and abs(current_heat - existing_heat) > 1e-9:
-                return current_heat > existing_heat
-            if current_heat is not None and existing_heat is None:
-                return True
-            if current_heat is None and existing_heat is not None:
-                return False
-        return current["order_index"] < existing["order_index"]
+    def _should_replace_theme_candidate(current: Dict, existing: Dict) -> bool:
+        current_heat = current.get("heat_score")
+        existing_heat = existing.get("heat_score")
+        if current_heat is not None and existing_heat is not None and abs(current_heat - existing_heat) > 1e-9:
+            return current_heat > existing_heat
+        if current_heat is not None and existing_heat is None:
+            return True
+        if current_heat is None and existing_heat is not None:
+            return False
+
+        current_estimated_profit_rate = current.get("estimated_profit_rate")
+        existing_estimated_profit_rate = existing.get("estimated_profit_rate")
+        if (
+            current_estimated_profit_rate is not None
+            and existing_estimated_profit_rate is not None
+            and abs(current_estimated_profit_rate - existing_estimated_profit_rate) > 1e-9
+        ):
+            return current_estimated_profit_rate > existing_estimated_profit_rate
+
+        current_asset_value = current.get("asset_value")
+        existing_asset_value = existing.get("asset_value")
+        if (
+            current_asset_value is not None
+            and existing_asset_value is not None
+            and abs(current_asset_value - existing_asset_value) > 1e-9
+        ):
+            return current_asset_value < existing_asset_value
+
+        return int(current.get("order_index", 10**9)) < int(existing.get("order_index", 10**9))
 
     def _passes_index_heat_filter(
         *,
@@ -550,156 +587,129 @@ def increase_gold_funds(
         total_metric += actual_amount
         fund_metric_dict[fund_code] = fund_metric_dict.get(fund_code, 0.0) + actual_amount
 
+    occupied_group_keys = set()
+    for f_code in asset_dict.keys():
+        fund_info = _get_cached_fund_info(f_code)
+        group_key, _ = _get_group_key_and_label(fund_info)
+        if group_key:
+            occupied_group_keys.add(group_key)
+    blocked_group_by_pending_trade: Dict[str, Dict[str, str]] = {}
     for f_code, asset in asset_dict.items():
+        if not _has_pending_trade(f_code):
+            continue
         fund_info = _get_cached_fund_info(f_code)
         group_key, group_label = _get_group_key_and_label(fund_info)
         if not group_key:
             continue
-
-        current_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
-        current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-        estimated_change, _ = calc_estimated_change(fund_info)
-        estimated_profit_rate = current_profit_rate + estimated_change
-        base_amt = _safe_float(payload_amt_dict.get(f_code, amount), _safe_float(amount, 0.0))
-        preview_buy_amount = _preview_efficiency_buy_amount(
-            current_asset_value=current_asset_value,
-            estimated_profit_rate=estimated_profit_rate,
-            base_amt=base_amt,
-        )
-        post_add_profit_rate = _calc_post_add_profit_rate(
-            current_asset_value=current_asset_value,
-            estimated_profit_rate=estimated_profit_rate,
-            buy_amount=preview_buy_amount,
-        )
-        candidate = {
+        blocked_group_by_pending_trade[group_key] = {
             "fund_code": f_code,
             "fund_name": getattr(asset, "fund_name", "") or _get_fund_name(f_code),
-            "group_label": group_label,
-            "post_add_profit_rate": post_add_profit_rate,
-            "estimated_profit_rate": estimated_profit_rate,
-            "asset_value": current_asset_value,
-            "preview_buy_amount": preview_buy_amount,
+            "group_label": group_label or "未知分组",
         }
-        best = representative_candidates.get(group_key)
-        if (
-            best is None
-            or candidate["post_add_profit_rate"] > best["post_add_profit_rate"]
-            or (
-                abs(candidate["post_add_profit_rate"] - best["post_add_profit_rate"]) <= 1e-9
-                and candidate["estimated_profit_rate"] > best["estimated_profit_rate"]
-            )
-            or (
-                abs(candidate["post_add_profit_rate"] - best["post_add_profit_rate"]) <= 1e-9
-                and abs(candidate["estimated_profit_rate"] - best["estimated_profit_rate"]) <= 1e-9
-                and candidate["asset_value"] < best["asset_value"]
-            )
-        ):
-            representative_candidates[group_key] = candidate
-
-    for candidate in representative_candidates.values():
+    for blocked in blocked_group_by_pending_trade.values():
         logger.info(
-            f"[同类优先] {candidate['group_label']} 当前仅保留 "
-            f"{candidate['fund_name']}({candidate['fund_code']}) 作为加仓代表，"
-            f"post_add_profit_rate={candidate['post_add_profit_rate']:.4f}%, "
-            f"estimated_profit_rate={candidate['estimated_profit_rate']:.2f}%, "
-            f"asset_value={candidate['asset_value']:.2f}, "
-            f"preview_buy_amount={candidate['preview_buy_amount']:.2f}"
+            f"[主题守卫] {blocked['group_label']} 存在在途基金 "
+            f"{blocked['fund_name']}({blocked['fund_code']})，本轮禁止买入同主题其他基金"
         )
-    occupied_group_keys = set(representative_candidates.keys())
+
     init_representative_candidates: Dict[str, Dict] = {}
     for idx, fund_item in enumerate(normalized_funds):
         f_code = fund_item["fund_code"]
         if f_code in asset_dict:
             continue
-        candidate = _build_init_candidate(fund_item, idx)
-        group_key = candidate["group_key"]
-        if not group_key or group_key in occupied_group_keys:
-            continue
-
-        existing = init_representative_candidates.get(group_key)
-        if existing is None or _should_replace_init_candidate(candidate, existing):
-            if existing is not None:
-                logger.info(
-                    f"[同主题初始化优先] {candidate['group_label']} 改为保留 "
-                    f"{candidate['fund_name']}({candidate['fund_code']})，替换 "
-                    f"{existing['fund_name']}({existing['fund_code']})，"
-                    f"heat_score={candidate['heat_score'] if candidate['heat_score'] is not None else '-'}"
-                )
-            init_representative_candidates[group_key] = candidate
-
-    for candidate in init_representative_candidates.values():
-        logger.info(
-            f"[同主题初始化优先] {candidate['group_label']} 当前仅保留 "
-            f"{candidate['fund_name']}({candidate['fund_code']}) 作为新仓代表，"
-            f"heat_score={candidate['heat_score'] if candidate['heat_score'] is not None else '-'}"
-        )
-
-    # 1. 遍历传过来的基金列表，如果未持有该基金，则执行该基金的初始化建仓
-    for f in normalized_funds:
-        f_code = f["fund_code"]
-        f_amt = f["init_amount"]
+        f_amt = fund_item["init_amount"]
         fund_info = _get_cached_fund_info(f_code)
         f_name = getattr(fund_info, "fund_name", "") or _get_fund_name(f_code)
         group_key, group_label = _get_group_key_and_label(fund_info)
-        
-        # 最先校验单个基金的资产是否已超过限制，超过则跳过该基金
+
         current_fund_metric = fund_metric_dict.get(f_code, 0.0)
-        # 只在有配置limit时进行检查，没有配置就不限制
         fund_limit = _get_effective_fund_limit(f_code)
         if fund_limit is not None and current_fund_metric >= fund_limit:
             logger.info(f"基金 {f_name}({f_code}) 当前资产值 {current_fund_metric:.2f} 已达到单基金上限 {fund_limit:.2f}，跳过初始化建仓")
             continue
 
-        if f_code not in asset_dict:
-            if group_key and group_key in occupied_group_keys:
-                logger.info(f"[同类跳过] 初始化建仓 {f_name}({f_code}) 属于 {group_label}，当前组合已存在同主题代表，跳过新仓")
-                continue
-            if group_key:
-                init_representative = init_representative_candidates.get(group_key)
-                if init_representative and init_representative["fund_code"] != f_code:
-                    logger.info(
-                        f"[同类跳过] 初始化建仓 {f_name}({f_code}) 属于 {group_label}，"
-                        f"当前优先处理 {init_representative['fund_name']}({init_representative['fund_code']}) "
-                        f"(heat_score={init_representative['heat_score'] if init_representative['heat_score'] is not None else '-'})"
-                    )
-                    continue
-            if not hqb_new_position_allowed:
+        if group_key and group_key in occupied_group_keys:
+            logger.info(f"[同类跳过] 初始化建仓 {f_name}({f_code}) 属于 {group_label}，当前组合已存在同主题代表，跳过新仓")
+            continue
+
+        if not hqb_new_position_allowed:
+            logger.info(
+                f"[黄金多利] 活期宝占比不足 {HQB_NEW_POSITION_THRESHOLD:.1f}%，"
+                f"跳过新仓初始化建仓: {f_name}({f_code})，init_amount={f_amt}"
+            )
+            continue
+
+        if _has_pending_trade(f_code):
+            logger.info(f"目标基金 {f_code} 存在在途交易，跳过初始化建仓")
+            continue
+
+        candidate = _build_init_candidate(fund_item, idx)
+        if not group_key:
+            init_representative_candidates[f"__nogroup__:{f_code}"] = candidate
+            continue
+
+        existing = init_representative_candidates.get(group_key)
+        if existing is None or _should_replace_theme_candidate(candidate, existing):
+            if existing is not None:
                 logger.info(
-                    f"[黄金多利] 活期宝占比不足 {HQB_NEW_POSITION_THRESHOLD:.1f}%，"
-                    f"跳过新仓初始化建仓: {f_name}({f_code})，init_amount={f_amt}"
+                    f"[同主题初始化优先] {candidate['group_label']} 过滤完成后改为保留 "
+                    f"{candidate['fund_name']}({candidate['fund_code']})，替换 "
+                    f"{existing['fund_name']}({existing['fund_code']})，"
+                    f"heat_score={candidate['heat_score'] if candidate['heat_score'] is not None else '-'}"
                 )
-                continue
+            init_representative_candidates[group_key] = candidate
+        else:
+            logger.info(
+                f"[同类跳过] 初始化建仓 {candidate['fund_name']}({candidate['fund_code']}) 属于 {candidate['group_label']}，"
+                f"过滤完成后热度不高于 {existing['fund_name']}({existing['fund_code']})，跳过"
+            )
 
-            if _has_pending_trade(f_code):
-                logger.info(f"目标基金 {f_code} 存在在途交易，跳过初始化建仓")
-                continue
+    for candidate in init_representative_candidates.values():
+        logger.info(
+            f"[同主题初始化优先] {candidate['group_label'] or '无主题'} 当前仅保留 "
+            f"{candidate['fund_name']}({candidate['fund_code']}) 作为新仓代表，"
+            f"heat_score={candidate['heat_score'] if candidate['heat_score'] is not None else '-'}"
+        )
 
-            if not _can_submit_buy(f_code, f_name, f_amt):
-                continue
-                
-            if group_key:
-                occupied_group_keys.add(group_key)
-            logger.info(f"基金 {f_name}({f_code}) 未持有，执行初始化建仓，准备下单金额: {f_amt}")
-            res = commit_order(user, sub_account_no, f_code, f_amt)
-            if res:
-                actual_amount = getattr(res, "amount", f_amt)
-                logger.info(f"初始化建仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
-                _mark_buy_metric(f_code, _safe_float(actual_amount, f_amt))
-                buy_triggered = True
-            else:
-                logger.info(f"初始化建仓未提交或失败: {f_name}({f_code}) 金额: {f_amt}")
+    selected_init_candidates = sorted(
+        init_representative_candidates.values(),
+        key=lambda item: int(item.get("order_index", 10**9)),
+    )
+    for candidate in selected_init_candidates:
+        f_code = candidate["fund_code"]
+        fund_item = normalized_fund_map.get(f_code)
+        if not fund_item:
+            continue
+        f_amt = fund_item["init_amount"]
+        f_name = candidate["fund_name"]
+        group_key = candidate["group_key"]
 
-    # 2. 遍历组合内所有持有的基金，满足条件则加仓降低成本
-    for f_code, asset in asset_dict.items():
+        if not _can_submit_buy(f_code, f_name, f_amt):
+            continue
+
+        if group_key:
+            occupied_group_keys.add(group_key)
+        logger.info(f"基金 {f_name}({f_code}) 未持有，执行初始化建仓，准备下单金额: {f_amt}")
+        res = commit_order(user, sub_account_no, f_code, f_amt)
+        if res:
+            actual_amount = getattr(res, "amount", f_amt)
+            logger.info(f"初始化建仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
+            _mark_buy_metric(f_code, _safe_float(actual_amount, f_amt))
+            buy_triggered = True
+        else:
+            logger.info(f"初始化建仓未提交或失败: {f_name}({f_code}) 金额: {f_amt}")
+
+    increase_representative_candidates: Dict[str, Dict] = {}
+    increase_direct_candidates: List[Dict] = []
+    for order_index, (f_code, asset) in enumerate(asset_dict.items()):
         fund_info = _get_cached_fund_info(f_code)
         f_name = getattr(asset, "fund_name", "") or _get_fund_name(f_code)
         group_key, group_label = _get_group_key_and_label(fund_info)
-        representative = representative_candidates.get(group_key) if group_key else None
-        if representative and representative["fund_code"] != f_code:
+        blocked_group = blocked_group_by_pending_trade.get(group_key) if group_key else None
+        if blocked_group and blocked_group["fund_code"] != f_code:
             logger.info(
-                f"[同类跳过] {f_name}({f_code}) 属于 {group_label}，"
-                f"当前优先处理 {representative['fund_name']}({representative['fund_code']}) "
-                f"(post_add_profit_rate={representative['post_add_profit_rate']:.4f}%)"
+                f"[主题守卫] 持仓基金 {f_name}({f_code}) 属于 {group_label}，"
+                f"同主题基金 {blocked_group['fund_name']}({blocked_group['fund_code']}) 仍在途，跳过本轮买入"
             )
             continue
         
@@ -720,13 +730,8 @@ def increase_gold_funds(
         estimated_change, label_est = calc_estimated_change(fund_info)
         estimated_profit_rate = current_profit_rate + estimated_change
 
-        week_growth_rate = _safe_float(getattr(fund_info, "week_return", None) if fund_info else None, 0.0)
-        month_growth_rate = _safe_float(getattr(fund_info, "month_return", None) if fund_info else None, 0.0)
-        
         logger.info(f"持仓基金 {f_name}({f_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%（{label_est}）")
 
-        # 获取当前资产值和该基金的买入金额
-        current_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
         # 获取该基金的买入金额，遵循优先级规则：
         # 1. 基金级别的amount优先级最高（在fund_list中配置）
         # 2. 如果没有基金级别的amount，则使用组合级别的amount（函数参数amount）
@@ -737,77 +742,24 @@ def increase_gold_funds(
         
         if should_increase:
             logger.info(f"持仓基金 {f_name}({f_code}) {increase_reason}，触发加仓判定")
-            
-            # 检查是否跌幅过大（小于-5.0%），如果是则跳过加仓，防止单边下跌
-            if estimated_profit_rate < -5.0:
-                # ---------- 深度回撤反弹加仓 ----------
-                # 触发条件（两个必须同时成立）：
-                #   1) is_deep_drawdown    : 回撤 > 5%（estimated_profit_rate < -5.0）
-                #   2) has_reversal_signal : 周线 > 0、月线 > 0、持仓市值 > 0，且净值站上 5 日均线
-                # 加仓额度：固定为 base_amt 的 2 倍。
-                # 这样若反弹持续，可通过连续 2 倍买入逐步降低成本；
-                # 若反弹终止，则下一轮会立刻回到熔断等待，避免一次性消耗过多现金。
-                is_deep_drawdown = estimated_profit_rate < -5.0
-                has_reversal_signal = (
-                    week_growth_rate > 0.0
-                    and month_growth_rate > 0.0
-                    and current_asset_value > 0.0
-                    and nav5_gate(fund_info, f_name, f_code, logger)
-                )
 
-                if is_deep_drawdown and has_reversal_signal:
-                    if estimated_profit_rate >= -10.0:
-                        buy_amount = float(base_amt) * 2.0
-                    else:
-                        logger.info(
-                            f"持仓基金 {f_name}({f_code}) 回撤 {estimated_profit_rate:.2f}% 低于 -10%，疑似基本面风险，放弃抄底"
-                        )
-                        continue
-
-                    logger.info(
-                        f"持仓基金 {f_name}({f_code}) 触发深度回撤反弹加仓："
-                        f"estimated_profit_rate={estimated_profit_rate:.2f}%, week={week_growth_rate:.2f}%, "
-                        f"month={month_growth_rate:.2f}%, base_amt={base_amt:.2f}, "
-                        f"buy_multiplier=2.0, buy_amount={buy_amount:.2f}"
-                    )
-                    if not _passes_index_heat_filter(
-                        fund_code=f_code,
-                        fund_name=f_name,
-                        fund_info=fund_info,
-                        buy_context="深度回撤反弹加仓",
-                    ):
-                        continue
-                    if not _can_submit_buy(f_code, f_name, buy_amount):
-                        continue
-                    res = commit_order(user, sub_account_no, f_code, buy_amount)
-                    if res:
-                        actual_amount = getattr(res, "amount", buy_amount)
-                        logger.info(f"深度回撤反弹加仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
-                        _mark_buy_metric(f_code, _safe_float(actual_amount, buy_amount))
-                        buy_triggered = True
-                    else:
-                        logger.info(f"深度回撤反弹加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")
-                    continue
-
+            buy_amount = _resolve_buy_amount(
+                fund_code=f_code,
+                fund_name=f_name,
+                fund_info=fund_info,
+                estimated_profit_rate=estimated_profit_rate,
+                base_amt=base_amt,
+                buy_context="深跌 3 倍加仓",
+            )
+            if buy_amount <= 0.0:
                 logger.info(
-                    f"持仓基金 {f_name}({f_code}) 深度回撤 {estimated_profit_rate:.2f}% 但无反弹信号"
-                    f"(week={week_growth_rate:.2f}%, month={month_growth_rate:.2f}%)，继续熔断等待"
+                    f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% "
+                    f"未满足当前加仓条件，继续等待"
                 )
                 continue
-            
-            # 加仓金额计算（统一处理）：
-            #   预估收益率: [-1%, -4%) → 1倍 base_amt
-            #               [-4%, -5%) → 2倍 base_amt
-            #               < -5%  → 已在上方跳过，不买入
-            # 注：base_amt 已遵循优先级: fund_list 中该基金的 amount > 组合默认 amount
-            buy_multiplier = 2.0 if estimated_profit_rate < -4.0 else 1.0
-            buy_amount = base_amt * buy_multiplier
-            logger.info(
-                f"满足加仓条件，准备买入 {f_name}({f_code}) "
-                f"金额: {buy_amount}（base_amt={base_amt}，倍率={buy_multiplier}，预估收益率 {estimated_profit_rate:.2f}%）"
-            )
 
-            if not _passes_index_heat_filter(
+            buy_multiplier = buy_amount / float(base_amt) if float(base_amt) > 0.0 else 0.0
+            if estimated_profit_rate >= -10.0 and not _passes_index_heat_filter(
                 fund_code=f_code,
                 fund_name=f_name,
                 fund_info=fund_info,
@@ -815,22 +767,76 @@ def increase_gold_funds(
             ):
                 continue
 
-            if not _can_submit_buy(f_code, f_name, buy_amount):
+            candidate = {
+                "fund_code": f_code,
+                "fund_name": f_name,
+                "group_key": group_key,
+                "group_label": group_label,
+                "order_index": order_index,
+                "heat_score": _get_candidate_heat_score(fund_info),
+                "estimated_profit_rate": estimated_profit_rate,
+                "asset_value": _safe_float(getattr(asset, "asset_value", 0.0), 0.0),
+                "buy_amount": buy_amount,
+                "buy_multiplier": buy_multiplier,
+                "base_amt": base_amt,
+            }
+            if not group_key:
+                increase_direct_candidates.append(candidate)
                 continue
-            
-            res = commit_order(user, sub_account_no, f_code, buy_amount)
-            if res:
-                actual_amount = getattr(res, "amount", buy_amount)
-                logger.info(f"加仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
-                _mark_buy_metric(f_code, _safe_float(actual_amount, buy_amount))
-                buy_triggered = True
+
+            existing = increase_representative_candidates.get(group_key)
+            if existing is None or _should_replace_theme_candidate(candidate, existing):
+                if existing is not None:
+                    logger.info(
+                        f"[同类优先] {group_label} 过滤完成后改为保留 "
+                        f"{candidate['fund_name']}({candidate['fund_code']})，替换 "
+                        f"{existing['fund_name']}({existing['fund_code']})，"
+                        f"heat_score={candidate['heat_score'] if candidate['heat_score'] is not None else '-'}"
+                    )
+                increase_representative_candidates[group_key] = candidate
             else:
-                logger.info(f"加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")
+                logger.info(
+                    f"[同类跳过] {f_name}({f_code}) 属于 {group_label}，"
+                    f"过滤完成后热度不高于 {existing['fund_name']}({existing['fund_code']})，跳过"
+                )
         else:
             logger.info(
                 f"持仓基金 {f_name}({f_code}) 预估收益率 {estimated_profit_rate:.2f}% >= -1.0%，不满足加仓条件"
             )
 
+    for candidate in increase_representative_candidates.values():
+        logger.info(
+            f"[同类优先] {candidate['group_label']} 当前仅保留 "
+            f"{candidate['fund_name']}({candidate['fund_code']}) 作为加仓代表，"
+            f"heat_score={candidate['heat_score'] if candidate['heat_score'] is not None else '-'}, "
+            f"estimated_profit_rate={candidate['estimated_profit_rate']:.2f}%, "
+            f"buy_amount={candidate['buy_amount']:.2f}"
+        )
+
+    selected_increase_candidates = sorted(
+        increase_direct_candidates + list(increase_representative_candidates.values()),
+        key=lambda item: int(item.get("order_index", 10**9)),
+    )
+    for candidate in selected_increase_candidates:
+        f_code = candidate["fund_code"]
+        f_name = candidate["fund_name"]
+        buy_amount = candidate["buy_amount"]
+        if not _can_submit_buy(f_code, f_name, buy_amount):
+            continue
+
+        logger.info(
+            f"满足加仓条件，准备买入 {f_name}({f_code}) "
+            f"金额: {buy_amount}（base_amt={candidate['base_amt']}，倍率={candidate['buy_multiplier']}，"
+            f"预估收益率 {candidate['estimated_profit_rate']:.2f}%）"
+        )
+        res = commit_order(user, sub_account_no, f_code, buy_amount)
+        if res:
+            actual_amount = getattr(res, "amount", buy_amount)
+            logger.info(f"加仓成功: {f_code} - 金额: {actual_amount} - 订单号: {res.busin_serial_no}")
+            _mark_buy_metric(f_code, _safe_float(actual_amount, buy_amount))
+            buy_triggered = True
+        else:
+            logger.info(f"加仓未提交或失败: {f_name}({f_code}) 金额: {buy_amount}")
 
     if not buy_triggered:
         logger.info("本次检查未触发加仓操作")

@@ -12,6 +12,8 @@ export type MockAssetDetail = {
   estimated_change: number
   tracked_index_code?: string
   tracked_index_name?: string
+  primary_theme_code?: string
+  primary_theme_name?: string
   latest_heat_score?: number
   latest_heat_trade_date?: string
 }
@@ -39,6 +41,8 @@ const mockPortfolioDetailsByName: Record<string, MockAssetDetail[]> = {
       estimated_change: -0.48,
       tracked_index_code: 'NDX',
       tracked_index_name: '纳斯达克100',
+      primary_theme_code: 'BK0475',
+      primary_theme_name: '美股科技',
       latest_heat_score: 18.23,
       latest_heat_trade_date: '2026-07-11'
     },
@@ -51,6 +55,8 @@ const mockPortfolioDetailsByName: Record<string, MockAssetDetail[]> = {
       estimated_change: 1.26,
       tracked_index_code: 'HSTECH',
       tracked_index_name: '恒生科技',
+      primary_theme_code: 'BK1058',
+      primary_theme_name: '港股科技',
       latest_heat_score: 22.48,
       latest_heat_trade_date: '2026-07-11'
     },
@@ -63,6 +69,8 @@ const mockPortfolioDetailsByName: Record<string, MockAssetDetail[]> = {
       estimated_change: 0.32,
       tracked_index_code: 'SPX',
       tracked_index_name: '标普500',
+      primary_theme_code: 'BK0474',
+      primary_theme_name: '美股核心资产',
       latest_heat_score: 16.75,
       latest_heat_trade_date: '2026-07-11'
     }
@@ -95,6 +103,8 @@ const mockPortfolioDetailsByName: Record<string, MockAssetDetail[]> = {
       estimated_change: 1.92,
       tracked_index_code: '930997',
       tracked_index_name: '新能源电池',
+      primary_theme_code: 'BK0437',
+      primary_theme_name: '新能源车',
       latest_heat_score: 12.65,
       latest_heat_trade_date: '2026-07-11'
     },
@@ -107,6 +117,8 @@ const mockPortfolioDetailsByName: Record<string, MockAssetDetail[]> = {
       estimated_change: -0.73,
       tracked_index_code: '000905',
       tracked_index_name: '中证500',
+      primary_theme_code: 'BK0500',
+      primary_theme_name: '中盘成长',
       latest_heat_score: 9.31,
       latest_heat_trade_date: '2026-07-11'
     }

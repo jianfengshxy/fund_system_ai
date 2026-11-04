@@ -136,10 +136,18 @@ def _get_latest_index_snapshot(index_code: str | None = None, fund_code: str | N
             FROM market_index_static s
             LEFT JOIN market_index_daily d
               ON d.index_code = s.index_code
-             AND d.trade_date = (
-                SELECT MAX(d2.trade_date)
-                FROM market_index_daily d2
-                WHERE d2.index_code = s.index_code
+             AND d.trade_date = COALESCE(
+                (
+                    SELECT MAX(d2.trade_date)
+                    FROM market_index_daily d2
+                    WHERE d2.index_code = s.index_code
+                      AND d2.heat_score IS NOT NULL
+                ),
+                (
+                    SELECT MAX(d3.trade_date)
+                    FROM market_index_daily d3
+                    WHERE d3.index_code = s.index_code
+                )
              )
             WHERE s.index_code = %s
             LIMIT 1
@@ -159,10 +167,18 @@ def _get_latest_index_snapshot(index_code: str | None = None, fund_code: str | N
             FROM market_index_static s
             LEFT JOIN market_index_daily d
               ON d.index_code = s.index_code
-             AND d.trade_date = (
-                SELECT MAX(d2.trade_date)
-                FROM market_index_daily d2
-                WHERE d2.index_code = s.index_code
+             AND d.trade_date = COALESCE(
+                (
+                    SELECT MAX(d2.trade_date)
+                    FROM market_index_daily d2
+                    WHERE d2.index_code = s.index_code
+                      AND d2.heat_score IS NOT NULL
+                ),
+                (
+                    SELECT MAX(d3.trade_date)
+                    FROM market_index_daily d3
+                    WHERE d3.index_code = s.index_code
+                )
              )
             WHERE s.track_fund_code = %s
             ORDER BY (d.heat_score IS NOT NULL) DESC, d.trade_date DESC, s.index_code
@@ -393,6 +409,7 @@ def _handle_portfolio_details(portfolio_name: str):
 
         def _enrich(asset):
             from src.service.基金信息.基金信息 import get_all_fund_info
+            from src.service.公共服务.fund_theme_group_service import get_primary_theme
 
             fund_info = get_all_fund_info(user, asset.fund_code)
             if not fund_info:
@@ -425,6 +442,10 @@ def _handle_portfolio_details(portfolio_name: str):
             else:
                 asset.estimated_change = float(getattr(fund_info, "estimated_change", None) or 0.0)
             asset.estimated_time = getattr(fund_info, "estimated_time", None)
+            primary_theme = get_primary_theme(fund_info)
+            if primary_theme:
+                asset.primary_theme_code = primary_theme[0]
+                asset.primary_theme_name = primary_theme[1]
             index_snapshot = _get_latest_index_snapshot(
                 getattr(fund_info, "index_code", None),
                 asset.fund_code,

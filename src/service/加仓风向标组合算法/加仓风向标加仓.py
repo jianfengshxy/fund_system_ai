@@ -9,7 +9,7 @@ if root_dir not in sys.path:
 
 import logging
 import math
-from typing import Optional
+from typing import Dict, Optional
 
 from src.common.logger import get_logger
 
@@ -26,8 +26,54 @@ from src.service.交易管理.交易查询 import count_success_trades_on_prev_n
 from src.service.公共服务.nav_gate_service import nav5_gate
 from src.service.公共服务.trade_guard_service import has_buy_submission_on_dates
 from src.service.公共服务.estimated_profit_service import calc_estimated_change, calc_estimated_profit_rate
+from src.service.公共服务.fund_theme_group_service import (
+    get_primary_theme as _shared_get_primary_theme,
+    get_theme_group_key_and_label,
+)
 # 新增导入 get_user_all_info
 from src.service.用户管理.用户信息 import get_user_all_info
+
+
+def _safe_float(v, default=0.0):
+    try:
+        if v is None:
+            return default
+        return float(v)
+    except Exception:
+        return default
+
+
+def _get_primary_theme(fund_info):
+    return _shared_get_primary_theme(fund_info)
+
+
+def _get_group_key_and_label(fund_info) -> tuple[Optional[str], str]:
+    return get_theme_group_key_and_label(fund_info)
+
+
+def _calc_post_add_profit_rate(current_asset_value: float, estimated_profit_rate: float, buy_amount: float) -> float:
+    """
+    计算“按当前标准金额加仓后，新的持有收益率是多少”。
+    分值越高（越接近 0 或转正），说明越可能更快靠近止盈线。
+    """
+    asset_value = _safe_float(current_asset_value, 0.0)
+    buy = _safe_float(buy_amount, 0.0)
+    rate_pct = _safe_float(estimated_profit_rate, 0.0)
+    rate = rate_pct / 100.0
+
+    if asset_value <= 0.0 or rate <= -0.999:
+        return rate_pct
+    if buy <= 0.0 or rate >= 0.0:
+        return rate_pct
+
+    current_cost = asset_value / (1.0 + rate)
+    if current_cost <= 0.0:
+        return rate_pct
+
+    new_rate = ((asset_value + buy) / (current_cost + buy)) - 1.0
+    return new_rate * 100.0
+
+
 def _get_max_funds_threshold():
     env_val = os.environ.get('MAX_FUNDS_THRESHOLD')
     if env_val is None or env_val == "":
@@ -62,6 +108,14 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
         base_amount = round(total_budget / max(MAX_FUNDS_THRESHOLD, 1) / max(spread_days, 1), 2) * 2
     logger.info(f"[买入金额] 单只基础买入金额={base_amount} 元(是新增金额的2倍)")
     buy_amount = base_amount
+    fund_info_cache: Dict[str, Optional[object]] = {}
+
+    def _get_cached_fund_info(fund_code: str):
+        if not fund_code:
+            return None
+        if fund_code not in fund_info_cache:
+            fund_info_cache[fund_code] = get_all_fund_info(user, fund_code)
+        return fund_info_cache[fund_code]
 
     # 获取子账户
     sub_account_no = getSubAccountNoByName(user, sub_account_name)
@@ -79,7 +133,13 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
     elif fund_type == 'non_index':
         wind_vane_funds = [f for f in wind_vane_funds if f.fund_type != '000']
     wind_vane_codes = {f.fund_code for f in wind_vane_funds}
-    wind_vane_indices = {get_all_fund_info(user, f.fund_code).index_code for f in wind_vane_funds if f.fund_type == '000'}
+    wind_vane_indices = {
+        getattr(fi, "index_code", None)
+        for f in wind_vane_funds
+        if f.fund_type == '000'
+        for fi in [_get_cached_fund_info(f.fund_code)]
+        if fi and getattr(fi, "index_code", None)
+    }
 
     # 获取持仓
     user_assets = get_sub_account_asset_by_name(user, sub_account_name)
@@ -89,21 +149,13 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
 
     # 预筛选并打标，然后按“风向标优先”排序
     enriched = []
+    group_best_candidates = {}
     for asset in user_assets:
         fund_code = asset.fund_code
-        fi = get_all_fund_info(user, fund_code)
+        fi = _get_cached_fund_info(fund_code)
         if not fi:
             logger.info(f"跳过 {fund_code}: 未获取到基金基础信息")
             continue
-
-        # 安全数值工具
-        def _safe_float(v, default=0.0):
-            try:
-                if v is None:
-                    return default
-                return float(v)
-            except Exception:
-                return default
 
         current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
         estimated_change, label_est = calc_estimated_change(fi)
@@ -115,9 +167,45 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             continue
 
         in_wind_vane = (fi.fund_type != '000' and fund_code in wind_vane_codes) or (fi.fund_type == '000' and fi.index_code in wind_vane_indices)
-        enriched.append((asset, fi, in_wind_vane, estimated_profit_rate))
+        current_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
+        group_key, group_label = _get_group_key_and_label(fi)
+        post_add_profit_rate = _calc_post_add_profit_rate(current_asset_value, estimated_profit_rate, buy_amount)
+        enriched.append((asset, fi, in_wind_vane, estimated_profit_rate, group_key, group_label, post_add_profit_rate))
+
+        if group_key:
+            candidate = group_best_candidates.get(group_key)
+            current_candidate = {
+                "fund_code": fund_code,
+                "fund_name": fi.fund_name,
+                "group_label": group_label,
+                "post_add_profit_rate": post_add_profit_rate,
+                "estimated_profit_rate": estimated_profit_rate,
+                "asset_value": current_asset_value,
+                "in_wind_vane": in_wind_vane,
+            }
+            if (
+                candidate is None
+                or current_candidate["post_add_profit_rate"] > candidate["post_add_profit_rate"]
+                or (
+                    math.isclose(current_candidate["post_add_profit_rate"], candidate["post_add_profit_rate"], rel_tol=1e-9, abs_tol=1e-9)
+                    and current_candidate["estimated_profit_rate"] > candidate["estimated_profit_rate"]
+                )
+                or (
+                    math.isclose(current_candidate["post_add_profit_rate"], candidate["post_add_profit_rate"], rel_tol=1e-9, abs_tol=1e-9)
+                    and math.isclose(current_candidate["estimated_profit_rate"], candidate["estimated_profit_rate"], rel_tol=1e-9, abs_tol=1e-9)
+                    and current_candidate["asset_value"] < candidate["asset_value"]
+                )
+            ):
+                group_best_candidates[group_key] = current_candidate
 
     # 关键：风向标在前；组内按 estimated_profit_rate 升序（跌幅越大越优先）
+    for candidate in group_best_candidates.values():
+        logger.info(
+            f"[同类优先] {candidate['group_label']} 仅保留 {candidate['fund_name']}({candidate['fund_code']}) "
+            f"作为当前加仓代表，post_add_profit_rate={candidate['post_add_profit_rate']:.4f}%, "
+            f"estimated_profit_rate={candidate['estimated_profit_rate']:.2f}%, asset_value={candidate['asset_value']:.2f}"
+        )
+
     enriched.sort(key=lambda t: (not t[2], t[3]))
     logger.info("排序策略：风向标优先；组内按回撤深度（estimated_profit_rate 越小越优先）")
     # 风向标在前，非风向标在后
@@ -133,13 +221,24 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
     logger.info(f"[组合资产] 当前组合总资产={current_total_asset:.2f} | 总预算={total_budget:.2f}")
 
     # 加仓流程中风向标路径的判定替换
-    for asset, fi, in_wind_vane, estimated_profit_rate in enriched:
+    for asset, fi, in_wind_vane, estimated_profit_rate, group_key, group_label, post_add_profit_rate in enriched:
         if orders_made >= fund_num:
             logger.info(f"已达本次下单上限 {fund_num} 笔，提前结束")
             break
 
         fund_code = asset.fund_code
         fund_name = fi.fund_name
+
+        if group_key:
+            best_candidate = group_best_candidates.get(group_key)
+            if best_candidate and best_candidate["fund_code"] != fund_code:
+                logger.info(
+                    f"[同类跳过] {fund_name}({fund_code}) | {group_label} | "
+                    f"post_add_profit_rate={post_add_profit_rate:.4f}%，当前优先处理 "
+                    f"{best_candidate['fund_name']}({best_candidate['fund_code']}) "
+                    f"(post_add_profit_rate={best_candidate['post_add_profit_rate']:.4f}%)"
+                )
+                continue
 
         # 统一使用公共服务的5日均值判定（覆盖风向标与非风向标）
         prefixed_name = f"风向标 {fund_name}" if in_wind_vane else fund_name

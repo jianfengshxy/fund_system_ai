@@ -500,7 +500,7 @@ def run_backtest(
                         nav_desc_by_fund[fund_code],
                         trade_date,
                     )
-                    is_deep_drawdown = profit_rate < -10.0
+                    is_deep_drawdown = profit_rate < -5.0
                     has_reversal_signal = (
                         week_return > 0
                         and month_return > 0
@@ -510,8 +510,8 @@ def run_backtest(
                         and current_nav > nav_5day_avg
                     )
                     if is_deep_drawdown and has_reversal_signal:
-                        if profit_rate >= -20.0:
-                            buy_amount = asset_value * 0.5
+                        if profit_rate >= -10.0:
+                            buy_amount = amount * 2.0
                         else:
                             continue
                     else:

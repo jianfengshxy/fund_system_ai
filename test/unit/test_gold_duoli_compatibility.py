@@ -129,6 +129,47 @@ def test_gold_duoli_increase_invalid_hqb_ratio_limit_enabled_logs_and_falls_back
     assert "已按 True 处理" in warnings[0][0]
 
 
+def test_gold_duoli_increase_forwards_index_heat_filter_enabled(monkeypatch):
+    from src.task import gold_duoli
+
+    captured = {}
+
+    monkeypatch.setattr(
+        gold_duoli,
+        "parse_strategy_event",
+        lambda event, action: (
+            {},
+            {
+                "account": "13918199137",
+                "password": "pwd",
+                "sub_account_name": "黄金多利热度",
+                "amount": 3000,
+                "index_heat_filter_enabled": "true",
+            },
+            "plain_payload",
+        ),
+    )
+    monkeypatch.setattr(gold_duoli, "get_user_all_info", lambda account, password: SimpleNamespace(account=account))
+    monkeypatch.setattr(gold_duoli, "_merge_favorites_funds", lambda **kwargs: (kwargs["base_funds"], 0, 0))
+    monkeypatch.setattr(
+        gold_duoli,
+        "gold_increase_biz",
+        lambda user, sub_account_name, amount, **kwargs: captured.update(
+            {
+                "sub_account_name": sub_account_name,
+                "amount": amount,
+                "kwargs": kwargs,
+            }
+        )
+        or True,
+    )
+
+    gold_duoli.increase({"payload": {}}, None)
+
+    assert captured["sub_account_name"] == "黄金多利热度"
+    assert captured["kwargs"]["index_heat_filter_enabled"] is True
+
+
 def test_business_gold_increase_passes_hqb_ratio_limit_enabled(monkeypatch):
     from src.bussiness.黄金多利组合 import increase as increase_module
 
@@ -144,6 +185,7 @@ def test_business_gold_increase_passes_hqb_ratio_limit_enabled(monkeypatch):
         limit=None,
         total_limit=None,
         hqb_ratio_limit_enabled=True,
+        index_heat_filter_enabled=False,
     ):
         captured.update(
             {
@@ -155,6 +197,7 @@ def test_business_gold_increase_passes_hqb_ratio_limit_enabled(monkeypatch):
                 "limit": limit,
                 "total_limit": total_limit,
                 "hqb_ratio_limit_enabled": hqb_ratio_limit_enabled,
+                "index_heat_filter_enabled": index_heat_filter_enabled,
             }
         )
         return True
@@ -176,6 +219,58 @@ def test_business_gold_increase_passes_hqb_ratio_limit_enabled(monkeypatch):
     assert result is True
     assert captured["sub_account_name"] == "黄金多利C"
     assert captured["hqb_ratio_limit_enabled"] is False
+
+
+def test_business_gold_increase_passes_index_heat_filter_enabled(monkeypatch):
+    from src.bussiness.黄金多利组合 import increase as increase_module
+
+    captured = {}
+
+    def fake_increase_gold_funds(
+        user,
+        sub_account_name,
+        amount,
+        *,
+        init_amount=None,
+        fund_list=None,
+        limit=None,
+        total_limit=None,
+        hqb_ratio_limit_enabled=True,
+        index_heat_filter_enabled=False,
+    ):
+        captured.update(
+            {
+                "user": user,
+                "sub_account_name": sub_account_name,
+                "amount": amount,
+                "init_amount": init_amount,
+                "fund_list": fund_list,
+                "limit": limit,
+                "total_limit": total_limit,
+                "hqb_ratio_limit_enabled": hqb_ratio_limit_enabled,
+                "index_heat_filter_enabled": index_heat_filter_enabled,
+            }
+        )
+        return True
+
+    monkeypatch.setattr(increase_module, "increase_gold_funds", fake_increase_gold_funds)
+
+    user = SimpleNamespace(customer_name="施小雨")
+    result = increase_module.increase(
+        user=user,
+        sub_account_name="黄金多利热度",
+        amount=2500.0,
+        init_amount=1500.0,
+        fund_list=[{"fund_code": "000001", "amount": 2500.0}],
+        limit=20000.0,
+        total_limit=100000.0,
+        hqb_ratio_limit_enabled=False,
+        index_heat_filter_enabled=True,
+    )
+
+    assert result is True
+    assert captured["sub_account_name"] == "黄金多利热度"
+    assert captured["index_heat_filter_enabled"] is True
 
 
 def test_service_increase_gold_funds_bypasses_hqb_limit_when_disabled(monkeypatch):

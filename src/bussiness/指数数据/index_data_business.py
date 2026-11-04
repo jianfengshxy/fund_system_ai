@@ -35,7 +35,7 @@ def sync_all_full(user: Optional[User] = None) -> dict:
     全量同步所有指数的全部数据。
 
     执行步骤：
-      1. 全量日数据同步（PE-TTM / PB / 价格 / 热度历史）
+      1. 全量日数据同步（PE-TTM / PB / 价格 / 热度历史 + 回测字段回填）
       2. 全量阶段指标同步（正收益概率 / 平均收益率 / PE百分位 / PB百分位，仅宽基/行业/主题/海外）
       3. 全量周期涨跌幅计算（change_w/m/q/hy/y）
 
@@ -79,11 +79,13 @@ def sync_latest_snapshot(
     user: Optional[User] = None,
     *,
     daily_range_type: str = "y",
+    heat_backfill_range_type: str = "n",
     daily_limit: Optional[int] = None,
     stage_limit: Optional[int] = None,
 ) -> dict:
     """
-    同步所有宽基/行业/主题/海外指数的最新交易日阶段指标。
+    同步所有宽基/行业/主题/海外指数的最新交易日阶段指标，
+    并将回测依赖的历史因子一并回填到日表。
 
     该接口调用天天基金 FundIndexDiy API（指数阶段指标.py），
     仅返回当前最新快照数据，不拉取历史，速度快（约 2~3 分钟）。
@@ -106,22 +108,37 @@ def sync_latest_snapshot(
         range_type=daily_range_type,
         limit=daily_limit,
     )
-    repair_result = svc.repair_recent_heat_score_gaps(
+    heat_backfill_result = svc.backfill_all_indices_heat_score_history(
         user,
-        range_type=daily_range_type,
-        lookback_days=7,
+        range_type=heat_backfill_range_type,
         limit=daily_limit,
     )
 
+    valuation_pct_result = svc.backfill_all_indices_daily_valuation_percentiles(
+        limit=daily_limit,
+    )
+    change_rows = svc.fill_period_changes()
     stage_result = svc.sync_all_indices_stage_performance(user, limit=stage_limit)
 
-    result = {"daily": daily_result, "daily_repair": repair_result, "stage": stage_result}
+    result = {
+        "daily": daily_result,
+        "heat_backfill": heat_backfill_result,
+        "valuation_percentiles": valuation_pct_result,
+        "period_changes": change_rows,
+        "stage": stage_result,
+    }
     result["elapsed_min"] = round((time.time() - t0) / 60, 1)
     logger.info(
         f"最新快照完成: 日数据 {daily_result['synced']}/{daily_result['total']} "
         f"(失败 {daily_result['failed']}), "
-        f"热度回补 {repair_result['synced']}/{repair_result['total']} "
-        f"(失败 {repair_result['failed']}), "
+        f"热度回填 {heat_backfill_result['synced']}/{heat_backfill_result['total']} "
+        f"(失败 {heat_backfill_result['failed']}, "
+        f"热度有值 {heat_backfill_result['heat_points']} 条), "
+        f"估值分位回填 {valuation_pct_result['synced']}/{valuation_pct_result['total']} "
+        f"(失败 {valuation_pct_result['failed']}, "
+        f"PE {valuation_pct_result['pe_points']} 条, "
+        f"PB {valuation_pct_result['pb_points']} 条), "
+        f"周期涨跌幅 {change_rows} 行, "
         f"阶段指标 {stage_result['synced']}/{stage_result['total']} "
         f"(失败 {stage_result['failed']}, 无日数据 {stage_result['no_daily_data']}), "
         f"耗时 {result['elapsed_min']} 分钟"

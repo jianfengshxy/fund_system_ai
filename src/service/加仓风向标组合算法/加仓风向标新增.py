@@ -27,10 +27,13 @@ from src.service.公共服务.nav_gate_service import nav5_gate
 from src.API.交易管理.feeMrg import getFee
 from src.service.公共服务.redeem_fee_filter_service import is_high_frequency_index_fee_ok
 from src.service.公共服务.risk_control_service import check_hqb_risk_allowed
+from src.service.公共服务.fund_theme_group_service import (
+    get_theme_group_key_and_label,
+)
+from src.service.公共服务.index_heat_service import get_latest_realtime_index_heat
 
 # 配置日志
 logger = get_logger(__name__)
-
 
 def _check_wind_vane_hqb_risk(user: User, total_budget: float, threshold: float = 20.0) -> bool:
     """
@@ -154,6 +157,23 @@ def add_new_funds(
 
     try:
         fee_cache: Dict[str, Dict] = {}
+        fund_info_cache: Dict[str, Optional[object]] = {}
+        index_heat_cache: Dict[str, Optional[float]] = {}
+
+        def _get_cached_fund_info(fund_code: str):
+            if not fund_code:
+                return None
+            if fund_code not in fund_info_cache:
+                fund_info_cache[fund_code] = get_all_fund_info(user, fund_code)
+            return fund_info_cache[fund_code]
+
+        def _get_init_heat_score(fund_info) -> Optional[float]:
+            if getattr(fund_info, 'fund_type', None) != '000':
+                return None
+            index_code = getattr(fund_info, 'index_code', None)
+            if not index_code:
+                return None
+            return get_latest_realtime_index_heat(user, index_code, cache=index_heat_cache)
 
         # 1) 获取组合资产与持仓
         user_assets = get_sub_account_asset_by_name(user, sub_account_name)
@@ -162,16 +182,16 @@ def add_new_funds(
             return False
 
         user_fund_codes: Set[str] = set()
-        user_index_codes: Set[str] = set()
+        user_group_keys: Set[str] = set()
         for asset in user_assets:
             # 记录已持有基金代码
             if getattr(asset, 'fund_code', None):
                 user_fund_codes.add(asset.fund_code)
-            # 如果是指数基金，记录其跟踪指数，避免重复
             try:
-                fund_info = get_all_fund_info(user, asset.fund_code)
-                if fund_info and getattr(fund_info, 'fund_type', None) == "000" and getattr(fund_info, 'index_code', None):
-                    user_index_codes.add(fund_info.index_code)
+                fund_info = _get_cached_fund_info(getattr(asset, "fund_code", None))
+                group_key, _ = get_theme_group_key_and_label(fund_info)
+                if group_key:
+                    user_group_keys.add(group_key)
             except Exception as e:
                 logger.warning(f"获取基金 {getattr(asset, 'fund_code', 'N/A')} 信息失败: {e}")
 
@@ -216,6 +236,7 @@ def add_new_funds(
 
         # 去除已持有的基金；指数基金避免重复跟踪同一指数；新增：在候选阶段应用净值门槛
         candidates = []
+        grouped_candidates: Dict[str, Dict[str, object]] = {}
         for f in wind_vane_funds:
             code = getattr(f, 'fund_code', None)
             if not code or code in user_fund_codes:
@@ -226,16 +247,20 @@ def add_new_funds(
 
             # 获取基金信息（用于指数去重与净值门槛）
             try:
-                info = get_all_fund_info(user, code)
+                info = _get_cached_fund_info(code)
             except Exception as e:
                 logger.warning(f"获取基金 {code} 信息失败，跳过该基金：{e}")
                 continue
 
-            # 指数基金：避免重复跟踪同一指数
+            group_key, group_label = get_theme_group_key_and_label(info)
+            if group_key and group_key in user_group_keys:
+                logger.info(
+                    f"主题重复，跳过新增：{name}({code})，"
+                    f"{group_label} 已在当前持仓中存在"
+                )
+                continue
+
             if ftype == '000':
-                idx_code = getattr(info, 'index_code', None)
-                if idx_code and idx_code in user_index_codes:
-                    continue
                 try:
                     key = str(code)
                     if key not in fee_cache:
@@ -258,10 +283,53 @@ def add_new_funds(
             product_rank = getattr(f, 'product_rank', '未知')
             logger.info(f"成功通过净值门槛加入最终候选: {name}({code}) [fund_type={ftype}, rank_100day={rank_100}, product_rank={product_rank}]")
 
-            candidates.append(f)
+            if group_key:
+                existing = grouped_candidates.get(group_key)
+                current_heat = _get_init_heat_score(info)
+                current_rank = getattr(f, 'product_rank', float('inf'))
+                existing_rank = getattr(existing['fund'], 'product_rank', float('inf')) if existing else float('inf')
+                should_replace = False
+                if existing is None:
+                    should_replace = True
+                else:
+                    existing_info = existing['fund_info']
+                    existing_heat = existing['heat_score']
+                    if getattr(info, 'fund_type', None) == '000' and getattr(existing_info, 'fund_type', None) == '000':
+                        if current_heat is not None and existing_heat is not None and abs(current_heat - existing_heat) > 1e-9:
+                            should_replace = current_heat > existing_heat
+                        elif current_heat is not None and existing_heat is None:
+                            should_replace = True
+                        elif current_heat is None and existing_heat is not None:
+                            should_replace = False
+                        else:
+                            should_replace = current_rank < existing_rank
+                    else:
+                        should_replace = current_rank < existing_rank
+                if should_replace:
+                    if existing is not None:
+                        logger.info(
+                            f"主题去重保留更优候选：{name}({code}) 替换 "
+                            f"{getattr(existing['fund'], 'fund_name', 'N/A')}({getattr(existing['fund'], 'fund_code', 'N/A')})，"
+                            f"{group_label}，heat_score={current_heat if current_heat is not None else '-'}，"
+                            f"product_rank={current_rank}"
+                        )
+                    grouped_candidates[group_key] = {
+                        'fund': f,
+                        'fund_info': info,
+                        'heat_score': current_heat,
+                    }
+                else:
+                    logger.info(
+                        f"主题去重跳过候选：{name}({code})，"
+                        f"{group_label} 已保留更优基金 {getattr(existing['fund'], 'fund_name', 'N/A')}({getattr(existing['fund'], 'fund_code', 'N/A')})"
+                    )
+            else:
+                candidates.append(f)
+
+        candidates.extend(candidate['fund'] for candidate in grouped_candidates.values())
 
         if not candidates:
-            logger.info("候选基金为空：风向标基金均已持有或重复指数，退出新增流程")
+            logger.info("候选基金为空：风向标基金均已持有或主题重复，退出新增流程")
             return True
 
         # 按产品排名升序（越小越优），无排名置于末尾
@@ -298,7 +366,7 @@ def add_new_funds(
             # 判断是否可申购（若可获取）
             info = None
             try:
-                info = get_all_fund_info(user, code)
+                info = _get_cached_fund_info(code)
                 if info and hasattr(info, 'can_purchase') and not info.can_purchase:
                     logger.warning(f"基金 {name}({code}) 当前不可申购，跳过")
                     # 打印过滤条件汇总（即使失败）

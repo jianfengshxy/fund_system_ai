@@ -130,21 +130,20 @@ def path_rebound_after_deep_drawdown() -> None:
         f"{fmt_money(first_add):<12}{fmt_money(state.cost):<12}{fmt_pct(state.profit_rate(current_nav)):<14}"
     )
 
-    # 第二步：深跌后，如果真的出现反弹信号，才会触发 0.5x 持仓市值抄底
+    # 第二步：深跌后，如果真的出现反弹信号，固定按 2 倍基础金额加仓；
+    # 一旦跌破 -10%，则直接停止抄底，避免继续消耗现金。
     for label, target_nav_cost_ratio, _ in scenarios[1:]:
         temp = PositionState(cost=state.cost, nav_cost=state.nav_cost)
         # 这里的 0.90 / 0.85 / 0.80 是“相对初始成本净值 1.0”的价格位置
         test_nav = target_nav_cost_ratio
         profit = temp.profit_rate(test_nav)
-        asset = temp.asset_value(test_nav)
 
-        if profit < -20.0:
+        if profit < -10.0:
             add_amount = 0.0
-            action = "超过 -20%，放弃抄底"
+            action = "跌破 -10%，停止抄底"
         else:
-            raw_add = asset * 0.5
-            add_amount = min(raw_add, FUND_LIMIT - temp.cost)
-            action = "反弹确认后抄底 0.5x"
+            add_amount = min(BASE_AMOUNT * 2.0, FUND_LIMIT - temp.cost)
+            action = "反弹确认后加仓 2x"
             if add_amount > 0:
                 temp.buy(add_amount, test_nav)
 

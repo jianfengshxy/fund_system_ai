@@ -236,9 +236,19 @@ def has_buy_submission_on_dates(
     
     logger.info(f"时间过滤后: trans_date={trans_date}, 0:00-15:00时间段内的有效交易记录数={len(filtered_trades)}") 
     
-    if not filtered_trades:
-        return None
-    return filtered_trades[0]
+    if filtered_trades:
+        return filtered_trades[0]
+
+    asset = _find_sub_account_asset(user, sub_account_no, fund_code)
+    on_way_count = _get_on_way_trade_count(asset)
+    if on_way_count > 0:
+        logger.info(
+            f"资产守卫命中: fund={fund_code}, trans_date={trans_date}, "
+            f"on_way_transaction_count={on_way_count}，按在途交易处理"
+        )
+        return asset
+
+    return None
 
 def _log_trade_full(t, title: str):
     summary = {

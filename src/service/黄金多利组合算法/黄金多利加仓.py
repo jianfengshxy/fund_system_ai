@@ -363,7 +363,7 @@ def increase_gold_funds(
             "heat_score": heat_score,
         }
 
-    def _should_replace_theme_candidate(current: Dict, existing: Dict) -> bool:
+    def _should_replace_init_theme_candidate(current: Dict, existing: Dict) -> bool:
         current_heat = current.get("heat_score")
         existing_heat = existing.get("heat_score")
         if current_heat is not None and existing_heat is not None and abs(current_heat - existing_heat) > 1e-9:
@@ -371,6 +371,48 @@ def increase_gold_funds(
         if current_heat is not None and existing_heat is None:
             return True
         if current_heat is None and existing_heat is not None:
+            return False
+
+        return int(current.get("order_index", 10**9)) < int(existing.get("order_index", 10**9))
+
+    def _get_post_add_estimated_profit_rate(candidate: Dict) -> Optional[float]:
+        candidate_asset_value = candidate.get("asset_value")
+        candidate_estimated_profit_rate = candidate.get("estimated_profit_rate")
+        candidate_buy_amount = candidate.get("buy_amount")
+        if (
+            candidate_asset_value is None
+            or candidate_estimated_profit_rate is None
+            or candidate_buy_amount is None
+        ):
+            return None
+
+        estimated_profit_rate = float(candidate_estimated_profit_rate)
+        asset_value = float(candidate_asset_value)
+        buy_amount = float(candidate_buy_amount)
+        nav_profit_ratio = 1.0 + (estimated_profit_rate / 100.0)
+        if nav_profit_ratio <= 1e-9:
+            return None
+
+        cost_basis = asset_value / nav_profit_ratio
+        profit_amount = asset_value - cost_basis
+        post_add_cost_basis = cost_basis + buy_amount
+        if post_add_cost_basis <= 1e-9:
+            return None
+
+        return (profit_amount / post_add_cost_basis) * 100.0
+
+    def _should_replace_increase_theme_candidate(current: Dict, existing: Dict) -> bool:
+        current_post_add_profit_rate = _get_post_add_estimated_profit_rate(current)
+        existing_post_add_profit_rate = _get_post_add_estimated_profit_rate(existing)
+        if (
+            current_post_add_profit_rate is not None
+            and existing_post_add_profit_rate is not None
+            and abs(current_post_add_profit_rate - existing_post_add_profit_rate) > 1e-9
+        ):
+            return current_post_add_profit_rate > existing_post_add_profit_rate
+        if current_post_add_profit_rate is not None and existing_post_add_profit_rate is None:
+            return True
+        if current_post_add_profit_rate is None and existing_post_add_profit_rate is not None:
             return False
 
         current_estimated_profit_rate = current.get("estimated_profit_rate")
@@ -649,7 +691,7 @@ def increase_gold_funds(
             continue
 
         existing = init_representative_candidates.get(group_key)
-        if existing is None or _should_replace_theme_candidate(candidate, existing):
+        if existing is None or _should_replace_init_theme_candidate(candidate, existing):
             if existing is not None:
                 logger.info(
                     f"[同主题初始化优先] {candidate['group_label']} 过滤完成后改为保留 "
@@ -785,19 +827,25 @@ def increase_gold_funds(
                 continue
 
             existing = increase_representative_candidates.get(group_key)
-            if existing is None or _should_replace_theme_candidate(candidate, existing):
+            if existing is None or _should_replace_increase_theme_candidate(candidate, existing):
                 if existing is not None:
+                    candidate_post_add_profit_rate = _get_post_add_estimated_profit_rate(candidate)
+                    existing_post_add_profit_rate = _get_post_add_estimated_profit_rate(existing)
                     logger.info(
                         f"[同类优先] {group_label} 过滤完成后改为保留 "
                         f"{candidate['fund_name']}({candidate['fund_code']})，替换 "
                         f"{existing['fund_name']}({existing['fund_code']})，"
-                        f"heat_score={candidate['heat_score'] if candidate['heat_score'] is not None else '-'}"
+                        f"post_add_estimated_profit_rate="
+                        f"{candidate_post_add_profit_rate if candidate_post_add_profit_rate is not None else '-'}"
                     )
                 increase_representative_candidates[group_key] = candidate
             else:
+                existing_post_add_profit_rate = _get_post_add_estimated_profit_rate(existing)
                 logger.info(
                     f"[同类跳过] {f_name}({f_code}) 属于 {group_label}，"
-                    f"过滤完成后热度不高于 {existing['fund_name']}({existing['fund_code']})，跳过"
+                    f"过滤完成后加仓后收益率不优于 {existing['fund_name']}({existing['fund_code']})，"
+                    f"existing_post_add_estimated_profit_rate="
+                    f"{existing_post_add_profit_rate if existing_post_add_profit_rate is not None else '-'}，跳过"
                 )
         else:
             logger.info(
@@ -805,10 +853,11 @@ def increase_gold_funds(
             )
 
     for candidate in increase_representative_candidates.values():
+        post_add_profit_rate = _get_post_add_estimated_profit_rate(candidate)
         logger.info(
             f"[同类优先] {candidate['group_label']} 当前仅保留 "
             f"{candidate['fund_name']}({candidate['fund_code']}) 作为加仓代表，"
-            f"heat_score={candidate['heat_score'] if candidate['heat_score'] is not None else '-'}, "
+            f"post_add_estimated_profit_rate={post_add_profit_rate if post_add_profit_rate is not None else '-'}, "
             f"estimated_profit_rate={candidate['estimated_profit_rate']:.2f}%, "
             f"buy_amount={candidate['buy_amount']:.2f}"
         )

@@ -267,6 +267,78 @@ def test_same_theme_across_different_indices_only_best_representative_increases(
     ]
 
 
+def test_same_theme_increase_filters_before_post_add_profit_rate_ranking(monkeypatch):
+    assets = [
+        _build_asset(fund_code="IDXA", fund_name="互联网指数", asset_value=6000.0, constant_profit_rate=-3.0),
+        _build_asset(fund_code="IDXB", fund_name="科技通信指数", asset_value=18000.0, constant_profit_rate=-3.0),
+    ]
+    fund_info_map = {
+        "IDXA": _build_fund_info(
+            fund_name="互联网指数",
+            fund_type="000",
+            index_code="399001",
+            theme_infos=[_build_theme(sec_code="BK000388", sec_name="TMT", isshow=True)],
+        ),
+        "IDXB": _build_fund_info(
+            fund_name="科技通信指数",
+            fund_type="000",
+            index_code="399002",
+            theme_infos=[_build_theme(sec_code="BK000388", sec_name="TMT", isshow=True)],
+        ),
+    }
+    estimated_change_map = {
+        "互联网指数": -1.5,
+        "科技通信指数": -1.5,
+    }
+
+    service_module, user, commit_calls = _setup_module(
+        monkeypatch,
+        assets=assets,
+        fund_info_map=fund_info_map,
+        estimated_change_map=estimated_change_map,
+    )
+    monkeypatch.setattr(
+        service_module,
+        "get_latest_realtime_index_heat",
+        lambda user, index_code, cache=None: 50.0,
+    )
+    monkeypatch.setattr(
+        service_module,
+        "get_latest_realtime_index_main_net_inflow",
+        lambda user, index_code, cache=None: -10.0 if index_code == "399001" else 10.0,
+    )
+    monkeypatch.setattr(
+        service_module,
+        "get_index_main_net_inflow_filter_snapshot",
+        lambda user, index_code, cache=None, positive_days_window=10, min_positive_days=5, inflow_sum_window=3: {
+            "index_code": index_code,
+            "positive_days_window": positive_days_window,
+            "min_positive_days": min_positive_days,
+            "positive_days_available": True,
+            "positive_days_count": 8,
+            "inflow_sum_window": inflow_sum_window,
+            "inflow_sum_available": True,
+            "recent_inflow_sum": 100.0,
+        },
+    )
+
+    result = service_module.increase_gold_funds(
+        user=user,
+        sub_account_name="黄金多利先过滤后排序",
+        amount=2000.0,
+        fund_list=[
+            {"fund_code": "IDXA", "amount": 2000.0},
+            {"fund_code": "IDXB", "amount": 2000.0},
+        ],
+        index_heat_filter_enabled=True,
+    )
+
+    assert result is True
+    assert commit_calls == [
+        ("sub-001", "IDXB", 2000.0),
+    ]
+
+
 def test_same_theme_increase_uses_actual_buy_amount_in_post_add_profit_rate(monkeypatch):
     assets = [
         _build_asset(fund_code="ACT1", fund_name="主动甲", asset_value=2000.0, constant_profit_rate=-8.0),

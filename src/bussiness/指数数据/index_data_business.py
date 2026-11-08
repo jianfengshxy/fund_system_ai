@@ -26,6 +26,7 @@ from src.common.logger import get_logger
 from src.API.登录接口.login import ensure_user_fresh
 from src.domain.user.User import User
 from src.service.市场指数.market_index_service import MarketIndexService
+from src.bussiness.主题数据.theme_data_business import sync_latest_snapshot as sync_theme_latest_snapshot
 
 logger = get_logger("IndexDataBusiness")
 
@@ -84,8 +85,16 @@ def sync_latest_snapshot(
     stage_limit: Optional[int] = None,
 ) -> dict:
     """
-    同步所有宽基/行业/主题/海外指数的最新交易日阶段指标，
-    并将回测依赖的历史因子一并回填到日表。
+    同步最新指数/主题快照。
+
+    指数侧：
+      - 同步所有宽基/行业/主题/海外指数的最新交易日阶段指标
+      - 并将回测依赖的历史因子一并回填到日表
+
+    主题侧：
+      - 若主题静态表为空，先初始化静态表
+      - 若主题动态表为空，先做全量初始化
+      - 然后补一次当日最新主题快照（不重复跑全量历史）
 
     该接口调用天天基金 FundIndexDiy API（指数阶段指标.py），
     仅返回当前最新快照数据，不拉取历史，速度快（约 2~3 分钟）。
@@ -119,6 +128,7 @@ def sync_latest_snapshot(
     )
     change_rows = svc.fill_period_changes()
     stage_result = svc.sync_all_indices_stage_performance(user, limit=stage_limit)
+    theme_result = sync_theme_latest_snapshot(user)
 
     result = {
         "daily": daily_result,
@@ -126,6 +136,7 @@ def sync_latest_snapshot(
         "valuation_percentiles": valuation_pct_result,
         "period_changes": change_rows,
         "stage": stage_result,
+        "theme": theme_result,
     }
     result["elapsed_min"] = round((time.time() - t0) / 60, 1)
     logger.info(
@@ -141,6 +152,10 @@ def sync_latest_snapshot(
         f"周期涨跌幅 {change_rows} 行, "
         f"阶段指标 {stage_result['synced']}/{stage_result['total']} "
         f"(失败 {stage_result['failed']}, 无日数据 {stage_result['no_daily_data']}), "
+        f"主题快照 {theme_result['daily']['synced']}/{theme_result['daily']['total']} "
+        f"(失败 {theme_result['daily']['failed']}, "
+        f"静态初始化 skipped={theme_result['init_static'].get('skipped')}, "
+        f"动态初始化 skipped={theme_result['init_daily'].get('skipped')}), "
         f"耗时 {result['elapsed_min']} 分钟"
     )
     return result

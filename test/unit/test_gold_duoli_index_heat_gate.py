@@ -11,10 +11,19 @@ def _setup_common_monkeypatch(
     estimated_change,
     nav5_gate_result=True,
     latest_heat_score=None,
+    latest_main_net_inflow=100.0,
+    inflow_snapshot=None,
 ):
     from src.service.黄金多利组合算法 import 黄金多利加仓 as service_module
 
     commit_calls = []
+    if inflow_snapshot is None:
+        inflow_snapshot = {
+            "positive_days_available": False,
+            "positive_days_count": 0,
+            "inflow_sum_available": False,
+            "recent_inflow_sum": None,
+        }
 
     monkeypatch.setattr(service_module, "getSubAccountNoByName", lambda user, sub_account_name: "sub-001")
     monkeypatch.setattr(service_module, "get_sub_account_asset_by_name", lambda user, sub_account_name: [asset])
@@ -27,6 +36,17 @@ def _setup_common_monkeypatch(
         service_module,
         "get_latest_realtime_index_heat",
         lambda user, index_code, cache=None, range_type="w": latest_heat_score,
+    )
+    monkeypatch.setattr(
+        service_module,
+        "get_latest_realtime_index_main_net_inflow",
+        lambda user, index_code, cache=None: latest_main_net_inflow,
+    )
+    monkeypatch.setattr(
+        service_module,
+        "get_index_main_net_inflow_filter_snapshot",
+        lambda user, index_code, cache=None, positive_days_window=10, min_positive_days=5, inflow_sum_window=3:
+        inflow_snapshot,
     )
     monkeypatch.setattr(
         service_module,
@@ -153,7 +173,7 @@ def test_index_fund_low_heat_blocks_increase_when_portfolio_gate_enabled(monkeyp
     assert commit_calls == []
 
 
-def test_index_fund_heat_ge_20_allows_double_increase(monkeypatch):
+def test_index_fund_heat_ge_20_allows_normal_increase(monkeypatch):
     service_module, commit_calls = _setup_common_monkeypatch(
         monkeypatch,
         asset=_build_asset(constant_profit_rate=-3.0),
@@ -172,7 +192,7 @@ def test_index_fund_heat_ge_20_allows_double_increase(monkeypatch):
     )
 
     assert result is True
-    assert commit_calls == [("sub-001", "000001", 4000.0)]
+    assert commit_calls == [("sub-001", "000001", 2000.0)]
 
 
 def test_non_index_fund_ignores_heat_gate(monkeypatch):

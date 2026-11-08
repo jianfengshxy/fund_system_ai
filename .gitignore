@@ -147,3 +147,4 @@ reports/
 # Local scripts (ad-hoc analysis utilities)
 scripts/
 src/service/定投管理/智能定投/批量月定投创建.py
+data/*.json

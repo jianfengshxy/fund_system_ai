@@ -9,6 +9,14 @@ if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
 from src.common.logger import get_logger
+from src.common.constant import (
+    RS_FUND_TYPE_INDEX,
+    RS_FUND_TYPE_STOCK,
+    RS_FUND_TYPE_MIXED,
+    RS_SUB_FUND_TYPE_INDEX_EQUITY,
+    describe_rs_fund_type,
+    describe_rs_sub_fund_type,
+)
 import datetime
 from typing import Optional, List, Dict
 
@@ -45,9 +53,83 @@ INDEX_MAIN_NET_INFLOW_POSITIVE_DAYS_WINDOW = 10
 INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS = 5
 INDEX_MAIN_NET_INFLOW_SUM_WINDOW = 3
 
+# 黄金多利资金面过滤当前只支持：
+# 1. A 股权益指数基金（000001）
+# 2. 主动权益基金（001/002）通过 BK 主题口径过滤
+MARKET_HEAT_SUPPORTED_THEME_FUND_TYPES = frozenset({
+    RS_FUND_TYPE_STOCK,
+    RS_FUND_TYPE_MIXED,
+})
+MARKET_HEAT_SUPPORTED_INDEX_SUB_TYPES = frozenset({
+    RS_SUB_FUND_TYPE_INDEX_EQUITY,
+})
+
 
 def _get_primary_theme(fund_info) -> Optional[tuple]:
     return _shared_get_primary_theme(fund_info)
+
+
+def _get_fund_type_code(fund_info) -> str:
+    return str(getattr(fund_info, "fund_type", "") or "").strip()
+
+
+def _get_fund_sub_type_code(fund_info) -> str:
+    return str(getattr(fund_info, "fund_sub_type", "") or "").strip()
+
+
+def _get_fund_type_label(fund_type: str) -> str:
+    return describe_rs_fund_type(fund_type)
+
+
+def _get_fund_sub_type_label(fund_sub_type: str) -> str:
+    return describe_rs_sub_fund_type(fund_sub_type)
+
+
+def _format_fund_type_summary(fund_info) -> str:
+    fund_type = _get_fund_type_code(fund_info)
+    fund_sub_type = _get_fund_sub_type_code(fund_info)
+    return (
+        f"fund_type={fund_type or '-'}({_get_fund_type_label(fund_type)}), "
+        f"fund_sub_type={fund_sub_type or '-'}({_get_fund_sub_type_label(fund_sub_type)})"
+    )
+
+
+def _resolve_market_signal_target(fund_info) -> tuple[Optional[Dict[str, str]], Optional[str]]:
+    if not fund_info:
+        return None, "基金信息为空"
+
+    fund_type = _get_fund_type_code(fund_info)
+    fund_sub_type = _get_fund_sub_type_code(fund_info)
+    index_code = str(getattr(fund_info, "index_code", "") or "").strip()
+
+    if fund_type == RS_FUND_TYPE_INDEX:
+        if not index_code:
+            return None, f"指数基金缺少 index_code，{_format_fund_type_summary(fund_info)}"
+        if fund_sub_type not in MARKET_HEAT_SUPPORTED_INDEX_SUB_TYPES:
+            return None, (
+                "指数子类型暂不支持黄金多利资金面过滤，"
+                f"{_format_fund_type_summary(fund_info)}，index_code={index_code}"
+            )
+        return {
+            "target_type": "index",
+            "target_code": index_code,
+            "target_label": index_code,
+        }, None
+
+    if fund_type in MARKET_HEAT_SUPPORTED_THEME_FUND_TYPES:
+        primary_theme = _get_primary_theme(fund_info)
+        if primary_theme:
+            theme_code = str(primary_theme[0] or "").strip()
+            theme_name = str(primary_theme[1] or "").strip()
+            if theme_code:
+                return {
+                    "target_type": "theme",
+                    "target_code": theme_code,
+                    "target_label": f"{theme_name or theme_code}({theme_code})" if theme_name else theme_code,
+                }, None
+        return None, f"主动权益基金缺少可用主题映射，{_format_fund_type_summary(fund_info)}"
+
+    return None, f"基金类型暂不支持黄金多利资金面过滤，{_format_fund_type_summary(fund_info)}"
 
 def increase_gold_funds(
     user: User,
@@ -386,34 +468,9 @@ def increase_gold_funds(
             theme_flow_snapshot_cache[theme_code] = None
             return None
 
-    def _is_index_fund(fund_info) -> bool:
-        return getattr(fund_info, "fund_type", None) == "000" and bool(getattr(fund_info, "index_code", None))
-
     def _get_market_signal_target(fund_info) -> Optional[Dict[str, str]]:
-        if not fund_info:
-            return None
-
-        if _is_index_fund(fund_info):
-            index_code = str(getattr(fund_info, "index_code", "") or "").strip()
-            if index_code:
-                return {
-                    "target_type": "index",
-                    "target_code": index_code,
-                    "target_label": index_code,
-                }
-
-        primary_theme = _get_primary_theme(fund_info)
-        if primary_theme:
-            theme_code = str(primary_theme[0] or "").strip()
-            theme_name = str(primary_theme[1] or "").strip()
-            if theme_code:
-                return {
-                    "target_type": "theme",
-                    "target_code": theme_code,
-                    "target_label": f"{theme_name or theme_code}({theme_code})" if theme_name else theme_code,
-                }
-
-        return None
+        target, _ = _resolve_market_signal_target(fund_info)
+        return target
 
     def _get_candidate_heat_score(fund_info) -> Optional[float]:
         target = _get_market_signal_target(fund_info)
@@ -524,14 +581,13 @@ def increase_gold_funds(
             logger.info(f"持仓基金 {fund_name}({fund_code}) 未获取到基金信息，跳过资金热度过滤")
             return True
 
-        target = _get_market_signal_target(fund_info)
+        target, target_skip_reason = _resolve_market_signal_target(fund_info)
         if not target:
-            fund_type = str(getattr(fund_info, "fund_type", "") or "").strip()
             logger.info(
-                f"持仓基金 {fund_name}({fund_code}) 无有效指数/主题资金面目标，"
-                f"跳过资金热度过滤（fund_type={fund_type or '-'}）"
+                f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过资金热度过滤："
+                f"{target_skip_reason or '无有效指数/主题资金面目标'}"
             )
-            return True
+            return False
 
         target_type = target["target_type"]
         target_code = target["target_code"]

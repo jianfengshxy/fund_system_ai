@@ -458,7 +458,9 @@ def increase_gold_funds(
         try:
             return get_theme_flow_filter_snapshot(
                 theme_code,
+                user=user,
                 cache=theme_flow_snapshot_cache,
+                snapshot_cache=theme_detail_snapshot_cache,
                 positive_days_window=INDEX_MAIN_NET_INFLOW_POSITIVE_DAYS_WINDOW,
                 min_positive_days=INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS,
                 inflow_sum_window=INDEX_MAIN_NET_INFLOW_SUM_WINDOW,

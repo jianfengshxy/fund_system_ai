@@ -120,7 +120,9 @@ def get_latest_realtime_theme_flow(
 def get_theme_flow_filter_snapshot(
     theme_code: str,
     *,
+    user=None,
     cache: Optional[Dict[str, Optional[Dict[str, Any]]]] = None,
+    snapshot_cache: Optional[Dict[str, Optional[Dict[str, Any]]]] = None,
     positive_days_window: int = 10,
     min_positive_days: int = 5,
     inflow_sum_window: int = 3,
@@ -128,7 +130,7 @@ def get_theme_flow_filter_snapshot(
     """
     获取主题净流入过滤快照。
 
-    历史数据来自 market_theme_daily.flow：
+    历史数据来自 market_theme_daily.flow，当前交易日优先用实时 FLOW 覆盖：
       1. 当前交易日净流入 > 0
       2. 过去 10 个交易日里，至少 5 个交易日净流入 > 0
       3. 过去 3 个交易日净流入合计 > 0
@@ -149,12 +151,35 @@ def get_theme_flow_filter_snapshot(
         "LIMIT %s",
         (theme_code, lookback),
     )
-    if not rows:
+    points_by_date = {}
+    for row in rows or []:
+        trade_date = _normalize_date(row.get("trade_date"))
+        flow = _safe_float(row.get("flow"))
+        if trade_date and flow is not None:
+            points_by_date[trade_date] = {
+                "trade_date": trade_date,
+                "flow": flow,
+                "flow_source": "database",
+            }
+
+    if user is not None:
+        realtime_snapshot = get_latest_realtime_theme_snapshot(user, theme_code, cache=snapshot_cache)
+        realtime_trade_date = _normalize_date(realtime_snapshot.get("deal_date")) if realtime_snapshot else None
+        realtime_flow = _safe_float(realtime_snapshot.get("latest_flow")) if realtime_snapshot else None
+        if realtime_trade_date and realtime_flow is not None:
+            points_by_date[realtime_trade_date] = {
+                "trade_date": realtime_trade_date,
+                "flow": realtime_flow,
+                "flow_source": "realtime",
+            }
+
+    if not points_by_date:
         if cache is not None:
             cache[theme_code] = None
         return None
 
-    points = list(reversed(rows))
+    points = [points_by_date[trade_date] for trade_date in sorted(points_by_date.keys())]
+    points = points[-lookback:]
     latest_row = points[-1]
     latest_flow = _safe_float(latest_row.get("flow"))
 
@@ -170,6 +195,7 @@ def get_theme_flow_filter_snapshot(
         "theme_code": theme_code,
         "latest_date": latest_row.get("trade_date"),
         "latest_flow": latest_flow,
+        "latest_flow_source": latest_row.get("flow_source"),
         "positive_days_window": positive_days_window,
         "min_positive_days": min_positive_days,
         "positive_days_available": len(positive_values) >= positive_days_window,

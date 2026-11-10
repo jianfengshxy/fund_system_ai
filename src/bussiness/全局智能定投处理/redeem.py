@@ -190,6 +190,7 @@ def redeem(
     
     logger.info(f"{fund_name}收益率计算：当前收益率{current_profit_rate}%，估值变化{estimated_change}%，预估收益率{estimated_profit_rate}%（{label_est}）")
     logger.info(f"{fund_name}其他指标：波动率{volatility}%，100日排名{rank_100}，投资次数{times}")
+    is_qdii_fund = (str(getattr(asset_detail, "fund_type", "") or "") == 'a') or ("QDII" in str(fund_name or "").upper())
    
     if asset_detail.available_vol <= 0.01:
         # logger.info("份额为空，返回False")
@@ -229,7 +230,7 @@ def redeem(
             f"波动率={volatility:.2f}，设置止盈点={stop_rate:.2f}（不低于3.0）"
         )
 
-    if asset_detail.fund_type == 'a' and estimated_profit_rate > 3.0:
+    if is_qdii_fund and estimated_profit_rate > 3.0:
         logger.info(f"{customer_name}的止盈操作开始：QDII基金{fund_name}{fund_code}预估收益{estimated_profit_rate},赎回0费率份额,实际止盈点:3.0")
         sell_0_fee_shares(user,sub_account_no,fund_code,get_shares_lazy())
 
@@ -271,53 +272,35 @@ def redeem(
 
     # 添加风控状态日志
     if hqb_ratio_percent < HQB_RATIO_THRESHOLD:
-        logger.info(f"【风控状态】活期宝占比{hqb_ratio_percent:.2f}% < {HQB_RATIO_THRESHOLD}%阈值，强制启用{PROFIT_THRESHOLD_FOR_LOW_BALANCE}%止盈模式。")
+        forced_stop_rate = 3.0 if is_qdii_fund else PROFIT_THRESHOLD_FOR_LOW_BALANCE
+        logger.info(
+            f"【风控状态】活期宝占比{hqb_ratio_percent:.2f}% < {HQB_RATIO_THRESHOLD}%阈值，"
+            f"强制启用止盈模式（{'QDII' if is_qdii_fund else '非QDII'}止盈点={forced_stop_rate:.1f}%）。"
+        )
+        if estimated_profit_rate > forced_stop_rate:
+            if is_qdii_fund:
+                logger.info(
+                    f"{customer_name}的止盈操作开始：QDII基金{fund_name}{fund_code}触发活期宝低水位强制止盈，"
+                    f"活期宝占比:{hqb_ratio_percent:.2f}%, 阈值:{HQB_RATIO_THRESHOLD}%, "
+                    f"预估收益{estimated_profit_rate}, 实际止盈点:{forced_stop_rate}"
+                )
+                sell_0_fee_shares(user, sub_account_no, fund_code, get_shares_lazy())
+            else:
+                logger.info(
+                    f"{customer_name}的止盈操作开始：基金{fund_name}{fund_code}触发活期宝低水位强制止盈，"
+                    f"活期宝占比:{hqb_ratio_percent:.2f}%, 阈值:{HQB_RATIO_THRESHOLD}%, "
+                    f"预估收益{estimated_profit_rate}, 实际止盈点:{forced_stop_rate}"
+                )
+                sell_low_fee_shares(user, sub_account_no, fund_code, get_shares_lazy())
+            return True
+
+        logger.info(
+            f"{fund_name}{fund_code}活期宝低水位强制止盈未触发："
+            f"预估收益{estimated_profit_rate} <= 止盈点{forced_stop_rate}"
+        )
+        return True
     else:
         logger.info(f"【风控状态】活期宝占比{hqb_ratio_percent:.2f}% >= {HQB_RATIO_THRESHOLD}%阈值，启用波动率止盈模式。")
-
-    #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于PROFIT_THRESHOLD_FOR_LOW_BALANCE，且投资次数小于5.0次，且当日估值增长率大于0.5%，立即卖出费率为0的份额（移除rank_100排名限制）
-    if estimated_profit_rate > PROFIT_THRESHOLD_FOR_LOW_BALANCE and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type == '000' and "QDII" not in fund_name and times <= 5.0 and estimated_change > 0.5:
-        logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:{PROFIT_THRESHOLD_FOR_LOW_BALANCE},投资次数:{times},估值增长率:{estimated_change}（无排名限制）")
-        sell_0_fee_shares(user,sub_account_no,fund_code,get_shares_lazy())
-        return True
-    else:
-        profit_ok = estimated_profit_rate > PROFIT_THRESHOLD_FOR_LOW_BALANCE
-        hqb_ok = hqb_ratio_percent < HQB_RATIO_THRESHOLD
-        fund_type_ok = (fund_type == '000')
-        qdii_ok = ("QDII" not in fund_name)
-        times_ok = (times <= 5.0)
-        est_ok = (estimated_change > 0.5)
-        logger.info(
-            f"{fund_name}{fund_code}余额条件检查未通过："
-            f"profit_ok={profit_ok}(预估收益{estimated_profit_rate} vs 阈值{PROFIT_THRESHOLD_FOR_LOW_BALANCE}), "
-            f"hqb_ok={hqb_ok}(活期宝占比{hqb_ratio_percent:.2f}% vs 阈值{HQB_RATIO_THRESHOLD}%), "
-            f"fund_type_ok={fund_type_ok}(基金类型{fund_type}), "
-            f"qdii_ok={qdii_ok}(基金名称包含QDII={not qdii_ok}), "
-            f"times_ok={times_ok}(投资次数{times} vs 阈值5.0), "
-            f"est_ok={est_ok}(估值变化{estimated_change} vs 阈值0.5)"
-        )
-        
-    #检查活期宝占比,小于HQB_RATIO_THRESHOLD(20%)，且收益大于5.0，且投资次数小于5.0次，立即卖出费率为0的份额
-    if estimated_profit_rate > 5.0 and hqb_ratio_percent < HQB_RATIO_THRESHOLD and fund_type in ['001', '002'] and rank_100 is not None and rank_100 > 80 and times <= 5.0 and estimated_change > 0.5:
-        logger.info(f"{customer_name}的{fund_name}{fund_code}止盈操作开始：活期宝占比:{hqb_ratio_percent:.2f}%,阈值:{HQB_RATIO_THRESHOLD}%,基金{fund_name}{fund_code}(类型:{fund_type})预估收益{estimated_profit_rate},实际止盈点:5.0, 100日排名:{rank_100},投资次数:{times}.")
-        sell_0_fee_shares(user, sub_account_no, fund_code, get_shares_lazy())
-        return True
-    else:
-        profit2_ok = estimated_profit_rate > 5.0
-        hqb2_ok = hqb_ratio_percent < HQB_RATIO_THRESHOLD
-        fund_type2_ok = (fund_type in ['001', '002'])
-        rank2_ok = (rank_100 is not None and rank_100 > 80)
-        times2_ok = (times <= 5.0)
-        est2_ok = (estimated_change > 0.5)
-        logger.info(
-            f"{fund_name}{fund_code}余额条件检查未通过："
-            f"profit_ok={profit2_ok}(预估收益{estimated_profit_rate} vs 阈值5.0), "
-            f"hqb_ok={hqb2_ok}(活期宝占比{hqb_ratio_percent:.2f}% vs 阈值{HQB_RATIO_THRESHOLD}%), "
-            f"fund_type_ok={fund_type2_ok}(基金类型{fund_type}), "
-            f"rank_ok={rank2_ok}(排名{rank_100} vs 阈值80), "
-            f"times_ok={times2_ok}(投资次数{times} vs 阈值5.0), "
-            f"est_ok={est2_ok}(估值变化{estimated_change} vs 阈值0.5)"
-        )
     logger.info("所有止盈条件都不满足，返回True")
     return True
 

@@ -131,6 +131,12 @@ def _resolve_market_signal_target(fund_info) -> tuple[Optional[Dict[str, str]], 
 
     return None, f"基金类型暂不支持黄金多利资金面过滤，{_format_fund_type_summary(fund_info)}"
 
+
+def _should_skip_market_heat_filter(reason: Optional[str]) -> bool:
+    if not reason:
+        return False
+    return "暂不支持黄金多利资金面过滤" in reason
+
 def increase_gold_funds(
     user: User,
     sub_account_name: str,
@@ -585,6 +591,12 @@ def increase_gold_funds(
 
         target, target_skip_reason = _resolve_market_signal_target(fund_info)
         if not target:
+            if _should_skip_market_heat_filter(target_skip_reason):
+                logger.info(
+                    f"持仓基金 {fund_name}({fund_code}) {buy_context} 跳过资金热度过滤："
+                    f"{target_skip_reason}"
+                )
+                return True
             logger.info(
                 f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过资金热度过滤："
                 f"{target_skip_reason or '无有效指数/主题资金面目标'}"

@@ -78,6 +78,7 @@ def _build_fund_info(
     *,
     fund_name="测试基金",
     fund_type="000",
+    fund_sub_type="000001",
     index_code="399001",
     nav_date="2026-10-20",
     week_return=1.5,
@@ -89,6 +90,7 @@ def _build_fund_info(
     return SimpleNamespace(
         fund_name=fund_name,
         fund_type=fund_type,
+        fund_sub_type=fund_sub_type,
         index_code=index_code,
         nav_date=nav_date,
         week_return=week_return,
@@ -215,6 +217,34 @@ def test_non_index_fund_ignores_heat_gate(monkeypatch):
 
     assert result is True
     assert commit_calls == [("sub-001", "110001", 2000.0)]
+
+
+def test_unsupported_index_sub_type_skips_heat_gate(monkeypatch):
+    service_module, commit_calls = _setup_common_monkeypatch(
+        monkeypatch,
+        asset=_build_asset(fund_code="021540", fund_name="华安法国CAC40ETF发起式联接(QDII)C"),
+        fund_info=_build_fund_info(
+            fund_name="华安法国CAC40ETF发起式联接(QDII)C",
+            fund_type="000",
+            fund_sub_type="000003",
+            index_code="FCHI",
+        ),
+        estimated_change=-0.5,
+        latest_heat_score=1.0,
+        latest_main_net_inflow=-100.0,
+    )
+
+    user = SimpleNamespace(account="13918199137")
+    result = service_module.increase_gold_funds(
+        user=user,
+        sub_account_name="黄金多利海外指数放行",
+        amount=2000.0,
+        fund_list=[{"fund_code": "021540", "amount": 2000.0}],
+        index_heat_filter_enabled=True,
+    )
+
+    assert result is True
+    assert commit_calls == [("sub-001", "021540", 2000.0)]
 
 
 def test_index_fund_low_heat_blocks_deep_rebound_increase(monkeypatch):

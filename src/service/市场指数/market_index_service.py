@@ -1024,6 +1024,115 @@ class MarketIndexService:
         )
         return r[0]["cnt"] if r else 0
 
+    def fetch_all_indices_realtime_market_snapshots(
+        self,
+        user: User,
+        *,
+        type_codes: Optional[List[str]] = None,
+        positive_days_window: int = 10,
+        min_positive_days: int = 5,
+        inflow_sum_window: int = 3,
+    ) -> List[Dict]:
+        """
+        通过市场指数实际接口拉取全量指数实时资金面快照。
+
+        返回字段说明：
+          - latest_heat_score: 指数当前资金热度分
+          - latest_main_net_inflow: 指数当前主力净流入金额
+          - inflow_snapshot: 最近 N 日净流入趋势快照（复用黄金多利口径的公共服务）
+        """
+        from src.API.市场指数.获取市场指数 import get_market_index
+        from src.service.公共服务.index_heat_service import (
+            get_index_main_net_inflow_filter_snapshot,
+            get_latest_realtime_index_main_net_inflow,
+        )
+
+        def _to_float(value) -> Optional[float]:
+            try:
+                if value in (None, ""):
+                    return None
+                return float(value)
+            except Exception:
+                return None
+
+        query_type_codes = type_codes or ["0"]
+        latest_flow_cache: Dict[str, Optional[float]] = {}
+        inflow_snapshot_cache: Dict[str, Dict] = {}
+        item_by_code: Dict[str, object] = {}
+
+        for type_code in query_type_codes:
+            page = 1
+            while True:
+                resp = get_market_index(
+                    user,
+                    type_code=type_code,
+                    page_index=page,
+                    page_size=30,
+                    sort_name="NEWCHG",
+                )
+                if not resp.success or not resp.items:
+                    break
+
+                for item in resp.items:
+                    index_code = str(getattr(item, "INDEXCODE", "") or "").strip()
+                    if index_code and index_code not in item_by_code:
+                        item_by_code[index_code] = item
+
+                logger.info(
+                    f"实时指数快照翻页: type_code={type_code}, page={page}, "
+                    f"本页 {len(resp.items)} 条, 累计 {len(item_by_code)} 条"
+                )
+
+                if len(resp.items) < 30:
+                    break
+
+                page += 1
+                time.sleep(0.2)
+
+        snapshots: List[Dict] = []
+        for index_code, item in item_by_code.items():
+            inflow_snapshot = get_index_main_net_inflow_filter_snapshot(
+                user,
+                index_code,
+                cache=inflow_snapshot_cache,
+                positive_days_window=positive_days_window,
+                min_positive_days=min_positive_days,
+                inflow_sum_window=inflow_sum_window,
+            )
+            latest_main_net_inflow = None
+            latest_main_net_inflow_source = None
+            latest_trade_date = None
+            if inflow_snapshot:
+                latest_main_net_inflow = inflow_snapshot.get("latest_main_net_inflow")
+                latest_main_net_inflow_source = inflow_snapshot.get("latest_main_net_inflow_source")
+                latest_trade_date = inflow_snapshot.get("latest_date")
+
+            if latest_main_net_inflow is None:
+                latest_main_net_inflow = get_latest_realtime_index_main_net_inflow(
+                    user,
+                    index_code,
+                    cache=latest_flow_cache,
+                )
+
+            snapshots.append({
+                "index_code": index_code,
+                "index_name": str(getattr(item, "INDEXNAME", "") or "").strip(),
+                "full_index_name": str(getattr(item, "FULLINDEXNAME", "") or "").strip(),
+                "type_name": str(getattr(item, "TYPE_NAME", "") or "").strip(),
+                "type_code": str(getattr(item, "TYPE_CODE", "") or "").strip(),
+                "sec_name": str(getattr(item, "SEC_NAME", "") or "").strip(),
+                "sec_code": str(getattr(item, "SEC_CODE", "") or "").strip(),
+                "latest_heat_score": _to_float(getattr(item, "XLFLOW_SCORE", None)),
+                "latest_main_net_inflow": _to_float(latest_main_net_inflow),
+                "latest_main_net_inflow_source": latest_main_net_inflow_source,
+                "latest_trade_date": latest_trade_date,
+                "inflow_snapshot": inflow_snapshot,
+            })
+
+        snapshots.sort(key=lambda row: (row["type_code"], row["index_code"]))
+        logger.info(f"实时指数资金面快照获取完成: {len(snapshots)} 个指数")
+        return snapshots
+
     # ===================== 跟踪基金同步 =====================
 
     def get_best_tracking_c_fund(self, user: User, index_code: str) -> Optional[Dict]:

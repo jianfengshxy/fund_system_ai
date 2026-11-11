@@ -1,139 +1,209 @@
 import os
 import sys
-import re
-import math
-from typing import List, Dict, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-from src.common.constant import DEFAULT_USER
+from src.common.constant import (
+    DEFAULT_USER,
+    RS_FUND_TYPE_INDEX,
+    RS_SUB_FUND_TYPE_INDEX_EQUITY,
+)
 from src.API.自选基金.FavorFund import get_favor_groups, add_to_favorites, get_favor_group
+from src.API.市场指数.获取追踪指数的基金 import get_tracking_funds
 from src.common.logger import get_logger
-from src.db.database_connection import DatabaseConnection
-from src.service.公共服务.redeem_fee_filter_service import filter_indices_by_tracking_fund_fee
+from src.service.基金信息.基金信息 import get_all_fund_info
+from src.service.市场指数.market_index_service import MarketIndexService
 
 logger = get_logger(__name__)
 
-TARGET_TYPES = ["宽基", "行业", "主题", "海外"]
+TARGET_INDEX_TYPE_CODES = ["001001", "001002", "001003"]
+INDEX_HEAT_MIN_SCORE = 20.0
+INDEX_MAIN_NET_INFLOW_MIN = 50_000_000.0
+INDEX_MAIN_NET_INFLOW_POSITIVE_DAYS_WINDOW = 10
+INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS = 5
+INDEX_MAIN_NET_INFLOW_SUM_WINDOW = 3
+INDEX_MAIN_NET_INFLOW_SUM_MIN = 50_000_000.0
+TRACKING_FUND_MAX_REDEEM_FEE_AFTER_7 = 0.5
 
 
-def _get_all_index_names_for_grouping() -> List[Dict]:
-    db = DatabaseConnection()
-    rows = db.execute_query(
-        f"SELECT index_code, index_name FROM market_index_static "
-        f"WHERE type_name IN ({','.join(['%s'] * len(TARGET_TYPES))})",
-        TARGET_TYPES,
+
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        if value in (None, ""):
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def _safe_optional_float(value) -> Optional[float]:
+    try:
+        if value in (None, ""):
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def _is_class_c(value) -> bool:
+    try:
+        return float(value) == 1.0
+    except Exception:
+        return str(value).strip() == "1"
+
+
+def _get_cached_fund_info(user, fund_code: str, cache: Dict[str, object]):
+    if not fund_code:
+        return None
+    if fund_code not in cache:
+        cache[fund_code] = get_all_fund_info(user, fund_code)
+    return cache[fund_code]
+
+
+def _append_theme(theme_list: List[Tuple[str, str]], seen_codes: Set[str], theme_code: str, theme_name: str) -> None:
+    theme_code = str(theme_code or "").strip()
+    theme_name = str(theme_name or "").strip()
+    if not theme_code.upper().startswith("BK"):
+        return
+    if theme_code in seen_codes:
+        return
+    seen_codes.add(theme_code)
+    theme_list.append((theme_code, theme_name))
+
+
+def _resolve_candidate_themes(snapshot: Dict, fund_info) -> List[Tuple[str, str]]:
+    theme_list: List[Tuple[str, str]] = []
+    seen_codes: Set[str] = set()
+
+    theme_infos = getattr(fund_info, "theme_infos", None) or []
+    show_themes = [theme for theme in theme_infos if getattr(theme, "isshow", False)]
+    other_themes = [theme for theme in theme_infos if not getattr(theme, "isshow", False)]
+    for theme in show_themes + other_themes:
+        _append_theme(
+            theme_list,
+            seen_codes,
+            getattr(theme, "sec_code", ""),
+            getattr(theme, "sec_name", ""),
+        )
+
+    relate_themes = getattr(fund_info, "relate_themes", None) or []
+    relate_themes = sorted(
+        relate_themes,
+        key=lambda item: _safe_float(getattr(item, "corr_1y", 0.0), 0.0),
+        reverse=True,
     )
-    return rows
+    for theme in relate_themes:
+        _append_theme(
+            theme_list,
+            seen_codes,
+            getattr(theme, "sec_code", ""),
+            getattr(theme, "sec_name", ""),
+        )
+
+    sec_codes = [code.strip() for code in str(snapshot.get("sec_code") or "").split(",") if code.strip()]
+    sec_names = [name.strip() for name in str(snapshot.get("sec_name") or "").split(",") if name.strip()]
+    for idx, sec_code in enumerate(sec_codes):
+        sec_name = sec_names[idx] if idx < len(sec_names) else ""
+        _append_theme(theme_list, seen_codes, sec_code, sec_name)
+
+    return theme_list
 
 
-def _dedup_similar_indices(indices: List[Dict], all_index_names: List[Dict]) -> List[Dict]:
-    if not indices:
-        return []
-
-    char_sets: Dict[str, Set[str]] = {}
-    char_count: Dict[str, int] = {}
-    for r in all_index_names:
-        chars = set("".join(re.findall(r"[\u4e00-\u9fff]+", r["index_name"])))
-        char_sets[r["index_code"]] = chars
-        for c in chars:
-            char_count[c] = char_count.get(c, 0) + 1
-    total = len(all_index_names)
-    idf = {c: math.log(total / cnt) for c, cnt in char_count.items()}
-
-    def _specificity(code: str) -> float:
-        return sum(idf[c] for c in char_sets.get(code, set()))
-
-    order = sorted(all_index_names, key=lambda r: (-_specificity(r["index_code"]), r["index_code"]))
-    seeds: List[Tuple[str, Set[str]]] = []
-    groups: Dict[str, List[str]] = {}
-    for r in order:
-        code = r["index_code"]
-        chars = char_sets.get(code, set())
-        best_seed, best_score = None, 0.0
-        for seed_code, seed_chars in seeds:
-            shared = chars & seed_chars
-            if len(shared) < 2:
-                continue
-            score = sum(idf[c] for c in shared)
-            if score > best_score:
-                best_seed, best_score = seed_code, score
-        if best_seed is not None:
-            groups[best_seed].append(code)
-        else:
-            seeds.append((code, chars))
-            groups[code] = [code]
-
-    code_to_gid: Dict[str, str] = {}
-    for seed, members in groups.items():
-        for code in members:
-            code_to_gid[code] = seed
-
-    from collections import OrderedDict
-
-    qualified_groups: Dict[str, List[Dict]] = OrderedDict()
-    for idx in indices:
-        code = idx["index_code"]
-        g = code_to_gid.get(code, code)
-        qualified_groups.setdefault(g, []).append(idx)
-
-    result = []
-    for g, group in qualified_groups.items():
-        best = max(group, key=lambda x: float(x["avg_return_q"]))
-        if len(group) > 1:
-            removed = [
-                f"{x['index_code']} {x['index_name']} (3M={float(x['avg_return_q']):.2f}%)"
-                for x in group if x != best
-            ]
-            logger.info(
-                f"[去重] 同类指数: 保留 {best['index_code']} {best['index_name']} "
-                f"(3M={float(best['avg_return_q']):.2f}%), "
-                f"跳过 {'; '.join(removed)}"
-            )
-        result.append(best)
-
-    result.sort(key=lambda x: float(x["avg_return_q"]), reverse=True)
-    return result
+def _build_candidate_group_keys(candidate: Dict) -> List[str]:
+    themes = candidate.get("themes") or []
+    if themes:
+        return [f"theme:{theme_code}" for theme_code, _ in themes if theme_code]
+    return [f"index:{candidate['index_code']}"]
 
 
-def get_latest_trade_date_for_3m_metrics() -> str:
-    db = DatabaseConnection()
-    rows = db.execute_query(
-        "SELECT MAX(trade_date) AS d FROM market_index_daily "
-        "WHERE profit_rate_q IS NOT NULL AND avg_return_q IS NOT NULL"
+def _passes_signal_filters(snapshot: Dict) -> bool:
+    heat_score = _safe_optional_float(snapshot.get("latest_heat_score"))
+    if heat_score is None or heat_score < INDEX_HEAT_MIN_SCORE:
+        return False
+
+    latest_main_net_inflow = _safe_optional_float(snapshot.get("latest_main_net_inflow"))
+    if latest_main_net_inflow is None or latest_main_net_inflow < INDEX_MAIN_NET_INFLOW_MIN:
+        return False
+
+    inflow_snapshot = snapshot.get("inflow_snapshot") or {}
+    if not inflow_snapshot.get("positive_days_available"):
+        return False
+
+    positive_days_count = int(inflow_snapshot.get("positive_days_count") or 0)
+    if positive_days_count < INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS:
+        return False
+
+    if not inflow_snapshot.get("inflow_sum_available"):
+        return False
+
+    recent_inflow_sum = _safe_optional_float(inflow_snapshot.get("recent_inflow_sum"))
+    if recent_inflow_sum is None or recent_inflow_sum < INDEX_MAIN_NET_INFLOW_SUM_MIN:
+        return False
+
+    return True
+
+
+def _select_best_tracking_a_share_c_fund(
+    user,
+    index_code: str,
+    fund_info_cache: Dict[str, object],
+) -> Optional[Dict]:
+    resp = get_tracking_funds(user, [index_code], page_size=50)
+    if not resp.success:
+        logger.warning(f"[{index_code}] 获取跟踪基金失败: {resp.first_error}")
+        return None
+
+    fund_list = resp.items.get(index_code, [])
+    if not fund_list:
+        logger.info(f"[{index_code}] 无跟踪基金数据")
+        return None
+
+    candidates: List[Dict] = []
+    for fund in fund_list:
+        if getattr(fund, "ISEXCHG", "") != "0":
+            continue
+        if getattr(fund, "DTZT", "") != "1":
+            continue
+        if getattr(fund, "ISBUY", "") != "1":
+            continue
+        if not _is_class_c(getattr(fund, "ISCLASSC", None)):
+            continue
+
+        shrate7 = _safe_optional_float(getattr(fund, "SHRATE7", None))
+        if shrate7 is None or shrate7 > TRACKING_FUND_MAX_REDEEM_FEE_AFTER_7:
+            continue
+
+        fund_code = str(getattr(fund, "FCODE", "") or "").strip()
+        fund_info = _get_cached_fund_info(user, fund_code, fund_info_cache)
+        if not fund_info:
+            continue
+
+        fund_type = str(getattr(fund_info, "fund_type", "") or "").strip()
+        fund_sub_type = str(getattr(fund_info, "fund_sub_type", "") or "").strip()
+        if fund_type != RS_FUND_TYPE_INDEX or fund_sub_type != RS_SUB_FUND_TYPE_INDEX_EQUITY:
+            continue
+
+        candidates.append({
+            "fund_code": fund_code,
+            "fund_name": str(getattr(fund, "SHORTNAME", "") or "").strip(),
+            "fund_endnav": _safe_float(getattr(fund, "ENDNAV", None), 0.0),
+            "shrate7": shrate7,
+            "fund_info": fund_info,
+        })
+
+    if not candidates:
+        logger.info(f"[{index_code}] 无符合条件的 A 股 C 类低赎回费跟踪基金")
+        return None
+
+    best = max(candidates, key=lambda row: (row["fund_endnav"], row["fund_code"]))
+    logger.info(
+        f"[{index_code}] 关联基金: {best['fund_code']} {best['fund_name']} "
+        f"(规模={best['fund_endnav']:.1f}万, SHRATE7={best['shrate7']:.2f}%)"
     )
-    return rows[0]["d"] if rows and rows[0].get("d") else ""
-
-
-def get_qualified_indices() -> List[Dict]:
-    db = DatabaseConnection()
-    sql = """
-        SELECT
-            s.index_code, s.index_name, s.track_fund_code, s.track_fund_name,
-            d.trade_date, d.profit_rate_q, d.avg_return_q
-        FROM market_index_static s
-        INNER JOIN (
-            SELECT d1.index_code, d1.trade_date, d1.profit_rate_q, d1.avg_return_q
-            FROM market_index_daily d1
-            INNER JOIN (
-                SELECT index_code, MAX(trade_date) AS max_date
-                FROM market_index_daily
-                WHERE profit_rate_q IS NOT NULL AND avg_return_q IS NOT NULL
-                GROUP BY index_code
-            ) d2 ON d1.index_code = d2.index_code AND d1.trade_date = d2.max_date
-        ) d ON s.index_code = d.index_code
-        WHERE s.type_name IN ({placeholders})
-          AND s.track_fund_code IS NOT NULL AND s.track_fund_code != ''
-          AND d.profit_rate_q > 70
-          AND d.avg_return_q > 20
-        ORDER BY d.avg_return_q DESC
-    """.format(placeholders=",".join(["%s"] * len(TARGET_TYPES)))
-
-    rows = db.execute_query(sql, TARGET_TYPES)
-    logger.info(f"智投平台条件查询: 满足条件的指数共 {len(rows)} 个")
-    return rows
+    return best
 
 
 def _collect_items(obj) -> List[Dict]:
@@ -198,57 +268,152 @@ def get_group_info(user, group_name: str) -> Tuple[int, Set[str]]:
     return target_group_id, existing_funds
 
 
+def get_qualified_fund_candidates(user) -> List[Dict]:
+    market_index_service = MarketIndexService()
+    snapshots = market_index_service.fetch_all_indices_realtime_market_snapshots(
+        user,
+        type_codes=TARGET_INDEX_TYPE_CODES,
+        positive_days_window=INDEX_MAIN_NET_INFLOW_POSITIVE_DAYS_WINDOW,
+        min_positive_days=INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS,
+        inflow_sum_window=INDEX_MAIN_NET_INFLOW_SUM_WINDOW,
+    )
+    if not snapshots:
+        logger.info("市场指数接口未返回可用指数数据。")
+        return []
+
+    latest_trade_date = max(
+        [str(row.get("latest_trade_date") or "") for row in snapshots if row.get("latest_trade_date")],
+        default="",
+    )
+    logger.info(
+        f"市场指数实时接口数据共 {len(snapshots)} 个，"
+        f"最新净流入交易日: {latest_trade_date or '-'}"
+    )
+
+    signal_qualified = [row for row in snapshots if _passes_signal_filters(row)]
+    logger.info(
+        f"热度/净流入筛选后剩余 {len(signal_qualified)} 个指数 "
+        f"(热度>={INDEX_HEAT_MIN_SCORE:.0f}, 当日净流入>={INDEX_MAIN_NET_INFLOW_MIN:.0f}, "
+        f"近{INDEX_MAIN_NET_INFLOW_POSITIVE_DAYS_WINDOW}日正流入天数>={INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS}, "
+        f"近{INDEX_MAIN_NET_INFLOW_SUM_WINDOW}日净流入合计>={INDEX_MAIN_NET_INFLOW_SUM_MIN:.0f})"
+    )
+    if not signal_qualified:
+        return []
+
+    fund_info_cache: Dict[str, object] = {}
+    mapped_candidates: List[Dict] = []
+    for snapshot in signal_qualified:
+        best_fund = _select_best_tracking_a_share_c_fund(user, snapshot["index_code"], fund_info_cache)
+        if not best_fund:
+            continue
+
+        themes = _resolve_candidate_themes(snapshot, best_fund["fund_info"])
+        primary_theme_code = themes[0][0] if themes else ""
+        primary_theme_name = themes[0][1] if themes else ""
+        mapped_candidates.append({
+            **snapshot,
+            **best_fund,
+            "theme_code": primary_theme_code,
+            "theme_name": primary_theme_name,
+            "themes": themes,
+        })
+
+    logger.info(f"完成指数基金关联后，剩余 {len(mapped_candidates)} 只基金候选")
+    if not mapped_candidates:
+        return []
+
+    mapped_candidates.sort(
+        key=lambda row: (
+            _safe_float(row.get("latest_main_net_inflow"), 0.0),
+            _safe_float(row.get("latest_heat_score"), 0.0),
+            _safe_float(row.get("fund_endnav"), 0.0),
+        ),
+        reverse=True,
+    )
+
+    occupied_group_keys: Dict[str, Dict] = {}
+    result: List[Dict] = []
+    for candidate in mapped_candidates:
+        group_keys = _build_candidate_group_keys(candidate)
+        conflicted_keys = [group_key for group_key in group_keys if group_key in occupied_group_keys]
+        if conflicted_keys:
+            conflicted_candidates = []
+            seen_funds: Set[str] = set()
+            for group_key in conflicted_keys:
+                existing = occupied_group_keys[group_key]
+                fund_code = str(existing.get("fund_code") or "")
+                if fund_code and fund_code not in seen_funds:
+                    conflicted_candidates.append(existing)
+                    seen_funds.add(fund_code)
+            conflict_desc = "; ".join(
+                f"{existing['fund_code']} {existing['fund_name']}({','.join(_build_candidate_group_keys(existing))})"
+                for existing in conflicted_candidates
+            )
+            logger.info(
+                f"[BK去重] 跳过 {candidate['fund_code']} {candidate['fund_name']} "
+                f"(index={candidate['index_code']}, main_net_inflow={_safe_float(candidate.get('latest_main_net_inflow')):.2f})，"
+                f"与已保留候选主题重叠: {conflict_desc}"
+            )
+            continue
+
+        for group_key in group_keys:
+            occupied_group_keys[group_key] = candidate
+        result.append(candidate)
+
+    logger.info(f"BK 主题去重后最终保留 {len(result)} 只基金")
+    for row in result:
+        theme_desc = ", ".join(
+            f"{theme_code}:{theme_name or '-'}"
+            for theme_code, theme_name in (row.get("themes") or [])
+        ) or "-"
+        logger.info(
+            f"[候选] {row['fund_code']} {row['fund_name']} <- "
+            f"{row['index_code']} {row['index_name']} "
+            f"(themes={theme_desc}, "
+            f"heat={_safe_float(row.get('latest_heat_score')):.2f}, "
+            f"main_net_inflow={_safe_float(row.get('latest_main_net_inflow')):.2f}, "
+            f"3日合计={_safe_float((row.get('inflow_snapshot') or {}).get('recent_inflow_sum')):.2f})"
+        )
+    return result
+
+
+def get_qualified_fund_codes(user) -> Set[str]:
+    return {
+        str(row["fund_code"])
+        for row in get_qualified_fund_candidates(user)
+        if row.get("fund_code")
+    }
+
+
 def add_qualified_funds_to_group(user, group_name: str = "智投平台", dry_run: bool = False) -> Dict[str, int]:
-    latest_trade_date = get_latest_trade_date_for_3m_metrics()
-    logger.info(f"market_index_daily(含3M指标) 最新交易日: {latest_trade_date}")
     logger.info(f"开始筛选满足条件的基金，目标组合: '{group_name}'...")
 
-    qualified_indices = get_qualified_indices()
-    if not qualified_indices:
-        logger.info("没有满足条件的指数。")
+    qualified_candidates = get_qualified_fund_candidates(user)
+    if not qualified_candidates:
+        logger.info("没有满足条件的指数基金。")
         return {"total_qualified": 0, "added": 0, "skipped": 0, "no_track_fund": 0}
-
-    before_fee_filter = len(qualified_indices)
-    qualified_indices = filter_indices_by_tracking_fund_fee(
-        user=user,
-        indices=qualified_indices,
-        scene_name=group_name,
-    )
-    fee_filtered = before_fee_filter - len(qualified_indices)
-    if fee_filtered > 0:
-        logger.info(f"费率过滤: 排除 {fee_filtered} 个指数，剩余 {len(qualified_indices)} 个")
-    if not qualified_indices:
-        logger.info("费率过滤后没有满足条件的指数。")
-        return {"total_qualified": 0, "added": 0, "skipped": 0, "no_track_fund": 0}
-
-    all_index_names = _get_all_index_names_for_grouping()
-    before_dedup = len(qualified_indices)
-    qualified_indices = _dedup_similar_indices(qualified_indices, all_index_names)
-    dedup_removed = before_dedup - len(qualified_indices)
-    if dedup_removed > 0:
-        logger.info(f"同类指数去重: 减少 {dedup_removed} 个，保留 {len(qualified_indices)} 个")
 
     group_id, existing_funds = get_group_info(user, group_name)
     if group_id == -1:
         logger.error(f"目标组合 '{group_name}' 未找到，请先在天天基金中创建该自选组合。")
-        return {"total_qualified": len(qualified_indices), "added": 0, "skipped": 0, "no_track_fund": 0}
+        return {"total_qualified": len(qualified_candidates), "added": 0, "skipped": 0, "no_track_fund": 0}
 
     logger.info(f"目标组合: {group_name} (ID: {group_id})")
     logger.info(f"组合当前基金数: {len(existing_funds)}")
-    logger.info(f"满足条件的指数: {len(qualified_indices)} 个")
+    logger.info(f"满足条件的基金: {len(qualified_candidates)} 个")
 
     stats = {
-        "total_qualified": len(qualified_indices),
+        "total_qualified": len(qualified_candidates),
         "added": 0,
         "skipped": 0,
         "no_track_fund": 0,
     }
 
-    for idx in qualified_indices:
-        index_code = idx["index_code"]
-        index_name = idx["index_name"]
-        fund_code = str(idx["track_fund_code"]) if idx.get("track_fund_code") else ""
-        fund_name = idx.get("track_fund_name", "Unknown")
+    for candidate in qualified_candidates:
+        index_code = candidate["index_code"]
+        index_name = candidate["index_name"]
+        fund_code = str(candidate["fund_code"]) if candidate.get("fund_code") else ""
+        fund_name = candidate.get("fund_name", "Unknown")
 
         if not fund_code:
             stats["no_track_fund"] += 1
@@ -256,8 +421,13 @@ def add_qualified_funds_to_group(user, group_name: str = "智投平台", dry_run
 
         logger.info(
             f"[{index_code} {index_name}] 跟踪基金: {fund_code} {fund_name} "
-            f"(trade_date={idx.get('trade_date')}, 3M胜率={float(idx['profit_rate_q']):.2f}%, "
-            f"3M均值={float(idx['avg_return_q']):.2f}%)"
+            f"(theme={candidate.get('theme_code') or '-'} {candidate.get('theme_name') or ''}, "
+            f"heat={_safe_float(candidate.get('latest_heat_score')):.2f}, "
+            f"main_net_inflow={_safe_float(candidate.get('latest_main_net_inflow')):.2f}, "
+            f"近10日正流入天数={int((candidate.get('inflow_snapshot') or {}).get('positive_days_count') or 0)}, "
+            f"近3日净流入合计={_safe_float((candidate.get('inflow_snapshot') or {}).get('recent_inflow_sum')):.2f}, "
+            f"规模={_safe_float(candidate.get('fund_endnav')):.1f}万, "
+            f"SHRATE7={_safe_float(candidate.get('shrate7')):.2f}%)"
         )
 
         if fund_code in existing_funds:

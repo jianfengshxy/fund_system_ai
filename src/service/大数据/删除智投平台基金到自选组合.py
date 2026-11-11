@@ -1,6 +1,6 @@
 import os
 import sys
-from typing import Dict, Set, Tuple
+from typing import Dict, Tuple
 
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if root_dir not in sys.path:
@@ -9,7 +9,7 @@ if root_dir not in sys.path:
 from src.common.constant import DEFAULT_USER
 from src.API.自选基金.FavorFund import get_favor_groups, remove_from_favorites, get_favor_group
 from src.common.logger import get_logger
-from src.service.大数据.增加智投平台基金到自选组合 import get_qualified_fund_codes
+from src.service.大数据.增加智投平台基金到自选组合 import get_qualified_fund_candidates
 
 logger = get_logger(__name__)
 
@@ -81,7 +81,12 @@ def get_group_info(user, group_name: str) -> Tuple[int, Dict[str, str]]:
 def remove_unqualified_funds_from_group(user, group_name: str = "智投平台", dry_run: bool = False) -> Dict[str, int]:
     logger.info(f"开始清理 '{group_name}' 组合（移出不再满足条件的基金）...")
 
-    qualified_fund_codes = get_qualified_fund_codes(user)
+    qualified_candidates = get_qualified_fund_candidates(user)
+    qualified_fund_codes = {
+        str(candidate["fund_code"])
+        for candidate in qualified_candidates
+        if candidate.get("fund_code")
+    }
 
     group_id, existing_funds_dict = get_group_info(user, group_name)
     if group_id == -1:
@@ -91,6 +96,14 @@ def remove_unqualified_funds_from_group(user, group_name: str = "智投平台", 
     logger.info(f"目标组合: {group_name} (ID: {group_id})")
     logger.info(f"组合当前基金数: {len(existing_funds_dict)}")
     logger.info(f"满足条件的基金: {len(qualified_fund_codes)} 个")
+    for candidate in qualified_candidates:
+        logger.info(
+            f"[保留] {candidate['fund_code']} {candidate['fund_name']} <- "
+            f"{candidate['index_code']} {candidate['index_name']} "
+            f"(theme={candidate.get('theme_code') or '-'} {candidate.get('theme_name') or ''}, "
+            f"heat={float(candidate.get('latest_heat_score') or 0.0):.2f}, "
+            f"main_net_inflow={float(candidate.get('latest_main_net_inflow') or 0.0):.2f})"
+        )
 
     funds_to_remove = []
     for code, name in existing_funds_dict.items():

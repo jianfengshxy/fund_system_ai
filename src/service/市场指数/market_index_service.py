@@ -1044,6 +1044,7 @@ class MarketIndexService:
         from src.API.市场指数.获取市场指数 import get_market_index
         from src.service.公共服务.index_heat_service import (
             get_index_main_net_inflow_filter_snapshot,
+            get_latest_realtime_index_heat,
             get_latest_realtime_index_main_net_inflow,
         )
 
@@ -1056,6 +1057,7 @@ class MarketIndexService:
                 return None
 
         query_type_codes = type_codes or ["0"]
+        latest_heat_cache: Dict[str, Optional[float]] = {}
         latest_flow_cache: Dict[str, Optional[float]] = {}
         inflow_snapshot_cache: Dict[str, Dict] = {}
         item_by_code: Dict[str, object] = {}
@@ -1091,6 +1093,11 @@ class MarketIndexService:
 
         snapshots: List[Dict] = []
         for index_code, item in item_by_code.items():
+            latest_heat_score = get_latest_realtime_index_heat(
+                user,
+                index_code,
+                cache=latest_heat_cache,
+            )
             inflow_snapshot = get_index_main_net_inflow_filter_snapshot(
                 user,
                 index_code,
@@ -1122,7 +1129,7 @@ class MarketIndexService:
                 "type_code": str(getattr(item, "TYPE_CODE", "") or "").strip(),
                 "sec_name": str(getattr(item, "SEC_NAME", "") or "").strip(),
                 "sec_code": str(getattr(item, "SEC_CODE", "") or "").strip(),
-                "latest_heat_score": _to_float(getattr(item, "XLFLOW_SCORE", None)),
+                "latest_heat_score": _to_float(latest_heat_score),
                 "latest_main_net_inflow": _to_float(latest_main_net_inflow),
                 "latest_main_net_inflow_source": latest_main_net_inflow_source,
                 "latest_trade_date": latest_trade_date,

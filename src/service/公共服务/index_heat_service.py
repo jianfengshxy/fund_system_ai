@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from src.API.市场指数.指数阶段指标 import get_fund_index_stage_performance
 from src.API.市场指数.指数资金热度与价格走势 import get_index_price_flow
 from src.API.市场指数.证券日线K线行情数据 import get_security_day_flow_kline, get_security_today_flow_kline
 
@@ -59,6 +60,19 @@ def get_latest_realtime_index_heat(
 
     latest_score: Optional[float] = None
     try:
+        stage_data = get_fund_index_stage_performance(user, index_code)
+        raw_stage_score = stage_data.get("XLFLOW_SCORE") if stage_data else None
+        if raw_stage_score not in (None, "", "--"):
+            latest_score = float(raw_stage_score)
+    except Exception:
+        latest_score = None
+
+    try:
+        if latest_score is not None:
+            if cache is not None:
+                cache[index_code] = latest_score
+            return latest_score
+
         resp = get_index_price_flow(user, index_code=index_code, range_type=range_type)
         items = getattr(resp, "items", None) or []
         if items:

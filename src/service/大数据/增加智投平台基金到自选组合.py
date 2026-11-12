@@ -27,6 +27,7 @@ INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS = 5
 INDEX_MAIN_NET_INFLOW_SUM_WINDOW = 3
 INDEX_MAIN_NET_INFLOW_SUM_MIN = 50_000_000.0
 TRACKING_FUND_MAX_REDEEM_FEE_AFTER_7 = 0.5
+THEME_DEDUP_MATCH_SCORE_MIN = 70.0
 
 
 
@@ -63,31 +64,38 @@ def _get_cached_fund_info(user, fund_code: str, cache: Dict[str, object]):
     return cache[fund_code]
 
 
-def _append_theme(theme_list: List[Tuple[str, str]], seen_codes: Set[str], theme_code: str, theme_name: str) -> None:
+def _upsert_theme(
+    theme_list: List[Dict[str, object]],
+    seen_codes: Dict[str, int],
+    theme_code: str,
+    theme_name: str,
+    match_score: Optional[float] = None,
+) -> None:
     theme_code = str(theme_code or "").strip()
     theme_name = str(theme_name or "").strip()
     if not theme_code.upper().startswith("BK"):
         return
-    if theme_code in seen_codes:
+    existing_idx = seen_codes.get(theme_code)
+    if existing_idx is not None:
+        existing = theme_list[existing_idx]
+        if theme_name and not existing.get("theme_name"):
+            existing["theme_name"] = theme_name
+        existing_score = _safe_optional_float(existing.get("match_score"))
+        if match_score is not None and (existing_score is None or match_score > existing_score):
+            existing["match_score"] = match_score
         return
-    seen_codes.add(theme_code)
-    theme_list.append((theme_code, theme_name))
+
+    seen_codes[theme_code] = len(theme_list)
+    theme_list.append({
+        "theme_code": theme_code,
+        "theme_name": theme_name,
+        "match_score": match_score,
+    })
 
 
-def _resolve_candidate_themes(snapshot: Dict, fund_info) -> List[Tuple[str, str]]:
-    theme_list: List[Tuple[str, str]] = []
-    seen_codes: Set[str] = set()
-
-    theme_infos = getattr(fund_info, "theme_infos", None) or []
-    show_themes = [theme for theme in theme_infos if getattr(theme, "isshow", False)]
-    other_themes = [theme for theme in theme_infos if not getattr(theme, "isshow", False)]
-    for theme in show_themes + other_themes:
-        _append_theme(
-            theme_list,
-            seen_codes,
-            getattr(theme, "sec_code", ""),
-            getattr(theme, "sec_name", ""),
-        )
+def _resolve_candidate_themes(snapshot: Dict, fund_info) -> List[Dict[str, object]]:
+    theme_list: List[Dict[str, object]] = []
+    seen_codes: Dict[str, int] = {}
 
     relate_themes = getattr(fund_info, "relate_themes", None) or []
     relate_themes = sorted(
@@ -95,28 +103,103 @@ def _resolve_candidate_themes(snapshot: Dict, fund_info) -> List[Tuple[str, str]
         key=lambda item: _safe_float(getattr(item, "corr_1y", 0.0), 0.0),
         reverse=True,
     )
+    relate_theme_scores = {
+        str(getattr(theme, "sec_code", "") or "").strip(): _safe_optional_float(getattr(theme, "corr_1y", None))
+        for theme in relate_themes
+    }
+
+    theme_infos = getattr(fund_info, "theme_infos", None) or []
+    show_themes = [theme for theme in theme_infos if getattr(theme, "isshow", False)]
+    other_themes = [theme for theme in theme_infos if not getattr(theme, "isshow", False)]
+    for theme in show_themes + other_themes:
+        theme_code = str(getattr(theme, "sec_code", "") or "").strip()
+        _upsert_theme(
+            theme_list,
+            seen_codes,
+            theme_code,
+            getattr(theme, "sec_name", ""),
+            match_score=relate_theme_scores.get(theme_code),
+        )
+
     for theme in relate_themes:
-        _append_theme(
+        _upsert_theme(
             theme_list,
             seen_codes,
             getattr(theme, "sec_code", ""),
             getattr(theme, "sec_name", ""),
+            match_score=_safe_optional_float(getattr(theme, "corr_1y", None)),
         )
 
     sec_codes = [code.strip() for code in str(snapshot.get("sec_code") or "").split(",") if code.strip()]
     sec_names = [name.strip() for name in str(snapshot.get("sec_name") or "").split(",") if name.strip()]
     for idx, sec_code in enumerate(sec_codes):
         sec_name = sec_names[idx] if idx < len(sec_names) else ""
-        _append_theme(theme_list, seen_codes, sec_code, sec_name)
+        # 快照直连主题只作为展示补充，不默认参与去重；去重仅依赖 relate_themes.corr_1y。
+        _upsert_theme(theme_list, seen_codes, sec_code, sec_name, match_score=None)
 
     return theme_list
 
 
 def _build_candidate_group_keys(candidate: Dict) -> List[str]:
     themes = candidate.get("themes") or []
-    if themes:
-        return [f"theme:{theme_code}" for theme_code, _ in themes if theme_code]
+    qualified_theme_codes = [
+        str(theme.get("theme_code") or "").strip()
+        for theme in themes
+        if str(theme.get("theme_code") or "").strip()
+        and _safe_float(theme.get("match_score"), 0.0) > THEME_DEDUP_MATCH_SCORE_MIN
+    ]
+    if qualified_theme_codes:
+        return [f"theme:{theme_code}" for theme_code in qualified_theme_codes]
     return [f"index:{candidate['index_code']}"]
+
+
+def _format_theme_desc(themes: List[Dict[str, object]]) -> str:
+    parts: List[str] = []
+    for theme in themes:
+        theme_code = str(theme.get("theme_code") or "").strip()
+        if not theme_code:
+            continue
+        theme_name = str(theme.get("theme_name") or "-").strip() or "-"
+        match_score = _safe_optional_float(theme.get("match_score"))
+        if match_score is None:
+            parts.append(f"{theme_code}:{theme_name}")
+        else:
+            parts.append(f"{theme_code}:{theme_name}@{match_score:.1f}")
+    return ", ".join(parts) or "-"
+
+
+def _dedup_candidates_by_theme(mapped_candidates: List[Dict]) -> List[Dict]:
+    occupied_group_keys: Dict[str, Dict] = {}
+    result: List[Dict] = []
+    for candidate in mapped_candidates:
+        group_keys = _build_candidate_group_keys(candidate)
+        conflicted_keys = [group_key for group_key in group_keys if group_key in occupied_group_keys]
+        if conflicted_keys:
+            conflicted_candidates = []
+            seen_funds: Set[str] = set()
+            for group_key in conflicted_keys:
+                existing = occupied_group_keys[group_key]
+                fund_code = str(existing.get("fund_code") or "")
+                if fund_code and fund_code not in seen_funds:
+                    conflicted_candidates.append(existing)
+                    seen_funds.add(fund_code)
+            conflict_desc = "; ".join(
+                f"{existing['fund_code']} {existing['fund_name']}({','.join(_build_candidate_group_keys(existing))})"
+                for existing in conflicted_candidates
+            )
+            logger.info(
+                f"[BK去重] 跳过 {candidate['fund_code']} {candidate['fund_name']} "
+                f"(index={candidate['index_code']}, heat={_safe_float(candidate.get('latest_heat_score')):.2f}, "
+                f"main_net_inflow={_safe_float(candidate.get('latest_main_net_inflow')):.2f}, "
+                f"dedup_themes={_format_theme_desc(candidate.get('themes') or [])})，"
+                f"与已保留候选主题重叠: {conflict_desc}"
+            )
+            continue
+
+        for group_key in group_keys:
+            occupied_group_keys[group_key] = candidate
+        result.append(candidate)
+    return result
 
 
 def _passes_signal_filters(snapshot: Dict) -> bool:
@@ -308,8 +391,8 @@ def get_qualified_fund_candidates(user) -> List[Dict]:
             continue
 
         themes = _resolve_candidate_themes(snapshot, best_fund["fund_info"])
-        primary_theme_code = themes[0][0] if themes else ""
-        primary_theme_name = themes[0][1] if themes else ""
+        primary_theme_code = str(themes[0].get("theme_code") or "") if themes else ""
+        primary_theme_name = str(themes[0].get("theme_name") or "") if themes else ""
         mapped_candidates.append({
             **snapshot,
             **best_fund,
@@ -333,42 +416,11 @@ def get_qualified_fund_candidates(user) -> List[Dict]:
         reverse=True,
     )
 
-    occupied_group_keys: Dict[str, Dict] = {}
-    result: List[Dict] = []
-    for candidate in mapped_candidates:
-        group_keys = _build_candidate_group_keys(candidate)
-        conflicted_keys = [group_key for group_key in group_keys if group_key in occupied_group_keys]
-        if conflicted_keys:
-            conflicted_candidates = []
-            seen_funds: Set[str] = set()
-            for group_key in conflicted_keys:
-                existing = occupied_group_keys[group_key]
-                fund_code = str(existing.get("fund_code") or "")
-                if fund_code and fund_code not in seen_funds:
-                    conflicted_candidates.append(existing)
-                    seen_funds.add(fund_code)
-            conflict_desc = "; ".join(
-                f"{existing['fund_code']} {existing['fund_name']}({','.join(_build_candidate_group_keys(existing))})"
-                for existing in conflicted_candidates
-            )
-            logger.info(
-                f"[BK去重] 跳过 {candidate['fund_code']} {candidate['fund_name']} "
-                f"(index={candidate['index_code']}, heat={_safe_float(candidate.get('latest_heat_score')):.2f}, "
-                f"main_net_inflow={_safe_float(candidate.get('latest_main_net_inflow')):.2f})，"
-                f"与已保留候选主题重叠: {conflict_desc}"
-            )
-            continue
-
-        for group_key in group_keys:
-            occupied_group_keys[group_key] = candidate
-        result.append(candidate)
+    result = _dedup_candidates_by_theme(mapped_candidates)
 
     logger.info(f"BK 主题去重后最终保留 {len(result)} 只基金")
     for row in result:
-        theme_desc = ", ".join(
-            f"{theme_code}:{theme_name or '-'}"
-            for theme_code, theme_name in (row.get("themes") or [])
-        ) or "-"
+        theme_desc = _format_theme_desc(row.get("themes") or [])
         logger.info(
             f"[候选] {row['fund_code']} {row['fund_name']} <- "
             f"{row['index_code']} {row['index_name']} "

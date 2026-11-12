@@ -322,10 +322,12 @@ def get_qualified_fund_candidates(user) -> List[Dict]:
     if not mapped_candidates:
         return []
 
+    # 候选优先级改为热度优先，避免不同指数规模差异导致净流入绝对值不可直接横向比较。
+    # 同热度下，再用净流入与基金规模做次级排序。
     mapped_candidates.sort(
         key=lambda row: (
-            _safe_float(row.get("latest_main_net_inflow"), 0.0),
             _safe_float(row.get("latest_heat_score"), 0.0),
+            _safe_float(row.get("latest_main_net_inflow"), 0.0),
             _safe_float(row.get("fund_endnav"), 0.0),
         ),
         reverse=True,
@@ -351,7 +353,8 @@ def get_qualified_fund_candidates(user) -> List[Dict]:
             )
             logger.info(
                 f"[BK去重] 跳过 {candidate['fund_code']} {candidate['fund_name']} "
-                f"(index={candidate['index_code']}, main_net_inflow={_safe_float(candidate.get('latest_main_net_inflow')):.2f})，"
+                f"(index={candidate['index_code']}, heat={_safe_float(candidate.get('latest_heat_score')):.2f}, "
+                f"main_net_inflow={_safe_float(candidate.get('latest_main_net_inflow')):.2f})，"
                 f"与已保留候选主题重叠: {conflict_desc}"
             )
             continue

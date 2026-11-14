@@ -12,6 +12,7 @@ from src.common.constant import (
     RS_SUB_FUND_TYPE_INDEX_EQUITY,
 )
 from src.API.自选基金.FavorFund import get_favor_groups, add_to_favorites, get_favor_group
+from src.API.市场指数.获取所有主题 import get_all_market_themes
 from src.API.市场指数.获取追踪指数的基金 import get_tracking_funds
 from src.common.logger import get_logger
 from src.service.基金信息.基金信息 import get_all_fund_info
@@ -26,7 +27,7 @@ INDEX_MAIN_NET_INFLOW_POSITIVE_DAYS_WINDOW = 10
 INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS = 5
 INDEX_MAIN_NET_INFLOW_SUM_WINDOW = 3
 INDEX_MAIN_NET_INFLOW_SUM_MIN = 50_000_000.0
-TRACKING_FUND_MAX_REDEEM_FEE_AFTER_7 = 0.5
+TRACKING_FUND_MAX_REDEEM_FEE_AFTER_7 = 0.2
 THEME_DEDUP_MATCH_SCORE_MIN = 70.0
 
 
@@ -432,10 +433,196 @@ def get_qualified_fund_candidates(user) -> List[Dict]:
     return result
 
 
+def _get_all_bk_themes(user) -> Dict[str, str]:
+    resp = get_all_market_themes(user, page_size=500)
+    if not resp.success:
+        logger.warning(f"获取 BK 主题列表失败: {resp.first_error}")
+        return {}
+
+    theme_name_map: Dict[str, str] = {}
+    for item in resp.items:
+        theme_code = str(getattr(item, "INDEXCODE", "") or "").strip()
+        if not theme_code.upper().startswith("BK"):
+            continue
+        theme_name_map[theme_code] = str(getattr(item, "INDEXNAME", "") or theme_code).strip()
+    return theme_name_map
+
+
+def get_qualified_fund_candidates_by_bk_theme(user) -> List[Dict]:
+    """
+    BK 主题驱动版：以 BK 主题为主键反向挑选指数基金候选。
+
+    口径说明：
+      1. 先遍历所有 BK 主题；
+      2. 再从指数实时快照里反查 SEC_CODE 包含该 BK 的指数；
+      3. 指数热度/净流入/近 10 日正流入/近 3 日累计净流入规则与现有逻辑保持一致；
+      4. 跟踪基金仍按 A 股指数 C 类、7 天后低赎回费、规模最大来选代表。
+
+    这会保留“一个主题对应一个代表基金”的结果，便于评估 BK 主题驱动方案的可行性。
+    """
+    theme_name_map = _get_all_bk_themes(user)
+    if not theme_name_map:
+        logger.info("BK 主题列表为空，无法执行 BK 主题驱动筛选。")
+        return []
+
+    market_index_service = MarketIndexService()
+    snapshots = market_index_service.fetch_all_indices_realtime_market_snapshots(
+        user,
+        type_codes=TARGET_INDEX_TYPE_CODES,
+        positive_days_window=INDEX_MAIN_NET_INFLOW_POSITIVE_DAYS_WINDOW,
+        min_positive_days=INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS,
+        inflow_sum_window=INDEX_MAIN_NET_INFLOW_SUM_WINDOW,
+    )
+    if not snapshots:
+        logger.info("市场指数接口未返回可用指数数据，无法执行 BK 主题驱动筛选。")
+        return []
+
+    theme_to_any_indices: Dict[str, Set[str]] = {}
+    for snapshot in snapshots:
+        sec_codes = [code.strip() for code in str(snapshot.get("sec_code") or "").split(",") if code.strip()]
+        for sec_code in sec_codes:
+            if not sec_code.upper().startswith("BK"):
+                continue
+            if sec_code not in theme_name_map:
+                continue
+            theme_to_any_indices.setdefault(sec_code, set()).add(str(snapshot.get("index_code") or ""))
+
+    signal_qualified = [row for row in snapshots if _passes_signal_filters(row)]
+    logger.info(
+        f"[BK主题驱动] BK 主题总数={len(theme_name_map)}，"
+        f"能映射到现有指数的主题数={sum(1 for code in theme_name_map if theme_to_any_indices.get(code))}，"
+        f"通过指数资金面过滤的指数数={len(signal_qualified)}"
+    )
+
+    fund_info_cache: Dict[str, object] = {}
+    theme_to_signal_indices: Dict[str, Set[str]] = {}
+    theme_candidates: Dict[str, List[Dict]] = {}
+
+    for snapshot in signal_qualified:
+        sec_codes = [code.strip() for code in str(snapshot.get("sec_code") or "").split(",") if code.strip()]
+        matched_theme_codes = [
+            sec_code
+            for sec_code in sec_codes
+            if sec_code.upper().startswith("BK") and sec_code in theme_name_map
+        ]
+        if not matched_theme_codes:
+            continue
+
+        best_fund = _select_best_tracking_a_share_c_fund(user, snapshot["index_code"], fund_info_cache)
+        if not best_fund:
+            continue
+
+        for theme_code in matched_theme_codes:
+            theme_to_signal_indices.setdefault(theme_code, set()).add(str(snapshot.get("index_code") or ""))
+            theme_candidates.setdefault(theme_code, []).append({
+                **snapshot,
+                **best_fund,
+                "theme_code": theme_code,
+                "theme_name": theme_name_map.get(theme_code, theme_code),
+            })
+
+    result: List[Dict] = []
+    for theme_code, candidates in theme_candidates.items():
+        candidates.sort(
+            key=lambda row: (
+                _safe_float(row.get("latest_heat_score"), 0.0),
+                _safe_float(row.get("latest_main_net_inflow"), 0.0),
+                _safe_float(row.get("fund_endnav"), 0.0),
+            ),
+            reverse=True,
+        )
+        best = candidates[0]
+        result.append({
+            **best,
+            "candidate_index_count": len(candidates),
+        })
+
+    result.sort(
+        key=lambda row: (
+            _safe_float(row.get("latest_heat_score"), 0.0),
+            _safe_float(row.get("latest_main_net_inflow"), 0.0),
+            _safe_float(row.get("fund_endnav"), 0.0),
+        ),
+        reverse=True,
+    )
+
+    logger.info(
+        f"[BK主题驱动] 通过资金面过滤的主题数="
+        f"{sum(1 for code in theme_name_map if theme_to_signal_indices.get(code))}，"
+        f"最终能落到场外指数 C 类基金的主题数={len(result)}，"
+        f"去重后基金数={len({str(row.get('fund_code') or '') for row in result if row.get('fund_code')})}"
+    )
+    for row in result:
+        logger.info(
+            f"[BK主题驱动候选] {row['theme_code']} {row['theme_name']} <- "
+            f"{row['index_code']} {row['index_name']} <- "
+            f"{row['fund_code']} {row['fund_name']} "
+            f"(heat={_safe_float(row.get('latest_heat_score')):.2f}, "
+            f"main_net_inflow={_safe_float(row.get('latest_main_net_inflow')):.2f}, "
+            f"3日合计={_safe_float((row.get('inflow_snapshot') or {}).get('recent_inflow_sum')):.2f}, "
+            f"规模={_safe_float(row.get('fund_endnav')):.1f}万, "
+            f"candidate_indices={int(row.get('candidate_index_count') or 0)})"
+        )
+    return result
+
+
+def _dedup_candidates_by_fund_code(candidates: List[Dict]) -> List[Dict]:
+    """
+    将“一个主题一个结果”的主题驱动结果，压缩成“一个基金一个结果”的入组口径。
+
+    保留首次出现的候选作为主记录，并把同一基金命中的其他 BK 主题合并到附加字段中，
+    方便后续日志展示和自选组合增删保持唯一基金粒度。
+    """
+    deduped: List[Dict] = []
+    seen_by_fund: Dict[str, Dict] = {}
+
+    for candidate in candidates:
+        fund_code = str(candidate.get("fund_code") or "").strip()
+        if not fund_code:
+            deduped.append(candidate)
+            continue
+
+        theme_code = str(candidate.get("theme_code") or "").strip()
+        theme_name = str(candidate.get("theme_name") or "").strip()
+
+        existing = seen_by_fund.get(fund_code)
+        if existing is None:
+            merged = {
+                **candidate,
+                "theme_codes": [theme_code] if theme_code else [],
+                "theme_names": [theme_name] if theme_name else [],
+            }
+            seen_by_fund[fund_code] = merged
+            deduped.append(merged)
+            continue
+
+        if theme_code and theme_code not in existing["theme_codes"]:
+            existing["theme_codes"].append(theme_code)
+        if theme_name and theme_name not in existing["theme_names"]:
+            existing["theme_names"].append(theme_name)
+
+    return deduped
+
+
+def _format_candidate_theme_summary(candidate: Dict) -> str:
+    theme_codes = candidate.get("theme_codes") or []
+    theme_names = candidate.get("theme_names") or []
+    if theme_codes:
+        parts = []
+        for idx, theme_code in enumerate(theme_codes):
+            theme_name = theme_names[idx] if idx < len(theme_names) else ""
+            parts.append(f"{theme_code} {theme_name}".strip())
+        return ", ".join(parts)
+
+    theme_code = str(candidate.get("theme_code") or "").strip()
+    theme_name = str(candidate.get("theme_name") or "").strip()
+    return f"{theme_code} {theme_name}".strip() or "-"
+
+
 def get_qualified_fund_codes(user) -> Set[str]:
     return {
         str(row["fund_code"])
-        for row in get_qualified_fund_candidates(user)
+        for row in _dedup_candidates_by_fund_code(get_qualified_fund_candidates_by_bk_theme(user))
         if row.get("fund_code")
     }
 
@@ -443,9 +630,9 @@ def get_qualified_fund_codes(user) -> Set[str]:
 def add_qualified_funds_to_group(user, group_name: str = "智投平台", dry_run: bool = False) -> Dict[str, int]:
     logger.info(f"开始筛选满足条件的基金，目标组合: '{group_name}'...")
 
-    qualified_candidates = get_qualified_fund_candidates(user)
+    qualified_candidates = _dedup_candidates_by_fund_code(get_qualified_fund_candidates_by_bk_theme(user))
     if not qualified_candidates:
-        logger.info("没有满足条件的指数基金。")
+        logger.info("没有满足条件的 BK 主题指数基金。")
         return {"total_qualified": 0, "added": 0, "skipped": 0, "no_track_fund": 0}
 
     group_id, existing_funds = get_group_info(user, group_name)
@@ -476,7 +663,7 @@ def add_qualified_funds_to_group(user, group_name: str = "智投平台", dry_run
 
         logger.info(
             f"[{index_code} {index_name}] 跟踪基金: {fund_code} {fund_name} "
-            f"(theme={candidate.get('theme_code') or '-'} {candidate.get('theme_name') or ''}, "
+            f"(themes={_format_candidate_theme_summary(candidate)}, "
             f"heat={_safe_float(candidate.get('latest_heat_score')):.2f}, "
             f"main_net_inflow={_safe_float(candidate.get('latest_main_net_inflow')):.2f}, "
             f"近10日正流入天数={int((candidate.get('inflow_snapshot') or {}).get('positive_days_count') or 0)}, "

@@ -9,7 +9,11 @@ if root_dir not in sys.path:
 from src.common.constant import DEFAULT_USER
 from src.API.自选基金.FavorFund import get_favor_groups, remove_from_favorites, get_favor_group
 from src.common.logger import get_logger
-from src.service.大数据.增加智投平台基金到自选组合 import get_qualified_fund_candidates
+from src.service.大数据.增加智投平台基金到自选组合 import (
+    get_qualified_fund_candidates_by_bk_theme,
+    _dedup_candidates_by_fund_code,
+    _format_candidate_theme_summary,
+)
 
 logger = get_logger(__name__)
 
@@ -81,7 +85,7 @@ def get_group_info(user, group_name: str) -> Tuple[int, Dict[str, str]]:
 def remove_unqualified_funds_from_group(user, group_name: str = "智投平台", dry_run: bool = False) -> Dict[str, int]:
     logger.info(f"开始清理 '{group_name}' 组合（移出不再满足条件的基金）...")
 
-    qualified_candidates = get_qualified_fund_candidates(user)
+    qualified_candidates = _dedup_candidates_by_fund_code(get_qualified_fund_candidates_by_bk_theme(user))
     qualified_fund_codes = {
         str(candidate["fund_code"])
         for candidate in qualified_candidates
@@ -100,7 +104,7 @@ def remove_unqualified_funds_from_group(user, group_name: str = "智投平台", 
         logger.info(
             f"[保留] {candidate['fund_code']} {candidate['fund_name']} <- "
             f"{candidate['index_code']} {candidate['index_name']} "
-            f"(theme={candidate.get('theme_code') or '-'} {candidate.get('theme_name') or ''}, "
+            f"(themes={_format_candidate_theme_summary(candidate)}, "
             f"heat={float(candidate.get('latest_heat_score') or 0.0):.2f}, "
             f"main_net_inflow={float(candidate.get('latest_main_net_inflow') or 0.0):.2f})"
         )

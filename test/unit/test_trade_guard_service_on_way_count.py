@@ -48,7 +48,7 @@ def test_has_buy_submission_on_dates_falls_back_to_asset_on_way_count(monkeypatc
     )
 
     result = service_module.has_buy_submission_on_dates(
-        user=SimpleNamespace(account="13918199137"),
+        user=SimpleNamespace(account="13052919137"),
         sub_account_no="10005780",
         fund_code="021031",
         trans_date=datetime.date(2026, 11, 6),

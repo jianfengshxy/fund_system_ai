@@ -15,7 +15,7 @@ from src.domain.user.User import User
 def DEFAULT_USER():
     return User(
         customer_no="cd0b7906b53b43ffa508a99744b4055b",
-        mobile_phone="13918199137"
+        mobile_phone="13052919137"
     )
 
 

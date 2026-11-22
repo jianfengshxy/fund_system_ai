@@ -70,7 +70,7 @@ def _setup_module(monkeypatch, *, assets, wind_vane_funds, fund_info_map):
         or SimpleNamespace(amount=amount, busin_serial_no=f"order-{len(commit_calls):03d}"),
     )
 
-    user = SimpleNamespace(customer_name="测试用户", account="13918199137")
+    user = SimpleNamespace(customer_name="测试用户", account="13052919137")
     return service_module, user, commit_calls
 
 

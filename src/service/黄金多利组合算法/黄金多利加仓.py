@@ -1088,7 +1088,7 @@ if __name__ == "__main__":
     try:
         # 1. 构造测试用户（或者使用默认用户）
         test_user = DEFAULT_USER
-        test_user.account = "13918199137"
+        test_user.account = "13052919137"
         test_user.password = "sWX15706"
         index_heat_filter_enabled = True
         # 2. 设置测试参数

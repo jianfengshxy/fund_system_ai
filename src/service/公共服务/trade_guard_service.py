@@ -25,11 +25,11 @@ except ImportError as e:
 
 # 创建本地 DEFAULT_USER 用于测试
 DEFAULT_USER = User(
-    account="13918199137",
+    account="13052919137",
     password="sWX15706"  # 测试用密码
 )
 DEFAULT_USER.customer_no = "cd0b7906b53b43ffa508a99744b4055b"
-DEFAULT_USER.mobile_phone = "13918199137"
+DEFAULT_USER.mobile_phone = "13052919137"
 
 logger = get_logger(__name__)
 

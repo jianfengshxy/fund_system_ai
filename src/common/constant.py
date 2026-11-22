@@ -446,7 +446,7 @@ def _get_password_from_yaml(account):
     return None
 
 def _load_default_user():
-    target_account = "13918199137"
+    target_account = "13052919137"
     
     # 尝试从 s.yaml 获取密码
     password = _get_password_from_yaml(target_account)
@@ -467,6 +467,7 @@ def _load_default_user():
         # 如果服务获取失败，回退到使用常量构建基础对象
         user_data = {
             'account': target_account,
+            'mobile_phone': target_account,
             'password': password,
             'paypassword': password,
             'c_token': C_TOKEN,
@@ -480,6 +481,9 @@ def _load_default_user():
             'passport_utoken': PASSPORT_UTOKEN,
         }
         user = User.from_dict(user_data)
+
+    if not getattr(user, 'mobile_phone', None):
+        user.mobile_phone = target_account
     
     # 确保 max_hqb_bank 存在
     if not getattr(user, 'max_hqb_bank', None):
@@ -511,7 +515,7 @@ class _LazyConst:
         return str(self.value())
 
 # 使用 LazyConst 延迟加载 DEFAULT_USER，确保按需获取且逻辑正确
-# 解决旧逻辑中可能回退到其他账号的问题，强制锁定 13918199137
+# 解决旧逻辑中可能回退到其他账号的问题，强制锁定 13052919137
 DEFAULT_USER = _LazyConst(_load_default_user)
 
 def get_bank_balance_threshold():

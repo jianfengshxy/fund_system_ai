@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)8s] %(m
 logger = logging.getLogger(__name__)
 
 user_list = [
-    ("13918199137","sWX15706","sWX15706","施小雨","飞龙在天",1000000.0)
+    ("13052919137","sWX15706","sWX15706","施小雨","飞龙在天",1000000.0)
 ]
 
 def test_add_new_funds():
@@ -54,7 +54,7 @@ def test_add_new_event_success():
     logger.info("开始测试 index.add_new (Event Handler)")
     # 使用提供的 payload 制造 event
     payload = {
-        "account": "13918199137",
+        "account": "13052919137",
         "password": "sWX15706",
         "sub_account_name": "飞龙在天",
         "total_budget": 1000000.0,

@@ -42,8 +42,8 @@ def _setup_module(monkeypatch, *, holdings, candidates, fund_info_map):
 
     user = SimpleNamespace(
         customer_name="测试用户",
-        account="13918199137",
-        mobile_phone="13918199137",
+        account="13052919137",
+        mobile_phone="13052919137",
         hqb_value=50000.0,
     )
 

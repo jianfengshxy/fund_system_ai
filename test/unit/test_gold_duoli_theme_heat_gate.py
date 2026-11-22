@@ -133,7 +133,7 @@ def test_active_fund_theme_low_heat_blocks_increase(monkeypatch):
         },
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利主动低热度",
@@ -160,7 +160,7 @@ def test_active_fund_without_theme_ignores_heat_gate(monkeypatch):
         estimated_change_map={"南方均衡回报混合C": -0.5},
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利主动无主题",
@@ -189,7 +189,7 @@ def test_active_fund_theme_negative_flow_blocks_increase(monkeypatch):
         theme_snapshot_map={"BK000389": None},
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利主动负流向",
@@ -228,7 +228,7 @@ def test_active_fund_theme_high_heat_allows_increase(monkeypatch):
         },
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利主动高热度",
@@ -267,7 +267,7 @@ def test_active_fund_theme_insufficient_history_blocks_increase(monkeypatch):
         },
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利主动历史不足",

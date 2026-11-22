@@ -62,6 +62,7 @@ def _ensure_bank(user):
 def _user_to_dict(user):
     return {
         'account': getattr(user, 'account', None),
+        'mobile_phone': getattr(user, 'mobile_phone', None) or getattr(user, 'account', None),
         'password': getattr(user, 'password', None),
         'c_token': getattr(user, 'c_token', None),
         'u_token': getattr(user, 'u_token', None),
@@ -375,5 +376,5 @@ def batch_login_all_cached_users(ensure_bank: bool = True):
     return successful_users
 
 if __name__ == "__main__":
-    user = get_user_from_store_or_cache("13918199137", "sWX15706")
+    user = get_user_from_store_or_cache("13052919137", "sWX15706")
     print(user)

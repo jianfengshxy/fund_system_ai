@@ -49,9 +49,11 @@ logger = get_logger(__name__)
 HQB_NEW_POSITION_THRESHOLD = 20.0
 INDEX_HEAT_FILTER_MIN = 20.0
 INDEX_HEAT_FILTER_MAX = 100.0
+INDEX_MAIN_NET_INFLOW_MIN = 50_000_000.0
 INDEX_MAIN_NET_INFLOW_POSITIVE_DAYS_WINDOW = 10
 INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS = 5
 INDEX_MAIN_NET_INFLOW_SUM_WINDOW = 3
+INDEX_MAIN_NET_INFLOW_SUM_MIN = 50_000_000.0
 
 # 黄金多利资金面过滤当前只支持：
 # 1. A 股权益指数基金（000001）
@@ -620,11 +622,11 @@ def increase_gold_funds(
             flow_label = "flow"
             trend_label = "净流入"
 
-        if latest_flow is not None and latest_flow <= 0:
+        if latest_flow is not None and latest_flow < INDEX_MAIN_NET_INFLOW_MIN:
             logger.info(
                 f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过资金热度过滤："
                 f"{target_type}_code={target_code}, {target_type}_label={target_label}, "
-                f"{flow_label}={latest_flow:.2f} <= 0"
+                f"{flow_label}={latest_flow:.2f} < {INDEX_MAIN_NET_INFLOW_MIN:.2f}"
             )
             return False
 
@@ -636,7 +638,12 @@ def increase_gold_funds(
             )
             return False
 
-        if target_type == "theme" and latest_flow is not None and latest_flow > 0 and not inflow_snapshot:
+        if (
+            target_type == "theme"
+            and latest_flow is not None
+            and latest_flow >= INDEX_MAIN_NET_INFLOW_MIN
+            and not inflow_snapshot
+        ):
             logger.info(
                 f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过净流入趋势过滤："
                 f"{target_type}_code={target_code}, {target_type}_label={target_label}，"
@@ -644,7 +651,7 @@ def increase_gold_funds(
             )
             return False
 
-        if inflow_snapshot and latest_flow is not None and latest_flow > 0:
+        if inflow_snapshot and latest_flow is not None and latest_flow >= INDEX_MAIN_NET_INFLOW_MIN:
             positive_days_available = bool(inflow_snapshot.get("positive_days_available"))
             positive_days_count = int(inflow_snapshot.get("positive_days_count") or 0)
             positive_days_window = int(
@@ -680,16 +687,21 @@ def increase_gold_funds(
                     f"最近{inflow_sum_window}个交易日{trend_label}数据不足"
                 )
                 return False
-            if inflow_sum_available and recent_inflow_sum is not None and float(recent_inflow_sum) <= 0:
+            if (
+                inflow_sum_available
+                and recent_inflow_sum is not None
+                and float(recent_inflow_sum) < INDEX_MAIN_NET_INFLOW_SUM_MIN
+            ):
                 logger.info(
                     f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过净流入趋势过滤："
                     f"{target_type}_code={target_code}, {target_type}_label={target_label}, "
-                    f"最近{inflow_sum_window}个交易日{trend_label}合计={float(recent_inflow_sum):.2f} <= 0"
+                    f"最近{inflow_sum_window}个交易日{trend_label}合计="
+                    f"{float(recent_inflow_sum):.2f} < {INDEX_MAIN_NET_INFLOW_SUM_MIN:.2f}"
                 )
                 return False
 
         if latest_heat_score is None:
-            if latest_flow is not None and latest_flow > 0:
+            if latest_flow is not None and latest_flow >= INDEX_MAIN_NET_INFLOW_MIN:
                 trend_parts = []
                 if inflow_snapshot and inflow_snapshot.get("positive_days_available"):
                     trend_parts.append(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from src.API.市场指数.指数阶段指标 import get_fund_index_stage_performance
 from src.API.市场指数.指数资金热度与价格走势 import get_index_price_flow
 from src.API.市场指数.证券日线K线行情数据 import get_security_day_flow_kline, get_security_today_flow_kline
 
@@ -59,6 +60,19 @@ def get_latest_realtime_index_heat(
 
     latest_score: Optional[float] = None
     try:
+        stage_data = get_fund_index_stage_performance(user, index_code)
+        raw_stage_score = stage_data.get("XLFLOW_SCORE") if stage_data else None
+        if raw_stage_score not in (None, "", "--"):
+            latest_score = float(raw_stage_score)
+    except Exception:
+        latest_score = None
+
+    try:
+        if latest_score is not None:
+            if cache is not None:
+                cache[index_code] = latest_score
+            return latest_score
+
         resp = get_index_price_flow(user, index_code=index_code, range_type=range_type)
         items = getattr(resp, "items", None) or []
         if items:
@@ -135,7 +149,7 @@ def _extract_point_trade_date(point: Any) -> str:
     return ""
 
 
-def _merge_recent_flow_points(user, secid: str, lmt: int) -> List[Any]:
+def _merge_recent_flow_points(user, secid: str, lmt: int) -> tuple[List[Any], set[str]]:
     """
     合并历史日线资金流与当日实时资金流，并按交易日升序返回。
 
@@ -145,9 +159,10 @@ def _merge_recent_flow_points(user, secid: str, lmt: int) -> List[Any]:
     day_resp = get_security_day_flow_kline(user, secid=secid, lmt=lmt)
     day_items = getattr(getattr(day_resp, "data", None), "items", None) or []
     if not day_items:
-        return []
+        return [], set()
 
     flow_by_date = {}
+    realtime_trade_dates: set[str] = set()
     for item in day_items:
         trade_date = _extract_point_trade_date(item)
         if trade_date:
@@ -160,8 +175,9 @@ def _merge_recent_flow_points(user, secid: str, lmt: int) -> List[Any]:
         trade_date = _extract_point_trade_date(today_item)
         if trade_date:
             flow_by_date[trade_date] = today_item
+            realtime_trade_dates.add(trade_date)
 
-    return [flow_by_date[d] for d in sorted(flow_by_date.keys())]
+    return [flow_by_date[d] for d in sorted(flow_by_date.keys())], realtime_trade_dates
 
 
 def get_index_main_net_inflow_filter_snapshot(
@@ -196,13 +212,14 @@ def get_index_main_net_inflow_filter_snapshot(
         return None
 
     lookback = max(int(positive_days_window or 0), int(inflow_sum_window or 0), 1)
-    points = _merge_recent_flow_points(user, secid=secid, lmt=lookback)
+    points, realtime_trade_dates = _merge_recent_flow_points(user, secid=secid, lmt=lookback)
     if not points:
         if cache is not None:
             cache[index_code] = None
         return None
 
     latest_point = points[-1]
+    latest_date = _extract_point_trade_date(latest_point) or None
     latest_main_net_inflow = getattr(latest_point, "MAIN_NET_INFLOW", None)
     try:
         latest_main_net_inflow = float(latest_main_net_inflow) if latest_main_net_inflow is not None else None
@@ -232,8 +249,9 @@ def get_index_main_net_inflow_filter_snapshot(
     snapshot = {
         "index_code": index_code,
         "secid": secid,
-        "latest_date": _extract_point_trade_date(latest_point) or None,
+        "latest_date": latest_date,
         "latest_main_net_inflow": latest_main_net_inflow,
+        "latest_main_net_inflow_source": "realtime" if latest_date in realtime_trade_dates else "day_kline",
         "positive_days_window": positive_days_window,
         "min_positive_days": min_positive_days,
         "positive_days_available": len(positive_values) >= positive_days_window,

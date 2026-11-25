@@ -136,7 +136,7 @@ class FundThemeRealTimeItem:
         for fn in cls.__dataclass_fields__:
             raw = d.get(fn)
             ft = cls.__dataclass_fields__[fn].type
-            if raw is None:
+            if raw is None or raw == "" or raw == "--":
                 clean[fn] = None if ft in (Any, Optional) else _default(ft)
             elif ft is float:
                 clean[fn] = float(raw)
@@ -165,7 +165,7 @@ class FundThemeSimilarItem:
         for fn in cls.__dataclass_fields__:
             raw = d.get(fn)
             ft = cls.__dataclass_fields__[fn].type
-            if raw is None:
+            if raw is None or raw == "" or raw == "--":
                 clean[fn] = _default(ft)
             elif ft is float:
                 clean[fn] = float(raw)
@@ -217,6 +217,8 @@ class FundThemeBaseInfoItem:
     SEC_CODE: str = ""
     SCOREDATE: str = ""
     TYPE_CODE: str = ""
+    RELATIVEINDNAME: str = ""
+    BACKGROUNDPIC: str = ""
 
     # ── 评分 ──
     WSC: int = 0
@@ -270,7 +272,7 @@ class FundThemeBaseInfoItem:
         for fn in cls.__dataclass_fields__:
             raw = d.get(fn)
             ft = cls.__dataclass_fields__[fn].type
-            if raw is None:
+            if raw is None or raw == "" or raw == "--":
                 clean[fn] = _default(ft)
             elif ft is float:
                 clean[fn] = float(raw)

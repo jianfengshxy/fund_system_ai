@@ -9,6 +9,14 @@ if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
 from src.common.logger import get_logger
+from src.common.constant import (
+    RS_FUND_TYPE_INDEX,
+    RS_FUND_TYPE_STOCK,
+    RS_FUND_TYPE_MIXED,
+    RS_SUB_FUND_TYPE_INDEX_EQUITY,
+    describe_rs_fund_type,
+    describe_rs_sub_fund_type,
+)
 import datetime
 from typing import Optional, List, Dict
 
@@ -30,19 +38,106 @@ from src.service.公共服务.index_heat_service import (
     get_index_main_net_inflow_filter_snapshot,
     get_latest_realtime_index_main_net_inflow,
 )
+from src.service.公共服务.theme_heat_service import (
+    get_latest_realtime_theme_heat,
+    get_latest_realtime_theme_flow,
+    get_theme_flow_filter_snapshot,
+)
 
 logger = get_logger(__name__)
 
 HQB_NEW_POSITION_THRESHOLD = 20.0
 INDEX_HEAT_FILTER_MIN = 20.0
 INDEX_HEAT_FILTER_MAX = 100.0
+INDEX_MAIN_NET_INFLOW_MIN = 50_000_000.0
 INDEX_MAIN_NET_INFLOW_POSITIVE_DAYS_WINDOW = 10
 INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS = 5
 INDEX_MAIN_NET_INFLOW_SUM_WINDOW = 3
+INDEX_MAIN_NET_INFLOW_SUM_MIN = 50_000_000.0
+
+# 黄金多利资金面过滤当前只支持：
+# 1. A 股权益指数基金（000001）
+# 2. 主动权益基金（001/002）通过 BK 主题口径过滤
+MARKET_HEAT_SUPPORTED_THEME_FUND_TYPES = frozenset({
+    RS_FUND_TYPE_STOCK,
+    RS_FUND_TYPE_MIXED,
+})
+MARKET_HEAT_SUPPORTED_INDEX_SUB_TYPES = frozenset({
+    RS_SUB_FUND_TYPE_INDEX_EQUITY,
+})
 
 
 def _get_primary_theme(fund_info) -> Optional[tuple]:
     return _shared_get_primary_theme(fund_info)
+
+
+def _get_fund_type_code(fund_info) -> str:
+    return str(getattr(fund_info, "fund_type", "") or "").strip()
+
+
+def _get_fund_sub_type_code(fund_info) -> str:
+    return str(getattr(fund_info, "fund_sub_type", "") or "").strip()
+
+
+def _get_fund_type_label(fund_type: str) -> str:
+    return describe_rs_fund_type(fund_type)
+
+
+def _get_fund_sub_type_label(fund_sub_type: str) -> str:
+    return describe_rs_sub_fund_type(fund_sub_type)
+
+
+def _format_fund_type_summary(fund_info) -> str:
+    fund_type = _get_fund_type_code(fund_info)
+    fund_sub_type = _get_fund_sub_type_code(fund_info)
+    return (
+        f"fund_type={fund_type or '-'}({_get_fund_type_label(fund_type)}), "
+        f"fund_sub_type={fund_sub_type or '-'}({_get_fund_sub_type_label(fund_sub_type)})"
+    )
+
+
+def _resolve_market_signal_target(fund_info) -> tuple[Optional[Dict[str, str]], Optional[str]]:
+    if not fund_info:
+        return None, "基金信息为空"
+
+    fund_type = _get_fund_type_code(fund_info)
+    fund_sub_type = _get_fund_sub_type_code(fund_info)
+    index_code = str(getattr(fund_info, "index_code", "") or "").strip()
+
+    if fund_type == RS_FUND_TYPE_INDEX:
+        if not index_code:
+            return None, f"指数基金缺少 index_code，{_format_fund_type_summary(fund_info)}"
+        if fund_sub_type not in MARKET_HEAT_SUPPORTED_INDEX_SUB_TYPES:
+            return None, (
+                "指数子类型暂不支持黄金多利资金面过滤，"
+                f"{_format_fund_type_summary(fund_info)}，index_code={index_code}"
+            )
+        return {
+            "target_type": "index",
+            "target_code": index_code,
+            "target_label": index_code,
+        }, None
+
+    if fund_type in MARKET_HEAT_SUPPORTED_THEME_FUND_TYPES:
+        primary_theme = _get_primary_theme(fund_info)
+        if primary_theme:
+            theme_code = str(primary_theme[0] or "").strip()
+            theme_name = str(primary_theme[1] or "").strip()
+            if theme_code:
+                return {
+                    "target_type": "theme",
+                    "target_code": theme_code,
+                    "target_label": f"{theme_name or theme_code}({theme_code})" if theme_name else theme_code,
+                }, None
+        return None, f"主动权益基金缺少可用主题映射，{_format_fund_type_summary(fund_info)}"
+
+    return None, f"基金类型暂不支持黄金多利资金面过滤，{_format_fund_type_summary(fund_info)}"
+
+
+def _should_skip_market_heat_filter(reason: Optional[str]) -> bool:
+    if not reason:
+        return False
+    return "暂不支持黄金多利资金面过滤" in reason
 
 def increase_gold_funds(
     user: User,
@@ -145,7 +240,7 @@ def increase_gold_funds(
             )
             return 0.0
 
-        if not _passes_index_heat_filter(
+        if not _passes_market_heat_filter(
             fund_code=fund_code,
             fund_name=fund_name,
             fund_info=fund_info,
@@ -289,6 +384,10 @@ def increase_gold_funds(
     index_heat_cache: Dict[str, Optional[float]] = {}
     index_main_net_inflow_cache: Dict[str, Optional[float]] = {}
     index_main_net_inflow_snapshot_cache: Dict[str, Dict] = {}
+    theme_heat_cache: Dict[str, Optional[float]] = {}
+    theme_flow_cache: Dict[str, Optional[float]] = {}
+    theme_flow_snapshot_cache: Dict[str, Dict] = {}
+    theme_detail_snapshot_cache: Dict[str, Dict] = {}
 
     def _get_effective_fund_limit(fund_code: str) -> Optional[float]:
         fund_limit = payload_limit_dict.get(fund_code)
@@ -337,16 +436,59 @@ def increase_gold_funds(
             index_main_net_inflow_snapshot_cache[index_code] = None
             return None
 
-    def _is_index_fund(fund_info) -> bool:
-        return getattr(fund_info, "fund_type", None) == "000" and bool(getattr(fund_info, "index_code", None))
+    def _get_latest_realtime_theme_heat(theme_code: str) -> Optional[float]:
+        try:
+            return get_latest_realtime_theme_heat(
+                user,
+                theme_code,
+                cache=theme_heat_cache,
+                snapshot_cache=theme_detail_snapshot_cache,
+            )
+        except Exception as exc:
+            logger.warning(f"获取主题 {theme_code} 实时资金热度失败: {exc}")
+            theme_heat_cache[theme_code] = None
+            return None
+
+    def _get_latest_realtime_theme_flow(theme_code: str) -> Optional[float]:
+        try:
+            return get_latest_realtime_theme_flow(
+                user,
+                theme_code,
+                cache=theme_flow_cache,
+                snapshot_cache=theme_detail_snapshot_cache,
+            )
+        except Exception as exc:
+            logger.warning(f"获取主题 {theme_code} 实时净流入失败: {exc}")
+            theme_flow_cache[theme_code] = None
+            return None
+
+    def _get_theme_flow_filter_snapshot(theme_code: str) -> Optional[Dict]:
+        try:
+            return get_theme_flow_filter_snapshot(
+                theme_code,
+                user=user,
+                cache=theme_flow_snapshot_cache,
+                snapshot_cache=theme_detail_snapshot_cache,
+                positive_days_window=INDEX_MAIN_NET_INFLOW_POSITIVE_DAYS_WINDOW,
+                min_positive_days=INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS,
+                inflow_sum_window=INDEX_MAIN_NET_INFLOW_SUM_WINDOW,
+            )
+        except Exception as exc:
+            logger.warning(f"获取主题 {theme_code} 净流入趋势快照失败: {exc}")
+            theme_flow_snapshot_cache[theme_code] = None
+            return None
+
+    def _get_market_signal_target(fund_info) -> Optional[Dict[str, str]]:
+        target, _ = _resolve_market_signal_target(fund_info)
+        return target
 
     def _get_candidate_heat_score(fund_info) -> Optional[float]:
-        if not _is_index_fund(fund_info):
+        target = _get_market_signal_target(fund_info)
+        if not target:
             return None
-        index_code = getattr(fund_info, "index_code", None)
-        if not index_code:
-            return None
-        return _get_latest_realtime_index_heat(index_code)
+        if target["target_type"] == "index":
+            return _get_latest_realtime_index_heat(target["target_code"])
+        return _get_latest_realtime_theme_heat(target["target_code"])
 
     def _build_init_candidate(fund_item: Dict, order_index: int) -> Dict:
         fund_code = fund_item["fund_code"]
@@ -363,7 +505,7 @@ def increase_gold_funds(
             "heat_score": heat_score,
         }
 
-    def _should_replace_theme_candidate(current: Dict, existing: Dict) -> bool:
+    def _should_replace_init_theme_candidate(current: Dict, existing: Dict) -> bool:
         current_heat = current.get("heat_score")
         existing_heat = existing.get("heat_score")
         if current_heat is not None and existing_heat is not None and abs(current_heat - existing_heat) > 1e-9:
@@ -371,6 +513,48 @@ def increase_gold_funds(
         if current_heat is not None and existing_heat is None:
             return True
         if current_heat is None and existing_heat is not None:
+            return False
+
+        return int(current.get("order_index", 10**9)) < int(existing.get("order_index", 10**9))
+
+    def _get_post_add_estimated_profit_rate(candidate: Dict) -> Optional[float]:
+        candidate_asset_value = candidate.get("asset_value")
+        candidate_estimated_profit_rate = candidate.get("estimated_profit_rate")
+        candidate_buy_amount = candidate.get("buy_amount")
+        if (
+            candidate_asset_value is None
+            or candidate_estimated_profit_rate is None
+            or candidate_buy_amount is None
+        ):
+            return None
+
+        estimated_profit_rate = float(candidate_estimated_profit_rate)
+        asset_value = float(candidate_asset_value)
+        buy_amount = float(candidate_buy_amount)
+        nav_profit_ratio = 1.0 + (estimated_profit_rate / 100.0)
+        if nav_profit_ratio <= 1e-9:
+            return None
+
+        cost_basis = asset_value / nav_profit_ratio
+        profit_amount = asset_value - cost_basis
+        post_add_cost_basis = cost_basis + buy_amount
+        if post_add_cost_basis <= 1e-9:
+            return None
+
+        return (profit_amount / post_add_cost_basis) * 100.0
+
+    def _should_replace_increase_theme_candidate(current: Dict, existing: Dict) -> bool:
+        current_post_add_profit_rate = _get_post_add_estimated_profit_rate(current)
+        existing_post_add_profit_rate = _get_post_add_estimated_profit_rate(existing)
+        if (
+            current_post_add_profit_rate is not None
+            and existing_post_add_profit_rate is not None
+            and abs(current_post_add_profit_rate - existing_post_add_profit_rate) > 1e-9
+        ):
+            return current_post_add_profit_rate > existing_post_add_profit_rate
+        if current_post_add_profit_rate is not None and existing_post_add_profit_rate is None:
+            return True
+        if current_post_add_profit_rate is None and existing_post_add_profit_rate is not None:
             return False
 
         current_estimated_profit_rate = current.get("estimated_profit_rate")
@@ -393,7 +577,7 @@ def increase_gold_funds(
 
         return int(current.get("order_index", 10**9)) < int(existing.get("order_index", 10**9))
 
-    def _passes_index_heat_filter(
+    def _passes_market_heat_filter(
         *,
         fund_code: str,
         fund_name: str,
@@ -407,28 +591,67 @@ def increase_gold_funds(
             logger.info(f"持仓基金 {fund_name}({fund_code}) 未获取到基金信息，跳过资金热度过滤")
             return True
 
-        fund_type = str(getattr(fund_info, "fund_type", "") or "").strip()
-        index_code = str(getattr(fund_info, "index_code", "") or "").strip()
-        if fund_type != "000" or not index_code:
-            logger.info(
-                f"持仓基金 {fund_name}({fund_code}) 非有效指数基金或无跟踪指数，"
-                f"跳过资金热度过滤（fund_type={fund_type or '-'}, index_code={index_code or '-'}）"
-            )
-            return True
-
-        latest_heat_score = _get_latest_realtime_index_heat(index_code)
-        latest_main_net_inflow = _get_latest_realtime_index_main_net_inflow(index_code)
-        inflow_snapshot = _get_index_main_net_inflow_filter_snapshot(index_code)
-
-        if latest_main_net_inflow is not None and latest_main_net_inflow <= 0:
+        target, target_skip_reason = _resolve_market_signal_target(fund_info)
+        if not target:
+            if _should_skip_market_heat_filter(target_skip_reason):
+                logger.info(
+                    f"持仓基金 {fund_name}({fund_code}) {buy_context} 跳过资金热度过滤："
+                    f"{target_skip_reason}"
+                )
+                return True
             logger.info(
                 f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过资金热度过滤："
-                f"index_code={index_code}, "
-                f"main_net_inflow={latest_main_net_inflow:.2f} <= 0"
+                f"{target_skip_reason or '无有效指数/主题资金面目标'}"
             )
             return False
 
-        if inflow_snapshot and latest_main_net_inflow is not None and latest_main_net_inflow > 0:
+        target_type = target["target_type"]
+        target_code = target["target_code"]
+        target_label = target["target_label"]
+
+        if target_type == "index":
+            latest_heat_score = _get_latest_realtime_index_heat(target_code)
+            latest_flow = _get_latest_realtime_index_main_net_inflow(target_code)
+            inflow_snapshot = _get_index_main_net_inflow_filter_snapshot(target_code)
+            flow_label = "main_net_inflow"
+            trend_label = "主力净流入"
+        else:
+            latest_heat_score = _get_latest_realtime_theme_heat(target_code)
+            latest_flow = _get_latest_realtime_theme_flow(target_code)
+            inflow_snapshot = _get_theme_flow_filter_snapshot(target_code)
+            flow_label = "flow"
+            trend_label = "净流入"
+
+        if latest_flow is not None and latest_flow < INDEX_MAIN_NET_INFLOW_MIN:
+            logger.info(
+                f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过资金热度过滤："
+                f"{target_type}_code={target_code}, {target_type}_label={target_label}, "
+                f"{flow_label}={latest_flow:.2f} < {INDEX_MAIN_NET_INFLOW_MIN:.2f}"
+            )
+            return False
+
+        if target_type == "theme" and latest_flow is None:
+            logger.info(
+                f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过资金热度过滤："
+                f"{target_type}_code={target_code}, {target_type}_label={target_label}, "
+                f"{flow_label}=-，缺少当日净流入数据"
+            )
+            return False
+
+        if (
+            target_type == "theme"
+            and latest_flow is not None
+            and latest_flow >= INDEX_MAIN_NET_INFLOW_MIN
+            and not inflow_snapshot
+        ):
+            logger.info(
+                f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过净流入趋势过滤："
+                f"{target_type}_code={target_code}, {target_type}_label={target_label}，"
+                f"缺少历史净流入快照"
+            )
+            return False
+
+        if inflow_snapshot and latest_flow is not None and latest_flow >= INDEX_MAIN_NET_INFLOW_MIN:
             positive_days_available = bool(inflow_snapshot.get("positive_days_available"))
             positive_days_count = int(inflow_snapshot.get("positive_days_count") or 0)
             positive_days_window = int(
@@ -437,11 +660,18 @@ def increase_gold_funds(
             min_positive_days = int(
                 inflow_snapshot.get("min_positive_days") or INDEX_MAIN_NET_INFLOW_MIN_POSITIVE_DAYS
             )
+            if target_type == "theme" and not positive_days_available:
+                logger.info(
+                    f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过净流入趋势过滤："
+                    f"{target_type}_code={target_code}, {target_type}_label={target_label}, "
+                    f"最近{positive_days_window}个交易日{trend_label}数据不足"
+                )
+                return False
             if positive_days_available and positive_days_count < min_positive_days:
                 logger.info(
                     f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过净流入趋势过滤："
-                    f"index_code={index_code}, "
-                    f"最近{positive_days_window}个交易日净流入为正天数={positive_days_count} < {min_positive_days}"
+                    f"{target_type}_code={target_code}, {target_type}_label={target_label}, "
+                    f"最近{positive_days_window}个交易日{trend_label}为正天数={positive_days_count} < {min_positive_days}"
                 )
                 return False
 
@@ -450,16 +680,28 @@ def increase_gold_funds(
             inflow_sum_window = int(
                 inflow_snapshot.get("inflow_sum_window") or INDEX_MAIN_NET_INFLOW_SUM_WINDOW
             )
-            if inflow_sum_available and recent_inflow_sum is not None and float(recent_inflow_sum) <= 0:
+            if target_type == "theme" and not inflow_sum_available:
                 logger.info(
                     f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过净流入趋势过滤："
-                    f"index_code={index_code}, "
-                    f"最近{inflow_sum_window}个交易日主力净流入合计={float(recent_inflow_sum):.2f} <= 0"
+                    f"{target_type}_code={target_code}, {target_type}_label={target_label}, "
+                    f"最近{inflow_sum_window}个交易日{trend_label}数据不足"
+                )
+                return False
+            if (
+                inflow_sum_available
+                and recent_inflow_sum is not None
+                and float(recent_inflow_sum) < INDEX_MAIN_NET_INFLOW_SUM_MIN
+            ):
+                logger.info(
+                    f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过净流入趋势过滤："
+                    f"{target_type}_code={target_code}, {target_type}_label={target_label}, "
+                    f"最近{inflow_sum_window}个交易日{trend_label}合计="
+                    f"{float(recent_inflow_sum):.2f} < {INDEX_MAIN_NET_INFLOW_SUM_MIN:.2f}"
                 )
                 return False
 
         if latest_heat_score is None:
-            if latest_main_net_inflow is not None and latest_main_net_inflow > 0:
+            if latest_flow is not None and latest_flow >= INDEX_MAIN_NET_INFLOW_MIN:
                 trend_parts = []
                 if inflow_snapshot and inflow_snapshot.get("positive_days_available"):
                     trend_parts.append(
@@ -474,14 +716,15 @@ def increase_gold_funds(
                 trend_suffix = f", {', '.join(trend_parts)}" if trend_parts else ""
                 logger.info(
                     f"持仓基金 {fund_name}({fund_code}) {buy_context} 通过净流入风控放行："
-                    f"index_code={index_code}, main_net_inflow={latest_main_net_inflow:.2f}, "
+                    f"{target_type}_code={target_code}, {target_type}_label={target_label}, "
+                    f"{flow_label}={latest_flow:.2f}, "
                     f"heat_score=-{trend_suffix}"
                 )
                 return True
 
             logger.info(
-                f"持仓基金 {fund_name}({fund_code}) 跟踪指数 {index_code} 当前无资金热度值，"
-                f"且主力净流入也为空，跳过资金热度过滤"
+                f"持仓基金 {fund_name}({fund_code}) 对应{target_type} {target_label} 当前无资金热度值，"
+                f"且{trend_label}也为空，跳过资金热度过滤"
             )
             return True
 
@@ -500,27 +743,29 @@ def increase_gold_funds(
             trend_suffix = f", {', '.join(trend_parts)}" if trend_parts else ""
             logger.info(
                 f"持仓基金 {fund_name}({fund_code}) {buy_context} 通过资金热度过滤："
-                f"index_code={index_code}, heat_score={latest_heat_score:.2f}, "
-                f"main_net_inflow={latest_main_net_inflow:.2f}"
-                if latest_main_net_inflow is not None
-                else f"index_code={index_code}, heat_score={latest_heat_score:.2f}, main_net_inflow=-"
+                f"{target_type}_code={target_code}, {target_type}_label={target_label}, "
+                f"heat_score={latest_heat_score:.2f}, {flow_label}={latest_flow:.2f}"
+                if latest_flow is not None
+                else f"{target_type}_code={target_code}, {target_type}_label={target_label}, "
+                     f"heat_score={latest_heat_score:.2f}, {flow_label}=-"
             )
             if trend_suffix:
                 logger.info(
                     f"持仓基金 {fund_name}({fund_code}) {buy_context} 净流入趋势确认："
-                    f"index_code={index_code}{trend_suffix}"
+                    f"{target_type}_code={target_code}, {target_type}_label={target_label}{trend_suffix}"
                 )
             return True
 
         logger.info(
             f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过资金热度过滤："
-            f"index_code={index_code}, heat_score={latest_heat_score:.2f}, "
-            f"main_net_inflow={latest_main_net_inflow:.2f}, "
+            f"{target_type}_code={target_code}, {target_type}_label={target_label}, "
+            f"heat_score={latest_heat_score:.2f}, {flow_label}={latest_flow:.2f}, "
             f"要求范围=[{INDEX_HEAT_FILTER_MIN:.0f}, {INDEX_HEAT_FILTER_MAX:.0f}]"
-            if latest_main_net_inflow is not None
+            if latest_flow is not None
             else
             f"持仓基金 {fund_name}({fund_code}) {buy_context} 未通过资金热度过滤："
-            f"index_code={index_code}, heat_score={latest_heat_score:.2f}, main_net_inflow=-, "
+            f"{target_type}_code={target_code}, {target_type}_label={target_label}, "
+            f"heat_score={latest_heat_score:.2f}, {flow_label}=-, "
             f"要求范围=[{INDEX_HEAT_FILTER_MIN:.0f}, {INDEX_HEAT_FILTER_MAX:.0f}]"
         )
         return False
@@ -649,7 +894,7 @@ def increase_gold_funds(
             continue
 
         existing = init_representative_candidates.get(group_key)
-        if existing is None or _should_replace_theme_candidate(candidate, existing):
+        if existing is None or _should_replace_init_theme_candidate(candidate, existing):
             if existing is not None:
                 logger.info(
                     f"[同主题初始化优先] {candidate['group_label']} 过滤完成后改为保留 "
@@ -759,7 +1004,7 @@ def increase_gold_funds(
                 continue
 
             buy_multiplier = buy_amount / float(base_amt) if float(base_amt) > 0.0 else 0.0
-            if estimated_profit_rate >= -10.0 and not _passes_index_heat_filter(
+            if estimated_profit_rate >= -10.0 and not _passes_market_heat_filter(
                 fund_code=f_code,
                 fund_name=f_name,
                 fund_info=fund_info,
@@ -785,19 +1030,25 @@ def increase_gold_funds(
                 continue
 
             existing = increase_representative_candidates.get(group_key)
-            if existing is None or _should_replace_theme_candidate(candidate, existing):
+            if existing is None or _should_replace_increase_theme_candidate(candidate, existing):
                 if existing is not None:
+                    candidate_post_add_profit_rate = _get_post_add_estimated_profit_rate(candidate)
+                    existing_post_add_profit_rate = _get_post_add_estimated_profit_rate(existing)
                     logger.info(
                         f"[同类优先] {group_label} 过滤完成后改为保留 "
                         f"{candidate['fund_name']}({candidate['fund_code']})，替换 "
                         f"{existing['fund_name']}({existing['fund_code']})，"
-                        f"heat_score={candidate['heat_score'] if candidate['heat_score'] is not None else '-'}"
+                        f"post_add_estimated_profit_rate="
+                        f"{candidate_post_add_profit_rate if candidate_post_add_profit_rate is not None else '-'}"
                     )
                 increase_representative_candidates[group_key] = candidate
             else:
+                existing_post_add_profit_rate = _get_post_add_estimated_profit_rate(existing)
                 logger.info(
                     f"[同类跳过] {f_name}({f_code}) 属于 {group_label}，"
-                    f"过滤完成后热度不高于 {existing['fund_name']}({existing['fund_code']})，跳过"
+                    f"过滤完成后加仓后收益率不优于 {existing['fund_name']}({existing['fund_code']})，"
+                    f"existing_post_add_estimated_profit_rate="
+                    f"{existing_post_add_profit_rate if existing_post_add_profit_rate is not None else '-'}，跳过"
                 )
         else:
             logger.info(
@@ -805,10 +1056,11 @@ def increase_gold_funds(
             )
 
     for candidate in increase_representative_candidates.values():
+        post_add_profit_rate = _get_post_add_estimated_profit_rate(candidate)
         logger.info(
             f"[同类优先] {candidate['group_label']} 当前仅保留 "
             f"{candidate['fund_name']}({candidate['fund_code']}) 作为加仓代表，"
-            f"heat_score={candidate['heat_score'] if candidate['heat_score'] is not None else '-'}, "
+            f"post_add_estimated_profit_rate={post_add_profit_rate if post_add_profit_rate is not None else '-'}, "
             f"estimated_profit_rate={candidate['estimated_profit_rate']:.2f}%, "
             f"buy_amount={candidate['buy_amount']:.2f}"
         )
@@ -848,7 +1100,7 @@ if __name__ == "__main__":
     try:
         # 1. 构造测试用户（或者使用默认用户）
         test_user = DEFAULT_USER
-        test_user.account = "13918199137"
+        test_user.account = "13052919137"
         test_user.password = "sWX15706"
         index_heat_filter_enabled = True
         # 2. 设置测试参数

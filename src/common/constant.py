@@ -102,9 +102,14 @@ DEFAULT_PAGE_INDEX_INT = 1
 #
 # 下面标记为“已确认”的值，均来自本项目真实接口返回以及对应天天基金页面展示的基金类型：
 # - 008888 / 008327 -> 类型: 指数型-股票
+# - 012404 -> 类型: 指数型-债券
+# - 016453 -> 类型: 指数型-QDII/海外
+# - 004253 / 518880 -> 类型: 指数型-商品
 # - 006503 -> 类型: 股票型
 # - 022365 -> 类型: 混合型-偏股
 # - 021523 -> 类型: 混合型-灵活
+# - 161716 -> 类型: 债券型-LOF
+# - 006061 / 015266 -> 类型: 债券型-中长债
 # - 022184 -> 类型: QDII-普通股票
 
 ASSET_FUND_TYPE_LABELS = {
@@ -114,19 +119,50 @@ ASSET_FUND_TYPE_LABELS = {
     "a": "QDII基金",
 }
 
+# 天天基金一级分类 RSFUNDTYPE
+RS_FUND_TYPE_INDEX = "000"
+RS_FUND_TYPE_STOCK = "001"
+RS_FUND_TYPE_MIXED = "002"
+RS_FUND_TYPE_BOND = "003"
+RS_FUND_TYPE_QDII = "007"
+
 RS_FUND_TYPE_LABELS = {
-    "000": "指数基金",
-    "001": "股票基金",
-    "002": "混合基金",
-    "007": "QDII基金",
+    RS_FUND_TYPE_INDEX: "指数基金",
+    RS_FUND_TYPE_STOCK: "股票基金",
+    RS_FUND_TYPE_MIXED: "混合基金",
+    RS_FUND_TYPE_BOND: "债券基金",
+    RS_FUND_TYPE_QDII: "QDII基金",
 }
 
+# 天天基金二级分类 RSBTYPE
+RS_SUB_FUND_TYPE_INDEX_EQUITY = "000001"
+RS_SUB_FUND_TYPE_INDEX_BOND = "000002"
+RS_SUB_FUND_TYPE_INDEX_QDII = "000003"
+RS_SUB_FUND_TYPE_INDEX_COMMODITY = "000005"
+RS_SUB_FUND_TYPE_STOCK_EQUITY = "001001"
+RS_SUB_FUND_TYPE_MIXED_PARTIAL_EQUITY = "002001"
+RS_SUB_FUND_TYPE_MIXED_BALANCED = "002003"
+RS_SUB_FUND_TYPE_MIXED_FLEXIBLE = "002004"
+RS_SUB_FUND_TYPE_BOND_SHORT = "003001"
+RS_SUB_FUND_TYPE_BOND_LONG = "003002"
+RS_SUB_FUND_TYPE_BOND_LOF = "003003"
+RS_SUB_FUND_TYPE_BOND_MEDIUM_LONG = "003004"
+RS_SUB_FUND_TYPE_QDII_EQUITY = "007001"
+
 RS_SUB_FUND_TYPE_LABELS = {
-    "000001": "指数型-股票",
-    "001001": "股票型",
-    "002001": "混合型-偏股",
-    "002004": "混合型-灵活",
-    "007001": "QDII-普通股票",
+    RS_SUB_FUND_TYPE_INDEX_EQUITY: "指数型-股票",
+    RS_SUB_FUND_TYPE_INDEX_BOND: "指数型-债券",
+    RS_SUB_FUND_TYPE_INDEX_QDII: "指数型-QDII/海外",
+    RS_SUB_FUND_TYPE_INDEX_COMMODITY: "指数型-商品",
+    RS_SUB_FUND_TYPE_STOCK_EQUITY: "股票型",
+    RS_SUB_FUND_TYPE_MIXED_PARTIAL_EQUITY: "混合型-偏股",
+    RS_SUB_FUND_TYPE_MIXED_BALANCED: "混合型-平衡",
+    RS_SUB_FUND_TYPE_MIXED_FLEXIBLE: "混合型-灵活",
+    RS_SUB_FUND_TYPE_BOND_SHORT: "债券型-短债",
+    RS_SUB_FUND_TYPE_BOND_LONG: "债券型-长债",
+    RS_SUB_FUND_TYPE_BOND_LOF: "债券型-LOF",
+    RS_SUB_FUND_TYPE_BOND_MEDIUM_LONG: "债券型-中长债",
+    RS_SUB_FUND_TYPE_QDII_EQUITY: "QDII-普通股票",
 }
 
 
@@ -410,7 +446,7 @@ def _get_password_from_yaml(account):
     return None
 
 def _load_default_user():
-    target_account = "13918199137"
+    target_account = "13052919137"
     
     # 尝试从 s.yaml 获取密码
     password = _get_password_from_yaml(target_account)
@@ -431,6 +467,7 @@ def _load_default_user():
         # 如果服务获取失败，回退到使用常量构建基础对象
         user_data = {
             'account': target_account,
+            'mobile_phone': target_account,
             'password': password,
             'paypassword': password,
             'c_token': C_TOKEN,
@@ -444,6 +481,9 @@ def _load_default_user():
             'passport_utoken': PASSPORT_UTOKEN,
         }
         user = User.from_dict(user_data)
+
+    if not getattr(user, 'mobile_phone', None):
+        user.mobile_phone = target_account
     
     # 确保 max_hqb_bank 存在
     if not getattr(user, 'max_hqb_bank', None):
@@ -475,7 +515,7 @@ class _LazyConst:
         return str(self.value())
 
 # 使用 LazyConst 延迟加载 DEFAULT_USER，确保按需获取且逻辑正确
-# 解决旧逻辑中可能回退到其他账号的问题，强制锁定 13918199137
+# 解决旧逻辑中可能回退到其他账号的问题，强制锁定 13052919137
 DEFAULT_USER = _LazyConst(_load_default_user)
 
 def get_bank_balance_threshold():

@@ -7,7 +7,7 @@ def test_login_success():
     """测试登录成功的情况"""
     print("开始测试登录成功")
     
-    result = login("13918199137", "sWX15706")
+    result = login("13052919137", "sWX15706")
     print(f"登录响应结果: {result}")
     # Only proceed with other assertions if previous checks pass
     assert result.customer_no == "cd0b7906b53b43ffa508a99744b4055b"
@@ -23,7 +23,7 @@ def test_login_failed_with_wrong_password():
     """测试密码错误的情况"""
     print("开始测试密码错误登录")
     
-    result = login("13918199137", "wrong_password")
+    result = login("13052919137", "wrong_password")
     print(f"登录响应结果: {result}")
     
     assert result is None

@@ -69,7 +69,7 @@ def test_merge_favorites_funds_logs_query_failure_instead_of_not_found(monkeypat
         seen_codes=set(),
         default_amount=2000.0,
         default_limit=None,
-        extra={"account": "13918199137", "sub_account_name": "智投平台", "action": "gold_increase"},
+        extra={"account": "13052919137", "sub_account_name": "智投平台", "action": "gold_increase"},
     )
 
     assert funds == []

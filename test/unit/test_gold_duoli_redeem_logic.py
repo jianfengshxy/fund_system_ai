@@ -93,7 +93,7 @@ def test_redeem_uses_fund_level_stop_rate_and_sells_zero_fee(monkeypatch):
         estimated_change_map={"测试基金": 1.0},
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.redeem_gold_funds(
         user=user,
         sub_account_name="黄金多利止盈",
@@ -114,7 +114,7 @@ def test_redeem_skips_when_estimated_profit_rate_below_stop_rate(monkeypatch):
         estimated_change_map={"测试基金": 0.2},
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.redeem_gold_funds(
         user=user,
         sub_account_name="黄金多利未止盈",
@@ -136,7 +136,7 @@ def test_redeem_skips_when_previous_trade_pending(monkeypatch):
         prev_trade_record=pending_record,
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.redeem_gold_funds(
         user=user,
         sub_account_name="黄金多利在途止盈",
@@ -158,7 +158,7 @@ def test_redeem_falls_back_to_low_fee_when_profit_above_ten(monkeypatch):
         sell_low_fee_result=True,
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.redeem_gold_funds(
         user=user,
         sub_account_name="黄金多利高收益兜底",

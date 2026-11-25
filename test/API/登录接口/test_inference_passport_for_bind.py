@@ -42,7 +42,7 @@ def mock_error_response():
 def test_inference_passport_for_bind_success():
     """测试获取Passport绑定信息成功的情况"""
     print("开始测试获取Passport绑定信息成功")
-    # user = login("13918199137", "sWX15706")
+    # user = login("13052919137", "sWX15706")
     result = inference_passport_for_bind(DEFAULT_USER)
     print(f"Passport绑定信息响应结果: {result}")
     

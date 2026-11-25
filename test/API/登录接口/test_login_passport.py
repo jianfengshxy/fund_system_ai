@@ -41,7 +41,7 @@ def mock_error_response():
 def test_login_passport_success():
     """测试Passport登录成功的情况"""
     print("开始测试Passport登录成功")
-    # user = login("13918199137","sWX15706")
+    # user = login("13052919137","sWX15706")
     result = login_passport(DEFAULT_USER)
     print(f"Passport登录响应结果: {result}")
     

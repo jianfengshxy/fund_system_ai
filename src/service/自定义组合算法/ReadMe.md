@@ -2,7 +2,7 @@
 
 payload 格式（止盈场景示例）：
 {
-  "account": "13918199137",
+  "account": "13052919137",
   "password": "sWX15706",
   "sub_account_name": "海外基金组合",
   "fund_list": [

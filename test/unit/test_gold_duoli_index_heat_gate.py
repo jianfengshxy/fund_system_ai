@@ -11,10 +11,19 @@ def _setup_common_monkeypatch(
     estimated_change,
     nav5_gate_result=True,
     latest_heat_score=None,
+    latest_main_net_inflow=100.0,
+    inflow_snapshot=None,
 ):
     from src.service.黄金多利组合算法 import 黄金多利加仓 as service_module
 
     commit_calls = []
+    if inflow_snapshot is None:
+        inflow_snapshot = {
+            "positive_days_available": False,
+            "positive_days_count": 0,
+            "inflow_sum_available": False,
+            "recent_inflow_sum": None,
+        }
 
     monkeypatch.setattr(service_module, "getSubAccountNoByName", lambda user, sub_account_name: "sub-001")
     monkeypatch.setattr(service_module, "get_sub_account_asset_by_name", lambda user, sub_account_name: [asset])
@@ -27,6 +36,17 @@ def _setup_common_monkeypatch(
         service_module,
         "get_latest_realtime_index_heat",
         lambda user, index_code, cache=None, range_type="w": latest_heat_score,
+    )
+    monkeypatch.setattr(
+        service_module,
+        "get_latest_realtime_index_main_net_inflow",
+        lambda user, index_code, cache=None: latest_main_net_inflow,
+    )
+    monkeypatch.setattr(
+        service_module,
+        "get_index_main_net_inflow_filter_snapshot",
+        lambda user, index_code, cache=None, positive_days_window=10, min_positive_days=5, inflow_sum_window=3:
+        inflow_snapshot,
     )
     monkeypatch.setattr(
         service_module,
@@ -58,6 +78,7 @@ def _build_fund_info(
     *,
     fund_name="测试基金",
     fund_type="000",
+    fund_sub_type="000001",
     index_code="399001",
     nav_date="2026-10-20",
     week_return=1.5,
@@ -69,6 +90,7 @@ def _build_fund_info(
     return SimpleNamespace(
         fund_name=fund_name,
         fund_type=fund_type,
+        fund_sub_type=fund_sub_type,
         index_code=index_code,
         nav_date=nav_date,
         week_return=week_return,
@@ -97,7 +119,7 @@ def test_index_fund_heat_missing_allows_normal_increase(monkeypatch):
         latest_heat_score=None,
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利热度空值",
@@ -119,7 +141,7 @@ def test_index_fund_heat_gate_disabled_keeps_original_logic(monkeypatch):
         latest_heat_score=10.0,
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利默认关闭",
@@ -140,7 +162,7 @@ def test_index_fund_low_heat_blocks_increase_when_portfolio_gate_enabled(monkeyp
         latest_heat_score=19.9,
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利低热度拦截",
@@ -153,7 +175,7 @@ def test_index_fund_low_heat_blocks_increase_when_portfolio_gate_enabled(monkeyp
     assert commit_calls == []
 
 
-def test_index_fund_heat_ge_20_allows_double_increase(monkeypatch):
+def test_index_fund_heat_ge_20_allows_normal_increase(monkeypatch):
     service_module, commit_calls = _setup_common_monkeypatch(
         monkeypatch,
         asset=_build_asset(constant_profit_rate=-3.0),
@@ -162,7 +184,7 @@ def test_index_fund_heat_ge_20_allows_double_increase(monkeypatch):
         latest_heat_score=20.0,
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利热度20双倍",
@@ -172,7 +194,7 @@ def test_index_fund_heat_ge_20_allows_double_increase(monkeypatch):
     )
 
     assert result is True
-    assert commit_calls == [("sub-001", "000001", 4000.0)]
+    assert commit_calls == [("sub-001", "000001", 2000.0)]
 
 
 def test_non_index_fund_ignores_heat_gate(monkeypatch):
@@ -184,7 +206,7 @@ def test_non_index_fund_ignores_heat_gate(monkeypatch):
         latest_heat_score=1.0,
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利非指数",
@@ -197,6 +219,34 @@ def test_non_index_fund_ignores_heat_gate(monkeypatch):
     assert commit_calls == [("sub-001", "110001", 2000.0)]
 
 
+def test_unsupported_index_sub_type_skips_heat_gate(monkeypatch):
+    service_module, commit_calls = _setup_common_monkeypatch(
+        monkeypatch,
+        asset=_build_asset(fund_code="021540", fund_name="华安法国CAC40ETF发起式联接(QDII)C"),
+        fund_info=_build_fund_info(
+            fund_name="华安法国CAC40ETF发起式联接(QDII)C",
+            fund_type="000",
+            fund_sub_type="000003",
+            index_code="FCHI",
+        ),
+        estimated_change=-0.5,
+        latest_heat_score=1.0,
+        latest_main_net_inflow=-100.0,
+    )
+
+    user = SimpleNamespace(account="13052919137")
+    result = service_module.increase_gold_funds(
+        user=user,
+        sub_account_name="黄金多利海外指数放行",
+        amount=2000.0,
+        fund_list=[{"fund_code": "021540", "amount": 2000.0}],
+        index_heat_filter_enabled=True,
+    )
+
+    assert result is True
+    assert commit_calls == [("sub-001", "021540", 2000.0)]
+
+
 def test_index_fund_low_heat_blocks_deep_rebound_increase(monkeypatch):
     service_module, commit_calls = _setup_common_monkeypatch(
         monkeypatch,
@@ -207,7 +257,7 @@ def test_index_fund_low_heat_blocks_deep_rebound_increase(monkeypatch):
         latest_heat_score=10.0,
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利深反低热度",
@@ -230,7 +280,7 @@ def test_index_fund_high_heat_allows_deep_rebound_increase(monkeypatch):
         latest_heat_score=45.0,
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利深反高热度",
@@ -252,7 +302,7 @@ def test_fund_level_heat_gate_overrides_portfolio_level(monkeypatch):
         latest_heat_score=10.0,
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利基金级覆盖",
@@ -290,7 +340,7 @@ def test_init_buy_ignores_heat_gate(monkeypatch):
         or SimpleNamespace(amount=amount, busin_serial_no="order-init-001"),
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利初始化",
@@ -339,7 +389,7 @@ def test_init_buy_same_theme_prefers_higher_heat_index(monkeypatch):
         or SimpleNamespace(amount=amount, busin_serial_no=f"order-{len(commit_calls):03d}"),
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利初始化热度优先",

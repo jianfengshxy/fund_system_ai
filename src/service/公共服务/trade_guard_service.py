@@ -25,11 +25,11 @@ except ImportError as e:
 
 # 创建本地 DEFAULT_USER 用于测试
 DEFAULT_USER = User(
-    account="13918199137",
+    account="13052919137",
     password="sWX15706"  # 测试用密码
 )
 DEFAULT_USER.customer_no = "cd0b7906b53b43ffa508a99744b4055b"
-DEFAULT_USER.mobile_phone = "13918199137"
+DEFAULT_USER.mobile_phone = "13052919137"
 
 logger = get_logger(__name__)
 
@@ -236,9 +236,19 @@ def has_buy_submission_on_dates(
     
     logger.info(f"时间过滤后: trans_date={trans_date}, 0:00-15:00时间段内的有效交易记录数={len(filtered_trades)}") 
     
-    if not filtered_trades:
-        return None
-    return filtered_trades[0]
+    if filtered_trades:
+        return filtered_trades[0]
+
+    asset = _find_sub_account_asset(user, sub_account_no, fund_code)
+    on_way_count = _get_on_way_trade_count(asset)
+    if on_way_count > 0:
+        logger.info(
+            f"资产守卫命中: fund={fund_code}, trans_date={trans_date}, "
+            f"on_way_transaction_count={on_way_count}，按在途交易处理"
+        )
+        return asset
+
+    return None
 
 def _log_trade_full(t, title: str):
     summary = {

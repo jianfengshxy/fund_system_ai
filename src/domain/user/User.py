@@ -6,6 +6,7 @@ logger.setLevel(logging.INFO)
 class User:
     def __init__(self, account, password, paypassword=None):
         self.account = account
+        self.mobile_phone = account
         self.password = password
         self.paypassword = paypassword
         self.c_token = ""
@@ -30,6 +31,7 @@ class User:
             password=data.get('password'),
             paypassword=data.get('paypassword')
         )
+        user.mobile_phone = data.get('mobile_phone') or data.get('account')
         user.c_token = data.get('c_token', '')
         user.u_token = data.get('u_token', '')
         user.customer_no = data.get('customer_no', '')
@@ -56,6 +58,7 @@ class User:
     def __repr__(self):
         return f"""User(
             account={self.account},
+            mobile_phone={self.mobile_phone},
             password={self.password},
             paypassword={self.paypassword},
             c_token={self.c_token},

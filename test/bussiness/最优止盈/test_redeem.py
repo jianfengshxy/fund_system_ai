@@ -48,7 +48,7 @@ def test_redeem_event_success():
     """测试 index.redeem 函数 (Event Handler)"""
     # 使用提供的 payload 制造 event
     payload = {
-        "account": "13918199137",
+        "account": "13052919137",
         "password": "sWX15706",
         "sub_account_name": "飞龙在天",
         "total_budget": 1000000.0
@@ -63,7 +63,7 @@ def test_redeem_missing_params():
     """测试 index.redeem 函数缺少参数的情况"""
     # 测试缺少参数的情况
     payload = {
-        "account": "13918199137",
+        "account": "13052919137",
         "password": "sWX15706",
         # 缺少 sub_account_name 和 total_budget
     }

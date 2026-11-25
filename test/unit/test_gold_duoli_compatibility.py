@@ -14,7 +14,7 @@ def test_gold_duoli_increase_default_hqb_ratio_limit_enabled(monkeypatch):
         lambda event, action: (
             {},
             {
-                "account": "13918199137",
+                "account": "13052919137",
                 "password": "pwd",
                 "sub_account_name": "黄金多利A",
                 "amount": 2000,
@@ -52,7 +52,7 @@ def test_gold_duoli_increase_accepts_false_string(monkeypatch):
         lambda event, action: (
             {},
             {
-                "account": "13918199137",
+                "account": "13052919137",
                 "password": "pwd",
                 "sub_account_name": "黄金多利B",
                 "amount": 3000,
@@ -95,7 +95,7 @@ def test_gold_duoli_increase_invalid_hqb_ratio_limit_enabled_logs_and_falls_back
         lambda event, action: (
             {},
             {
-                "account": "13918199137",
+                "account": "13052919137",
                 "password": "pwd",
                 "sub_account_name": "黄金多利B2",
                 "amount": 3000,
@@ -140,7 +140,7 @@ def test_gold_duoli_increase_forwards_index_heat_filter_enabled(monkeypatch):
         lambda event, action: (
             {},
             {
-                "account": "13918199137",
+                "account": "13052919137",
                 "password": "pwd",
                 "sub_account_name": "黄金多利热度",
                 "amount": 3000,
@@ -309,7 +309,7 @@ def test_service_increase_gold_funds_bypasses_hqb_limit_when_disabled(monkeypatc
         or SimpleNamespace(amount=amount, busin_serial_no="order-001"),
     )
 
-    user = SimpleNamespace(account="13918199137")
+    user = SimpleNamespace(account="13052919137")
     result = service_module.increase_gold_funds(
         user=user,
         sub_account_name="黄金多利D",
@@ -335,7 +335,7 @@ def test_gold_duoli_redeem_still_compatible(monkeypatch):
         lambda event, action: (
             {},
             {
-                "account": "13918199137",
+                "account": "13052919137",
                 "password": "pwd",
                 "sub_account_name": "黄金多利E",
                 "stop_rate": "3.5",

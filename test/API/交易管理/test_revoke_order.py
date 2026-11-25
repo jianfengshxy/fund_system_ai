@@ -11,7 +11,7 @@ if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
 from src.API.交易管理.revokMrg import revoke_order
-from src.serice.交易管理.交易查询 import get_withdrawable_trades
+from src.service.交易管理.交易查询 import get_withdrawable_trades
 from src.common.constant import DEFAULT_USER
 
 # 配置日志

@@ -4,9 +4,9 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
-from API.银行卡信息.CashBag import getCashBagAvailableShareV2
-from domain.bank.bank import HqbBank
-from common.constant import DEFAULT_USER
+from src.API.银行卡信息.CashBag import getCashBagAvailableShareV2
+from src.domain.bank.bank import HqbBank
+from src.common.constant import DEFAULT_USER
 
 @pytest.fixture
 def mock_success_response():

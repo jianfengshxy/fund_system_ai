@@ -972,8 +972,7 @@ def increase_gold_funds(
             
         # 计算预估收益率
         current_profit_rate = float(getattr(asset, "constant_profit_rate", 0.0) or 0.0)
-        estimated_change, label_est = calc_estimated_change(fund_info)
-        estimated_profit_rate = current_profit_rate + estimated_change
+        estimated_profit_rate, estimated_change, label_est = calc_estimated_profit_rate(current_profit_rate, fund_info)
 
         logger.info(f"持仓基金 {f_name}({f_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%（{label_est}）")
 

@@ -26,7 +26,7 @@ from src.service.基金信息.基金信息 import get_all_fund_info
 from src.common.errors import RetriableError, ValidationError
 from src.API.登录接口.login import ensure_user_fresh
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from src.service.公共服务.estimated_profit_service import calc_estimated_change
+from src.service.公共服务.estimated_profit_service import calc_estimated_profit_rate
 
 def get_fund_total_asset_detail(user: User, fund_code: str) -> Optional[AssetDetails]:
     """
@@ -115,8 +115,11 @@ def get_sub_account_asset_by_name(user: User, sub_account_name: str) -> Optional
             except ValidationError as e:
                 logger.error(f"基金信息解析错误: {e}", extra={"account": getattr(user, 'mobile_phone', None) or getattr(user, 'account', None), "sub_account_name": sub_account_name, "fund_code": asset.fund_code, "action": "get_assets"})
                 fund_info = None
-            estimated_change, _ = calc_estimated_change(fund_info) if fund_info else (0.0, 'fund_info缺失')
-            estimated_profit_rate = (asset.constant_profit_rate or asset.hold_profit_rate or 0.0) + estimated_change
+            estimated_profit_rate, _, _ = (
+                calc_estimated_profit_rate((asset.constant_profit_rate or asset.hold_profit_rate or 0.0), fund_info)
+                if fund_info else
+                (asset.constant_profit_rate or asset.hold_profit_rate or 0.0, 0.0, 'fund_info缺失')
+            )
             logger.info(f"  基金 {asset.fund_name}({asset.fund_code}): "
                        f"资产值={asset.asset_value}, "
                        f"可用份额={asset.available_vol}, "

@@ -79,8 +79,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
         # 预估收益率 = 当前收益率 + 估值涨跌幅
         current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-        estimated_change, label_est = calc_estimated_change(fund_info)
-        estimated_profit_rate = current_profit_rate + estimated_change
+        estimated_profit_rate, estimated_change, label_est = calc_estimated_profit_rate(current_profit_rate, fund_info)
 
         # rank_100day
         r100 = _safe_float(getattr(fund_info, "rank_100day", None), None)
@@ -159,8 +158,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
             
             # 计算指标
             current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-            estimated_change, label_est = calc_estimated_change(fund_info)
-            estimated_profit_rate = current_profit_rate + estimated_change
+            estimated_profit_rate, estimated_change, label_est = calc_estimated_profit_rate(current_profit_rate, fund_info)
             
             # 条件判断：预估收益率 > 5.0 且 估值涨跌幅 > 0.5
             if estimated_profit_rate > 5.0 and estimated_change > 0.5:

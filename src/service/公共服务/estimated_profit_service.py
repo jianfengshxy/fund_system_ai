@@ -68,6 +68,25 @@ def calc_estimated_change(fund_info: Any) -> Tuple[float, str]:
     return est_change, (f"盘中估值(nav={nav_date}, est={est_date})" if est_date else "估值日期缺失")
 
 
+def compound_profit_rate(current_profit_rate: float, estimated_change: float) -> float:
+    """统一计算预估收益率。
+
+    使用复合口径：(1 + r) * (1 + delta) - 1。
+    输入和输出都使用百分比数值，例如 1.23 表示 1.23%。
+    """
+    try:
+        cur = float(current_profit_rate or 0.0)
+    except (ValueError, TypeError):
+        cur = 0.0
+
+    try:
+        delta = float(estimated_change or 0.0)
+    except (ValueError, TypeError):
+        delta = 0.0
+
+    return ((1.0 + cur / 100.0) * (1.0 + delta / 100.0) - 1.0) * 100.0
+
+
 def calc_estimated_profit_rate(current_profit_rate: float, fund_info: Any) -> Tuple[float, float, str]:
     """按口径规则统一计算预估持有收益率。
 
@@ -80,4 +99,4 @@ def calc_estimated_profit_rate(current_profit_rate: float, fund_info: Any) -> Tu
     except (ValueError, TypeError):
         cur = 0.0
     eff_change, label = calc_estimated_change(fund_info)
-    return cur + eff_change, eff_change, label
+    return compound_profit_rate(cur, eff_change), eff_change, label

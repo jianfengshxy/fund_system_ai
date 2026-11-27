@@ -184,8 +184,7 @@ def redeem(
     
     # 获取当前收益率和估值增长率
     current_profit_rate = constant_profit_rate if constant_profit_rate is not None else 0.0
-    estimated_change, label_est = calc_estimated_change(fund_info)
-    estimated_profit_rate = current_profit_rate + estimated_change
+    estimated_profit_rate, estimated_change, label_est = calc_estimated_profit_rate(current_profit_rate, fund_info)
     rank_100 = fund_info.rank_100day
     
     logger.info(f"{fund_name}收益率计算：当前收益率{current_profit_rate}%，估值变化{estimated_change}%，预估收益率{estimated_profit_rate}%（{label_est}）")

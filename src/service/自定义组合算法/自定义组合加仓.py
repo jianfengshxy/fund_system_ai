@@ -183,8 +183,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             continue
 
         current_profit_rate = _safe_float(getattr(asset, 'constant_profit_rate', None), 0.0)
-        estimated_change, _ = calc_estimated_change(fund_info)
-        estimated_profit_rate = current_profit_rate + estimated_change
+        estimated_profit_rate, _, _ = calc_estimated_profit_rate(current_profit_rate, fund_info)
         safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
         preview_buy_amount = _preview_total_buy_amount(safe_asset_value, estimated_profit_rate, fund_amount)
         post_add_profit_rate = _calc_post_add_profit_rate(safe_asset_value, estimated_profit_rate, preview_buy_amount)
@@ -300,8 +299,7 @@ def increase_funds(user: User, sub_account_name: str, fund_list: Optional[list] 
             filter_checks = []
 
             current_profit_rate = _safe_float(getattr(asset, 'constant_profit_rate', None), 0.0)
-            estimated_change, _ = calc_estimated_change(fund_info)
-            estimated_profit_rate = current_profit_rate + estimated_change
+            estimated_profit_rate, _, _ = calc_estimated_profit_rate(current_profit_rate, fund_info)
             safe_asset_value = _safe_float(getattr(asset, "asset_value", 0.0), 0.0)
             times = safe_asset_value / float(fund_amount)
             if times > 15:

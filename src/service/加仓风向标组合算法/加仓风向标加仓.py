@@ -158,8 +158,7 @@ def increase_funds(user: User, sub_account_name: str, total_budget: float, amoun
             continue
 
         current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-        estimated_change, label_est = calc_estimated_change(fi)
-        estimated_profit_rate = current_profit_rate + estimated_change
+        estimated_profit_rate, estimated_change, label_est = calc_estimated_profit_rate(current_profit_rate, fi)
 
         # 公共前置过滤：仅保留跌幅足够的标的
         if estimated_profit_rate >= -1.0:

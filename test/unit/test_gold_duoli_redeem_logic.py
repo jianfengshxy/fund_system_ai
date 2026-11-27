@@ -3,6 +3,8 @@ from __future__ import annotations
 import datetime
 from types import SimpleNamespace
 
+from src.service.公共服务.estimated_profit_service import compound_profit_rate
+
 
 def _build_asset(
     *,
@@ -54,8 +56,12 @@ def _setup_common_monkeypatch(
     monkeypatch.setattr(service_module, "get_all_fund_info", lambda user, fund_code: fund_info_map[fund_code])
     monkeypatch.setattr(
         service_module,
-        "calc_estimated_change",
-        lambda current_fund_info: (estimated_change_map[current_fund_info.fund_name], "估值测试"),
+        "calc_estimated_profit_rate",
+        lambda current_profit_rate, current_fund_info: (
+            compound_profit_rate(current_profit_rate, estimated_change_map[current_fund_info.fund_name]),
+            estimated_change_map[current_fund_info.fund_name],
+            "估值测试",
+        ),
     )
     monkeypatch.setattr(
         service_module,

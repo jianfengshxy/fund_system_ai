@@ -107,7 +107,7 @@ def redeem_gold_funds(
             else:
                 prev_trade_day = None
 
-            estimated_change, label_est = calc_estimated_change(fund_info)
+            estimated_profit_rate, estimated_change, label_est = calc_estimated_profit_rate(current_profit_rate, fund_info)
             
             # 获取波动率和基金类型以供日志输出
             volatility = _safe_float(getattr(fund_info, "volatility", None), 0.0) if fund_info else 0.0
@@ -126,9 +126,6 @@ def redeem_gold_funds(
             else:
                 resolved_stop_rate = default_stop_rate
                 stop_rate_source = "默认动态计算"
-            
-            # 计算预估收益率 = 当前收益率 + 估值涨跌幅
-            estimated_profit_rate = current_profit_rate + estimated_change
             
             logger.info(
                 f"基金 {fund_name}({fund_code}) 止盈指标 -> 类型: {fund_type}, 波动率: {volatility:.2f}%, "

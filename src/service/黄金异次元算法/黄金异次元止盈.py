@@ -49,10 +49,7 @@ def redeem_gold_dimension_funds(user: User, sub_account_name: str) -> bool:
 
             # 获取基金估值信息
             fund_info = get_all_fund_info(user, fund_code)
-            estimated_change, label_est = calc_estimated_change(fund_info)
-            
-            # 计算预估收益率 = 当前收益率 + 估值涨跌幅
-            estimated_profit_rate = current_profit_rate + estimated_change
+            estimated_profit_rate, estimated_change, label_est = calc_estimated_profit_rate(current_profit_rate, fund_info)
             
             logger.info(f"基金 {fund_name}({fund_code}) 当前收益率: {current_profit_rate}%, 估值变动: {estimated_change}%, 预估收益率: {estimated_profit_rate:.2f}%（{label_est}）")
 

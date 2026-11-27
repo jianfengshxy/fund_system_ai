@@ -194,8 +194,7 @@ def process_fixed_ratio_redeem(user: User, config: Dict):
 
                 # 计算预估收益率
                 current_profit_rate = asset_detail.constant_profit_rate if asset_detail.constant_profit_rate is not None else 0.0
-                estimated_change, label_est = calc_estimated_change(fund_info)
-                estimated_profit_rate = current_profit_rate + estimated_change
+                estimated_profit_rate, estimated_change, label_est = calc_estimated_profit_rate(current_profit_rate, fund_info)
                 
                 logger.info(f"基金 {fund_name}({fund_code}) - 当前收益率: {current_profit_rate}%, 估值增长: {estimated_change}%, 预估总收益: {estimated_profit_rate:.2f}% (目标: {stop_rate}%)（{label_est}）")
                 

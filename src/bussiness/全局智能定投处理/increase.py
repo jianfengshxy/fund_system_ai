@@ -332,10 +332,12 @@ def increase(user: User, plan_detail: FundPlanDetail) -> bool:
     
     # 获取当前收益率和估值增长率
     current_profit_rate = constant_profit_rate if constant_profit_rate is not None else 0.0
-    estimated_change, label_est = calc_estimated_change(fund_info)
-    estimated_profit_rate = current_profit_rate + estimated_change
+    estimated_profit_rate, estimated_change, label_est = calc_estimated_profit_rate(current_profit_rate, fund_info)
     
-    logger.info(f"[收益率预估] 预估收益率 = 当前({current_profit_rate}%) + 估值({estimated_change}%) = {estimated_profit_rate:.2f}%（{label_est}）")
+    logger.info(
+        f"[收益率预估] 当前({current_profit_rate}%)、估值({estimated_change}%) -> "
+        f"预估收益率 {estimated_profit_rate:.2f}%（{label_est}）"
+    )
 
       #判断是否是月定投延期交易
     if period_type == 3 and  period_value != day_of_month: 

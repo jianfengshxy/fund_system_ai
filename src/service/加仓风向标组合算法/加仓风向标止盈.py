@@ -100,8 +100,7 @@ def redeem_funds(user: User, sub_account_name: str, total_budget: Optional[float
 
         # 预估收益率
         current_profit_rate = _safe_float(getattr(asset, "constant_profit_rate", 0.0), 0.0)
-        estimated_change, label_est = calc_estimated_change(fund_info)
-        estimated_profit_rate = current_profit_rate + estimated_change
+        estimated_profit_rate, estimated_change, label_est = calc_estimated_profit_rate(current_profit_rate, fund_info)
 
         # 波动率对齐
         volatility = fund_info.volatility if fund_info and hasattr(fund_info, "volatility") and fund_info.volatility is not None else 0.0
